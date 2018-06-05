@@ -29,6 +29,10 @@ import (
 
 var logger = loggo.GetLogger("juju.worker.peergrouper")
 
+
+//go:generate mockgen -package peergrouper -destination state_mock_test.go github.com/juju/juju/worker/peergrouper State,Machine
+//go:generate mockgen -package peergrouper -destination watcher_mock_test.go github.com/juju/juju/state NotifyWatcher
+
 type State interface {
 	RemoveControllerMachine(m Machine) error
 	ControllerConfig() (controller.Config, error)
