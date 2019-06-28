@@ -152,7 +152,7 @@ func UpdateKubeCloudWithStorage(k8sCloud *cloud.Cloud, storageParams KubeCloudSt
 	cloudType, region, err := cloud.SplitHostCloudRegion(k8sCloud.HostCloudRegion)
 	if err != nil {
 		// Region is optional, but cloudType is required for next step.
-		return "", ClusterQueryError{}
+		return "", ClusterQueryError{Message: err.Error()}
 	}
 	if region != "" {
 		k8sCloud.Regions = []cloud.Region{{
