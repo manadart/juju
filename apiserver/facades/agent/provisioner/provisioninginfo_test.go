@@ -178,11 +178,11 @@ func (s *withoutControllerSuite) addSpacesAndSubnets(c *gc.C) {
 	// Add 1 subnet into space1, and 2 into space2.
 	// Each subnet is in a matching zone (e.g "subnet-#" in "zone#").
 	testing.AddSubnetsWithTemplate(c, s.State, 3, network.SubnetInfo{
-		CIDR:             "10.10.{{.}}.0/24",
-		ProviderId:       "subnet-{{.}}",
-		AvailabilityZone: "zone{{.}}",
-		SpaceName:        "{{if (eq . 0)}}space1{{else}}space2{{end}}",
-		VLANTag:          42,
+		CIDR:              "10.10.{{.}}.0/24",
+		ProviderId:        "subnet-{{.}}",
+		AvailabilityZones: []string{"zone{{.}}"},
+		SpaceName:         "{{if (eq . 0)}}space1{{else}}space2{{end}}",
+		VLANTag:           42,
 	})
 }
 

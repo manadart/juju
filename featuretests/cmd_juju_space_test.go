@@ -43,10 +43,10 @@ func (s *cmdSpaceSuite) MakeSubnetInfos(c *gc.C, space string, cidrTemplate stri
 		ids[i] = fmt.Sprintf(cidrTemplate, i)
 		infos[i] = network.SubnetInfo{
 			// ProviderId it needs to be unique in state.
-			ProviderId:       network.Id(fmt.Sprintf("sub-%d", rand.Int())),
-			CIDR:             ids[i],
-			SpaceName:        space,
-			AvailabilityZone: "zone1",
+			ProviderId:        network.Id(fmt.Sprintf("sub-%d", rand.Int())),
+			CIDR:              ids[i],
+			SpaceName:         space,
+			AvailabilityZones: []string{"zone1"},
 		}
 	}
 	return infos, ids

@@ -44,7 +44,7 @@ func (s *SpacesSuite) makeSubnetInfosForCIDRs(c *gc.C, CIDRs []string) []network
 		infos[i] = network.SubnetInfo{
 			CIDR:              cidr,
 			VLANTag:           79,
-			AvailabilityZones: []string{"AvailabilityZone"},
+			AvailabilityZones: []string{"AvailabilityZones"},
 		}
 
 	}
@@ -584,7 +584,7 @@ func (s *SpacesSuite) TestFanSubnetInheritsSpace(c *gc.C) {
 	info := network.SubnetInfo{
 		CIDR:              "253.1.0.0/16",
 		VLANTag:           79,
-		AvailabilityZones: []string{"AvailabilityZone"},
+		AvailabilityZones: []string{"AvailabilityZones"},
 	}
 	info.SetFan("1.1.1.0/24", "253.0.0.0/8")
 	_, err = s.State.AddSubnet(info)
