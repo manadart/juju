@@ -15,6 +15,7 @@ import (
 	names "gopkg.in/juju/names.v2"
 
 	"github.com/juju/juju/core/instance"
+	corenetworkenv "github.com/juju/juju/core/network"
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/context"
 	networkenv "github.com/juju/juju/network"
@@ -136,14 +137,14 @@ func (e *environSuite) TestReleaseContainerAddresses(c *gc.C) {
 
 func (e *environSuite) TestSubnetsWithEmptyParams(c *gc.C) {
 	info, err := e.netEnv.Subnets(e.callCtx, "", nil)
-	c.Assert(info, jc.DeepEquals, []networkenv.SubnetInfo{})
+	c.Assert(info, jc.DeepEquals, []corenetworkenv.SubnetInfo{})
 	c.Assert(err, gc.IsNil)
 }
 
 func (e *environSuite) TestSubnets(c *gc.C) {
-	ids := []networkenv.Id{networkenv.Id("0")}
+	ids := []corenetworkenv.Id{corenetworkenv.Id("0")}
 	info, err := e.netEnv.Subnets(e.callCtx, instance.Id("0"), ids)
-	c.Assert(info, jc.DeepEquals, []networkenv.SubnetInfo{})
+	c.Assert(info, jc.DeepEquals, []corenetworkenv.SubnetInfo{})
 	c.Assert(err, gc.IsNil)
 }
 
@@ -175,5 +176,5 @@ func (e *environSuite) TestNetworkInterfacesWithEmptyParams(c *gc.C) {
 func (e *environSuite) TestSpaces(c *gc.C) {
 	info, err := e.netEnv.Spaces(e.callCtx)
 	c.Assert(err, gc.IsNil)
-	c.Assert(info, jc.DeepEquals, []networkenv.SpaceInfo{})
+	c.Assert(info, jc.DeepEquals, []corenetworkenv.SpaceInfo{})
 }

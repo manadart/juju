@@ -13,6 +13,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
+	corenetwork "github.com/juju/juju/core/network"
 	"github.com/juju/juju/network"
 	"github.com/juju/juju/testing"
 )
@@ -417,6 +418,6 @@ func (s *CIDRSuite) TestParseCIDR(c *gc.C) {
 }
 
 func (s *NetworkSuite) TestGenerateVirtualMACAddress(c *gc.C) {
-	mac := network.GenerateVirtualMACAddress()
+	mac := corenetwork.GenerateVirtualMACAddress()
 	c.Check(mac, gc.Matches, "^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$")
 }

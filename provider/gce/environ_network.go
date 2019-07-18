@@ -125,9 +125,8 @@ func (e *environ) getInstanceSubnets(
 	for _, iface := range ifaces {
 		if subnetIds.Include(string(iface.ProviderSubnetId)) {
 			results = append(results, makeSubnetInfo(
-				// TODO (manadart 2019-07-11): Move InterfaceInfo to core and remove casting.
-				corenetwork.Id(iface.ProviderSubnetId),
-				corenetwork.Id(iface.ProviderNetworkId),
+				iface.ProviderSubnetId,
+				iface.ProviderNetworkId,
 				iface.CIDR,
 				zones,
 			))

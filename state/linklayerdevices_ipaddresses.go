@@ -222,7 +222,7 @@ func (addr *Address) Remove() (err error) {
 	removeOp := removeIPAddressDocOp(addr.doc.DocID)
 	ops := []txn.Op{removeOp}
 	if addr.ProviderID() != "" {
-		op := addr.st.networkEntityGlobalKeyRemoveOp("address", corenetwork.Id(addr.ProviderID()))
+		op := addr.st.networkEntityGlobalKeyRemoveOp("address", addr.ProviderID())
 		ops = append(ops, op)
 	}
 	return addr.st.db().RunTransaction(ops)

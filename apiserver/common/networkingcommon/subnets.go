@@ -78,7 +78,9 @@ func (cache *addSubnetsCache) validateSpace(spaceTag string) (*names.SpaceTag, e
 				logger.Warningf("ignoring duplicated space %q", space.Name())
 				continue
 			}
-			cache.allSpaces.Add(space.Name())
+			if space.Name() != network.DefaultSpaceName {
+				cache.allSpaces.Add(space.Name())
+			}
 		}
 	}
 	if cache.allSpaces.IsEmpty() {
