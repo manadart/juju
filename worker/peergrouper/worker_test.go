@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"reflect"
 	"sort"
 	"strconv"
 	"sync"
@@ -425,7 +426,7 @@ func (s *workerSuite) TestFatalErrors(c *gc.C) {
 			defer workertest.DirtyKill(c, w)
 
 			for j := 0; j < testCase.advanceCount; j++ {
-				s.clock.WaitAdvance(pollInterval, coretesting.ShortWait, 1)
+				_ = s.clock.WaitAdvance(pollInterval, coretesting.ShortWait, 1)
 			}
 			done := make(chan error)
 			go func() {
@@ -459,7 +460,7 @@ func (s *workerSuite) TestSetMembersErrorIsNotFatal(c *gc.C) {
 		// Just watch three error retries
 		retryInterval := initialRetryInterval
 		for i := 0; i < 3; i++ {
-			s.clock.WaitAdvance(retryInterval, coretesting.ShortWait, 1)
+			_ = s.clock.WaitAdvance(retryInterval, coretesting.ShortWait, 1)
 			retryInterval = scaleRetry(retryInterval)
 			select {
 			case err := <-called:
@@ -497,25 +498,30 @@ func (s *workerSuite) TestControllersArePublished(c *gc.C) {
 			c.Fatalf("timed out waiting for publish")
 		}
 
-		// If a config change wakes up the loop *after* the controller topology
-		// is published, then we will get another call to setAPIHostPorts.
-		// This can take longer than the standard ShortWait duration.
-		select {
-		case <-publishCh:
-		case <-time.After(3 * coretesting.ShortWait):
-		}
-
-		// Change one of the server API addresses and check that it is
-		// published.
+		// Change one of the server API addresses.
 		newMachine10Addresses := network.NewSpaceAddresses(ipVersion.extraHost)
 		st.controller("10").setAddresses(newMachine10Addresses...)
-		select {
-		case servers := <-publishCh:
-			expected := ExpectedAPIHostPorts(3, ipVersion)
-			expected[0] = network.SpaceAddressesWithPort(newMachine10Addresses, apiPort)
-			AssertAPIHostPorts(c, servers, expected)
-		case <-time.After(coretesting.LongWait):
-			c.Fatalf("timed out waiting for publish")
+
+		// Set up our sorted expectation for the new server addresses.
+		expected := ExpectedAPIHostPorts(3, ipVersion)
+		expected[0] = network.SpaceAddressesWithPort(newMachine10Addresses, apiPort)
+		sort.Sort(hostPortSliceByHostPort(expected))
+
+		// If a config change wakes up the loop *after* the controller topology
+		// is published, then we will get another call to setAPIHostPorts.
+		// This can take an indeterminate amount of time, so we just loop until
+		// we see the expected addresses, or hit the timeout.
+		timeout := time.After(coretesting.LongWait)
+		for {
+			select {
+			case servers := <-publishCh:
+				sort.Sort(hostPortSliceByHostPort(servers))
+				if reflect.DeepEqual(servers, expected) {
+					return
+				}
+			case <-timeout:
+				c.Fatalf("timed out waiting for correct addresses to be published")
+			}
 		}
 	})
 }
