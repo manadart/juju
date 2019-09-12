@@ -499,9 +499,10 @@ func (s *workerSuite) TestControllersArePublished(c *gc.C) {
 
 		// If a config change wakes up the loop *after* the controller topology
 		// is published, then we will get another call to setAPIHostPorts.
+		// This can take longer than the standard ShortWait duration.
 		select {
 		case <-publishCh:
-		case <-time.After(coretesting.ShortWait):
+		case <-time.After(3 * coretesting.ShortWait):
 		}
 
 		// Change one of the server API addresses and check that it is
