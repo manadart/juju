@@ -55,10 +55,10 @@ var (
 
 type workerSuite struct {
 	coretesting.BaseSuite
-	clock  *testclock.Clock
-	hub    Hub
-	notify chan struct{}
-	mu     sync.Mutex
+	clock *testclock.Clock
+	hub   Hub
+	idle  chan struct{}
+	mu    sync.Mutex
 }
 
 var _ = gc.Suite(&workerSuite{})
@@ -68,6 +68,7 @@ func (s *workerSuite) SetUpTest(c *gc.C) {
 	s.clock = testclock.NewClock(time.Now())
 	s.hub = nopHub{}
 	logger.SetLogLevel(loggo.TRACE)
+	s.PatchValue(&IdleFunc, s.idleNotify)
 }
 
 type testSuite interface {
@@ -976,7 +977,8 @@ func (s *workerSuite) initialize3Voters(c *gc.C) (*fakeState, worker.Worker, *vo
 	mustNext(c, memberWatcher, "nonvoting members")
 	assertMembers(c, memberWatcher.Value(), mkMembers("0v 1 2", testIPv4))
 	st.session.setStatus(mkStatuses("0p 1s 2s", testIPv4))
-	s.ensureUpdateChannelProcessed(c, pollInterval, time.Second, 1)
+	s.waitUntilIdle(c)
+	s.clock.Advance(pollInterval)
 	mustNext(c, memberWatcher, "status ok")
 	assertMembers(c, memberWatcher.Value(), mkMembers("0v 1v 2v", testIPv4))
 	err = st.controller("11").SetHasVote(true)
@@ -1031,7 +1033,8 @@ func (s *workerSuite) TestRemovePrimaryValidSecondaries(c *gc.C) {
 		c.Check(testStatus.Members[2].State, gc.Equals, replicaset.MemberState(replicaset.PrimaryState))
 	}
 	// Now we have to wait for time to advance for us to reevaluate the system
-	c.Assert(s.clock.WaitAdvance(2*pollInterval, coretesting.LongWait, 2), jc.ErrorIsNil)
+	s.waitUntilIdle(c)
+	s.clock.Advance(2 * pollInterval)
 	mustNext(c, memberWatcher, "reevaluting member post-step-down")
 	// we should now have switch the vote over to whoever became the primary
 	if primaryMemberIndex == 1 {
@@ -1055,7 +1058,8 @@ func (s *workerSuite) TestRemovePrimaryValidSecondaries(c *gc.C) {
 	// StepDownPrimary and then can remove its vote.
 	// now we timeout so that the system will notice we really do still want to step down the primary, and ask
 	// for it to revote.
-	c.Assert(s.clock.WaitAdvance(2*pollInterval, coretesting.ShortWait, 1), jc.ErrorIsNil)
+	s.waitUntilIdle(c)
+	s.clock.Advance(2 * pollInterval)
 	testStatus = mustNextStatus(c, statusWatcher, "stepping down new primary")
 	if primaryMemberIndex == 1 {
 		// 11 was the primary, now 12 is
@@ -1066,7 +1070,8 @@ func (s *workerSuite) TestRemovePrimaryValidSecondaries(c *gc.C) {
 		c.Check(testStatus.Members[2].State, gc.Equals, replicaset.MemberState(replicaset.SecondaryState))
 	}
 	// and then we again notice that the primary has been rescheduled and changed the member votes again
-	c.Assert(s.clock.WaitAdvance(pollInterval, coretesting.ShortWait, 1), jc.ErrorIsNil)
+	s.waitUntilIdle(c)
+	s.clock.Advance(pollInterval)
 	mustNext(c, memberWatcher, "reevaluting member post-step-down")
 	if primaryMemberIndex == 1 {
 		// primary was 11, now it is 12 as the only voter
@@ -1177,43 +1182,40 @@ func (s *workerSuite) newWorker(
 		APIPort:            apiPort,
 		Hub:                s.hub,
 		SupportsHA:         supportsHA,
-		UpdateNotify:       s.updateNotify,
 	})
 }
 
-func (s *workerSuite) updateNotify() {
-	logger.Infof("updateNotify signalled")
+func (s *workerSuite) idleNotify() {
+	logger.Infof("idleNotify signalled")
 	s.mu.Lock()
-	notify := s.notify
+	idle := s.idle
 	s.mu.Unlock()
-	if notify == nil {
+	if idle == nil {
 		return
 	}
-	// Send down the notify channel if it is set.
+	// Send down the idle channel if it is set.
 	select {
-	case notify <- struct{}{}:
+	case idle <- struct{}{}:
 	case <-time.After(coretesting.LongWait):
 		// no-op
 		logger.Infof("... no one watching")
 	}
 }
 
-func (s *workerSuite) ensureUpdateChannelProcessed(c *gc.C, d, w time.Duration, n int) {
-	logger.Infof("ensureUpdateChannelProcessed, delay %s", d)
+func (s *workerSuite) waitUntilIdle(c *gc.C) {
+	logger.Infof("wait for idle")
 	s.mu.Lock()
-	s.notify = make(chan struct{})
+	s.idle = make(chan struct{})
 	s.mu.Unlock()
 
-	c.Assert(s.clock.WaitAdvance(d, w, n), gc.IsNil)
-
 	select {
-	case <-s.notify:
+	case <-s.idle:
 		// All good.
 	case <-time.After(coretesting.LongWait):
-		c.Errorf("update channel not signalled in worker")
+		c.Fatalf("idle channel not signalled in worker")
 	}
 
 	s.mu.Lock()
-	s.notify = nil
+	s.idle = nil
 	s.mu.Unlock()
 }

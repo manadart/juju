@@ -29,7 +29,7 @@ type controllerTracker struct {
 	// protected by the mutex.
 	id        string
 	wantsVote bool
-	addresses []network.SpaceAddress
+	addresses network.SpaceAddresses
 }
 
 func newControllerTracker(node ControllerNode, host ControllerHost, notifyCh chan struct{}) (*controllerTracker, error) {

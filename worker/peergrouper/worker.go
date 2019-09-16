@@ -92,6 +92,14 @@ var (
 	// to State. This enables us to make changes to members
 	// that are triggered by changes to member status.
 	pollInterval = 1 * time.Minute
+
+	// IdleFunc allows tests to be able to get callbacks when the controller
+	// hasn't been given any changes for a specified time.
+	IdleFunc func()
+
+	// IdleTime relates to how long the controller needs to wait with no changes
+	// to be considered idle.
+	IdleTime = 50 * time.Millisecond
 )
 
 // Hub defines the methods of the apiserver centralhub that the peer
@@ -125,6 +133,8 @@ type pgWorker struct {
 	// serverDetails holds the last server information broadcast via pub/sub.
 	// It is used to detect changes since the last publish.
 	serverDetails apiserver.Details
+
+	idleFunc func()
 }
 
 // Config holds the configuration for a peergrouper worker.
@@ -189,6 +199,7 @@ func New(config Config) (worker.Worker, error) {
 		controllerChanges:  make(chan struct{}),
 		controllerTrackers: make(map[string]*controllerTracker),
 		detailsRequests:    make(chan string),
+		idleFunc:           IdleFunc,
 	}
 	err := catacomb.Invoke(catacomb.Plan{
 		Site: &w.catacomb,
@@ -230,11 +241,22 @@ func (w *pgWorker) loop() error {
 	var updateChan <-chan time.Time
 	retryInterval := initialRetryInterval
 
+	var idle <-chan time.Time
+	if w.idleFunc != nil {
+		logger.Tracef("pgWorker %p set idle timeout to %s", w, IdleTime)
+		idle = time.After(IdleTime)
+	}
+
 	for {
 		logger.Tracef("waiting...")
 		select {
 		case <-w.catacomb.Dying():
 			return w.catacomb.ErrDying()
+		case <-idle:
+			logger.Tracef("pgWorker %p is idle", w)
+			w.idleFunc()
+			idle = time.After(IdleTime)
+			continue
 		case <-controllerChanges:
 			// A controller controller was added or removed.
 			logger.Tracef("<-controllerChanges")
@@ -295,6 +317,8 @@ func (w *pgWorker) loop() error {
 				logger.Errorf("cannot set replicaset: %v", err)
 			} else if _, isStepDownPrimary := err.(*stepDownPrimaryError); !isStepDownPrimary {
 				return errors.Trace(err)
+			} else {
+				logger.Tracef("isStepDownPrimary error: %v", err)
 			}
 			// both replicaset errors and stepping down the primary are both considered fast-retry 'failures'.
 			// we need to re-read the state after a short timeout and re-evaluate the replicaset.
@@ -303,21 +327,26 @@ func (w *pgWorker) loop() error {
 		w.publishAPIServerDetails(servers, members)
 
 		if failed {
-			logger.Tracef("failed, waking up after: %v", retryInterval)
+			logger.Tracef("failed, will wake up after: %v", retryInterval)
 			updateChan = w.config.Clock.After(retryInterval)
 			retryInterval = scaleRetry(retryInterval)
 		} else {
 			// Update the replica set members occasionally to keep them up to
 			// date with the current replica-set member statuses.
-			logger.Tracef("succeeded, waking up after: %v", pollInterval)
 			// If we had previously failed to update the replicaset,
 			// the updateChan isn't set to the pollInterval. So if we had just
 			// processed an update, or have just succeeded after a failure reset
 			// the updateChan to the pollInterval.
 			if updateChan == nil || retryInterval != initialRetryInterval {
+				logger.Tracef("succeeded, will wake up after: %v", pollInterval)
 				updateChan = w.config.Clock.After(pollInterval)
+			} else {
+				logger.Tracef("succeeded, wait already pending")
 			}
 			retryInterval = initialRetryInterval
+		}
+		if w.idleFunc != nil {
+			idle = time.After(IdleTime)
 		}
 	}
 }
