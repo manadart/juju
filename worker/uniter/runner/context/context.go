@@ -139,6 +139,7 @@ type HookUnit interface {
 	UnitStatus() (params.StatusResult, error)
 	UpdateNetworkInfo() error
 	CommitHookChanges(params.CommitHookChangesArgs) error
+	PublicAddress() (string, error)
 }
 
 // HookContext is the implementation of runner.Context.
@@ -626,10 +627,18 @@ func (ctx *HookContext) ResetExecutionSetUnitStatus() {
 	ctx.hasRunStatusSet = false
 }
 
-// PublicAddress returns the executing unit's public address or an
-// error if it is not available.
+// PublicAddress fetches the executing unit's public address if has not yet
+// been retrieved.
+// The cached value is returned, or an error if it is not available.
 // Implements jujuc.HookContext.ContextNetworking, part of runner.Context.
 func (ctx *HookContext) PublicAddress() (string, error) {
+	if ctx.publicAddress == "" {
+		var err error
+		if ctx.publicAddress, err = ctx.unit.PublicAddress(); err != nil {
+			return "", errors.Trace(err)
+		}
+	}
+
 	if ctx.publicAddress == "" {
 		return "", errors.NotFoundf("public address")
 	}
