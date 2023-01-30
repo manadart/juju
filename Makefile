@@ -134,7 +134,7 @@ endif
 ifeq ($(shell echo "${GOARCH}" | sed -E 's/.*(arm|arm64|ppc64le|ppc64|s390x).*/golang/'), golang)
 	TEST_TIMEOUT := 5400s
 else
-	TEST_TIMEOUT := 2700s
+	TEST_TIMEOUT := 600s
 endif
 TEST_TIMEOUT:=$(TEST_TIMEOUT)
 

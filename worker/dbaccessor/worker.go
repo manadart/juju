@@ -238,7 +238,7 @@ func (w *dbWorker) initializeDqlite() error {
 		return errors.Trace(err)
 	}
 
-	withTLS, err := opt.WithTLSOption()
+	//withTLS, err := opt.WithTLSOption()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -248,7 +248,7 @@ func (w *dbWorker) initializeDqlite() error {
 		return errors.Trace(err)
 	}
 
-	if w.dbApp, err = w.cfg.NewApp(dataDir, withAddr, withTLS, withCluster, opt.WithLogFuncOption()); err != nil {
+	if w.dbApp, err = w.cfg.NewApp(dataDir, withAddr, withCluster, opt.WithLogFuncOption()); err != nil {
 		return errors.Trace(err)
 	}
 

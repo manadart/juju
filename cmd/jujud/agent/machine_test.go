@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	stdcontext "context"
+	"database/sql"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -61,6 +62,10 @@ import (
 	"github.com/juju/juju/core/migration"
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/network"
+<<<<<<< Updated upstream
+=======
+	"github.com/juju/juju/database"
+>>>>>>> Stashed changes
 	"github.com/juju/juju/environs"
 	"github.com/juju/juju/environs/context"
 	envtesting "github.com/juju/juju/environs/testing"
@@ -96,6 +101,8 @@ const (
 
 type MachineSuite struct {
 	commonMachineSuite
+
+	dqliteOptions *database.OptionFactory
 }
 
 var _ = gc.Suite(&MachineSuite{})
@@ -114,10 +121,11 @@ func (s *MachineSuite) SetUpTest(c *gc.C) {
 		controller.AuditingEnabled: true,
 	}
 	s.commonMachineSuite.SetUpTest(c)
-	bootstrapRaft(c, s.DataDir())
 
 	// Restart failed workers much faster for the tests.
 	s.PatchValue(&engine.EngineErrorDelay, 100*time.Millisecond)
+
+	s.setDqliteOptions(c, loggo.GetLogger("cmd.jujud.agent.test"))
 
 	// Most of these tests normally finish sub-second on a fast machine.
 	// If any given test hits a minute, we have almost certainly become
@@ -125,8 +133,38 @@ func (s *MachineSuite) SetUpTest(c *gc.C) {
 	coretesting.DumpTestLogsAfter(time.Minute, c, s)
 }
 
+<<<<<<< Updated upstream
 func bootstrapRaft(c *gc.C, dataDir string) {
 	// TODO (stickupkid): Use the dqlite suite.
+=======
+// setDqliteOptions creates a new option factory that will bind Dqlite to the
+// loopback device.
+func (s *MachineSuite) setDqliteOptions(c *gc.C, l loggo.Logger) {
+	// None of this config is relevant except for the data directory.
+	// Other values exist to pass validation.
+	cfg, err := agent.NewAgentConfig(agent.AgentConfigParams{
+		Paths:                  agent.Paths{DataDir: s.DataDir()},
+		Tag:                    names.NewMachineTag("not-used"),
+		Password:               "not-used",
+		Nonce:                  "not-used",
+		Controller:             names.NewControllerTag(utils.MustNewUUID().String()),
+		Model:                  names.NewModelTag(utils.MustNewUUID().String()),
+		APIAddresses:           []string{"localhost:9000"},
+		CACert:                 "not used",
+		UpgradedToVersion:      coretesting.CurrentVersion().Number,
+		AgentLogfileMaxBackups: 7,
+		AgentLogfileMaxSizeMB:  123,
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
+	s.PatchValue(&database.DefaultBindAddress, "127.0.0.1")
+	s.dqliteOptions = database.NewOptionFactory(cfg, l)
+}
+
+func (s *MachineSuite) bootstrapDqlite(c *gc.C, ops ...func(db *sql.DB) error) {
+	err := database.BootstrapDqlite(stdcontext.TODO(), s.dqliteOptions, loggo.GetLogger("cmd.jujud.agent.test"), ops...)
+	c.Assert(err, jc.ErrorIsNil)
+>>>>>>> Stashed changes
 }
 
 func (s *MachineSuite) TestParseNonsense(c *gc.C) {
@@ -278,7 +316,11 @@ func (s *MachineSuite) TestDyingMachine(c *gc.C) {
 }
 
 func (s *MachineSuite) TestManageModelRunsInstancePoller(c *gc.C) {
+<<<<<<< Updated upstream
 	testing.PatchExecutableAsEchoArgs(c, s, "ovs-vsctl", 0)
+=======
+	s.bootstrapDqlite(c)
+>>>>>>> Stashed changes
 	s.AgentSuite.PatchValue(&instancepoller.ShortPoll, 500*time.Millisecond)
 	s.AgentSuite.PatchValue(&instancepoller.ShortPollCap, 500*time.Millisecond)
 
@@ -410,6 +452,7 @@ func (s *MachineSuite) testUpgradeRequest(c *gc.C, agent runner, tag string, cur
 }
 
 func (s *MachineSuite) TestUpgradeRequest(c *gc.C) {
+	s.bootstrapDqlite(c)
 	m, _, currentTools := s.primeAgent(c, state.JobManageModel, state.JobHostUnits)
 	ctrl, a := s.newAgent(c, m)
 	defer ctrl.Finish()
@@ -418,6 +461,7 @@ func (s *MachineSuite) TestUpgradeRequest(c *gc.C) {
 }
 
 func (s *MachineSuite) TestNoUpgradeRequired(c *gc.C) {
+	s.bootstrapDqlite(c)
 	m, _, _ := s.primeAgent(c, state.JobManageModel, state.JobHostUnits)
 	ctrl, a := s.newAgent(c, m)
 	defer ctrl.Finish()
@@ -529,6 +573,7 @@ func (s *MachineSuite) waitForOpenState(c *gc.C, a *MachineAgent) (*state.State,
 }
 
 func (s *MachineSuite) TestManageModelServesAPI(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertJobWithState(c, state.JobManageModel, nil, func(conf agent.Config, agentState *state.State, a *MachineAgent) {
 		apiInfo, ok := conf.APIInfo()
 		c.Assert(ok, jc.IsTrue)
@@ -549,6 +594,7 @@ func (noOpLogger) Debugf(string, ...interface{})    {}
 func (noOpLogger) Tracef(string, ...interface{})    {}
 
 func (s *MachineSuite) TestIAASControllerPatchUpdateManagerFile(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertJobWithState(c, state.JobManageModel,
 		func() {
 			s.cmdRunner.EXPECT().RunCommands(exec.RunParams{
@@ -568,6 +614,7 @@ func (s *MachineSuite) TestIAASControllerPatchUpdateManagerFile(c *gc.C) {
 }
 
 func (s *MachineSuite) TestIAASControllerPatchUpdateManagerFileErrored(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertJobWithState(c, state.JobManageModel,
 		func() {
 			s.cmdRunner.EXPECT().RunCommands(exec.RunParams{
@@ -587,6 +634,7 @@ func (s *MachineSuite) TestIAASControllerPatchUpdateManagerFileErrored(c *gc.C) 
 }
 
 func (s *MachineSuite) TestIAASControllerPatchUpdateManagerFileNonZeroExitCode(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertJobWithState(c, state.JobManageModel,
 		func() {
 			s.cmdRunner.EXPECT().RunCommands(exec.RunParams{
@@ -606,6 +654,7 @@ func (s *MachineSuite) TestIAASControllerPatchUpdateManagerFileNonZeroExitCode(c
 }
 
 func (s *MachineSuite) TestManageModelAuditsAPI(c *gc.C) {
+	s.bootstrapDqlite(c)
 	password := "shhh..."
 	user := s.Factory.MakeUser(c, &factory.UserParams{
 		Password: password,
@@ -751,6 +800,7 @@ func (s *MachineSuite) assertAgentSetsToolsVersion(c *gc.C, job state.MachineJob
 }
 
 func (s *MachineSuite) TestAgentSetsToolsVersionManageModel(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertAgentSetsToolsVersion(c, state.JobManageModel)
 }
 
@@ -759,6 +809,7 @@ func (s *MachineSuite) TestAgentSetsToolsVersionHostUnits(c *gc.C) {
 }
 
 func (s *MachineSuite) TestManageModelRunsCleaner(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertJobWithState(c, state.JobManageModel, nil, func(conf agent.Config, agentState *state.State, a *MachineAgent) {
 		// Create an application and unit, and destroy the app.
 		app := s.AddTestingApplication(c, "wordpress", s.AddTestingCharm(c, "wordpress"))
@@ -792,6 +843,7 @@ func (s *MachineSuite) TestManageModelRunsCleaner(c *gc.C) {
 }
 
 func (s *MachineSuite) TestJobManageModelRunsMinUnitsWorker(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.assertJobWithState(c, state.JobManageModel, nil, func(_ agent.Config, agentState *state.State, _ *MachineAgent) {
 		// Ensure that the MinUnits worker is alive by doing a simple check
 		// that it responds to state changes: add an application, set its minimum
@@ -1125,6 +1177,7 @@ func (s *MachineSuite) TestMachineAgentIgnoreAddressesContainer(c *gc.C) {
 }
 
 func (s *MachineSuite) TestMachineWorkers(c *gc.C) {
+	s.bootstrapDqlite(c)
 	testing.PatchExecutableAsEchoArgs(c, s, "ovs-vsctl", 0)
 
 	tracker := agenttest.NewEngineTracker()
@@ -1149,6 +1202,7 @@ func (s *MachineSuite) TestMachineWorkers(c *gc.C) {
 }
 
 func (s *MachineSuite) TestControllerModelWorkers(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.PatchValue(&charmrevision.NewAPIFacade, func(base.APICaller) (charmrevision.Facade, error) {
 		return noopRevisionUpdater{}, nil
 	})
@@ -1170,6 +1224,7 @@ func (s *MachineSuite) TestControllerModelWorkers(c *gc.C) {
 }
 
 func (s *MachineSuite) TestHostedModelWorkers(c *gc.C) {
+	s.bootstrapDqlite(c)
 	s.PatchValue(&charmrevision.NewAPIFacade, func(base.APICaller) (charmrevision.Facade, error) {
 		return noopRevisionUpdater{}, nil
 	})
@@ -1198,6 +1253,8 @@ func (s *MachineSuite) TestHostedModelWorkers(c *gc.C) {
 }
 
 func (s *MachineSuite) TestWorkersForHostedModelWithInvalidCredential(c *gc.C) {
+	s.bootstrapDqlite(c)
+
 	// The dummy provider blows up in the face of multi-model
 	// scenarios so patch in a minimal environs.Environ that's good
 	// enough to allow the model workers to run.
@@ -1243,6 +1300,8 @@ func (s *MachineSuite) TestWorkersForHostedModelWithInvalidCredential(c *gc.C) {
 }
 
 func (s *MachineSuite) TestWorkersForHostedModelWithDeletedCredential(c *gc.C) {
+	s.bootstrapDqlite(c)
+
 	// The dummy provider blows up in the face of multi-model
 	// scenarios so patch in a minimal environs.Environ that's good
 	// enough to allow the model workers to run.
@@ -1293,6 +1352,8 @@ func (s *MachineSuite) TestWorkersForHostedModelWithDeletedCredential(c *gc.C) {
 }
 
 func (s *MachineSuite) TestMigratingModelWorkers(c *gc.C) {
+	s.bootstrapDqlite(c)
+
 	st, closer := s.setUpNewModel(c)
 	defer closer()
 	uuid := st.ModelUUID()
@@ -1338,6 +1399,7 @@ func (s *MachineSuite) TestMigratingModelWorkers(c *gc.C) {
 }
 
 func (s *MachineSuite) TestDyingModelCleanedUp(c *gc.C) {
+	s.bootstrapDqlite(c)
 	st, closer := s.setUpNewModel(c)
 	defer closer()
 
@@ -1372,7 +1434,7 @@ func (s *MachineSuite) TestDyingModelCleanedUp(c *gc.C) {
 func (s *MachineSuite) TestModelWorkersRespectSingularResponsibilityFlag(c *gc.C) {
 	// Grab responsibility for the model on behalf of another machine.
 	uuid := s.BackingState.ModelUUID()
-	claimSingularRaftLease(c, s.DataDir(), uuid)
+	s.claimSingularLease(c, uuid)
 
 	// Then run a normal model-tracking test, just checking for
 	// a different set of workers.
@@ -1386,8 +1448,26 @@ func (s *MachineSuite) TestModelWorkersRespectSingularResponsibilityFlag(c *gc.C
 	})
 }
 
+<<<<<<< Updated upstream
 func claimSingularRaftLease(c *gc.C, dataDir string, modelUUID string) {
 	// TODO(stickupkid): Implement for the dqlite implementation.
+=======
+func (s *MachineSuite) claimSingularLease(c *gc.C, modelUUID string) {
+	err := database.BootstrapDqlite(
+		stdcontext.TODO(),
+		s.dqliteOptions,
+		loggo.GetLogger("cmd.jujud.agent.test"),
+		func(db *sql.DB) error {
+			q := `
+INSERT INTO lease (uuid, lease_type_id, model_uuid, name, holder, start, expiry)
+VALUES (?, 0, ?, ?, 'machine-999-lxd-99', datetime('now'), datetime('now', '+100 seconds'))`[1:]
+
+			_, err := db.Exec(q, utils.MustNewUUID().String(), modelUUID, modelUUID)
+			return err
+		},
+	)
+	c.Assert(err, jc.ErrorIsNil)
+>>>>>>> Stashed changes
 }
 
 func (s *MachineSuite) setUpNewModel(c *gc.C) (newSt *state.State, closer func()) {
@@ -1439,7 +1519,7 @@ type cleanupSuite interface {
 
 func startAddressPublisher(suite cleanupSuite, c *gc.C, agent *MachineAgent) {
 	// Start publishing a test API address on the central hub so that
-	// the raft workers can start. The other way of unblocking them
+	// dependent workers can start. The other way of unblocking them
 	// would be to get the peergrouper healthy, but that has proved
 	// difficult - trouble getting the replicaset correctly
 	// configured.
