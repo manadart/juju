@@ -21,10 +21,13 @@ const (
 // for the identified agent.
 func AgentConf(info AgentInfo, renderer shell.Renderer) common.Conf {
 	conf := common.Conf{
-		Desc:          fmt.Sprintf("juju agent for %s", info.name),
-		ExecStart:     info.cmd(renderer),
-		Logfile:       info.logFile(renderer),
-		Env:           osenv.FeatureFlags(),
+		Desc:      fmt.Sprintf("juju agent for %s", info.name),
+		ExecStart: info.cmd(renderer),
+		Logfile:   info.logFile(renderer),
+		Env: map[string]string{
+			"LIBRAFT_TRACE":   "1",
+			"LIBDQLITE_TRACE": "1",
+		},
 		Timeout:       agentServiceTimeout,
 		ServiceBinary: info.jujud(renderer),
 		ServiceArgs:   info.execArgs(renderer),
