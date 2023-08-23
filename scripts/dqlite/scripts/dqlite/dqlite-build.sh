@@ -101,7 +101,7 @@ build() {
     cd ../
 
     # raft
-    git clone https://github.com/canonical/raft.git --depth 1 --branch ${TAG_RAFT}
+    git clone https://github.com/MathieuBordere/raft.git --depth 1 --branch ${TAG_RAFT}
     cd raft
     autoreconf -i
     CFLAGS="-I${PWD}/../libuv/include -I${PWD}/../lz4/lib ${CUSTOM_CFLAGS}" \
