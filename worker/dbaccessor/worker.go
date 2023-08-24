@@ -567,6 +567,11 @@ func (w *dbWorker) startDqliteNode(ctx context.Context, options ...app.Option) e
 		return errors.Trace(err)
 	}
 
+	start := time.Now()
+	defer func() {
+		w.cfg.Logger.Warningf("*** INSTRUMENTATION: NODE START TOOK %s", time.Now().Sub(start).String())
+	}()
+
 	dqliteOptions := append(options,
 		mgr.WithLogFuncOption(),
 		mgr.WithTracingOption(),
@@ -802,6 +807,11 @@ func (w *dbWorker) rebindAddress(ctx context.Context, addr string) error {
 		return errors.Trace(err)
 	}
 	servers[0].Address = net.JoinHostPort(addr, port)
+
+	start := time.Now()
+	defer func() {
+		w.cfg.Logger.Warningf("*** INSTRUMENTATION: REBIND TOOK %s", time.Now().Sub(start).String())
+	}()
 
 	w.cfg.Logger.Infof("rebinding Dqlite node to %s", addr)
 	if err := mgr.SetClusterServers(ctx, servers); err != nil {
