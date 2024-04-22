@@ -340,6 +340,12 @@ dqlite-repl: musl-install-if-missing dqlite-install-if-missing
 	${run_cgo_install}
 	mv $(GO_INSTALL_PATH)/cmd $(GO_INSTALL_PATH)/dqlite-repl
 
+.PHONY: reconfigure
+reconfigure: PACKAGE = github.com/juju/juju/scripts/dqlite/reconfigure
+reconfigure: musl-install-if-missing dqlite-install-if-missing
+## reconfigure: Build reconfigure without updating dependencies
+	${run_cgo_build}
+
 .PHONY: containeragent
 containeragent: PACKAGE = github.com/juju/juju/cmd/containeragent
 containeragent:
