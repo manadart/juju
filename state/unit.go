@@ -5,6 +5,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/juju/juju/environs/config"
 	"reflect"
 	"sort"
 	"time"
@@ -1644,6 +1645,7 @@ var (
 
 // assignToMachine is the internal version of AssignToMachine.
 func (u *Unit) assignToMachine(
+	cfg config.Config,
 	m MachineRef,
 	unused bool,
 ) (err error) {
@@ -1660,7 +1662,7 @@ func (u *Unit) assignToMachine(
 				return nil, errors.Trace(err)
 			}
 		}
-		return u.assignToMachineOps(m, unused)
+		return u.assignToMachineOps(cfg, m, unused)
 	}
 	if err := u.st.db().Run(buildTxn); err != nil {
 		return errors.Trace(err)
@@ -1677,6 +1679,7 @@ func (u *Unit) assignToMachine(
 // - alreadyAssignedErr when the unit has already been assigned
 // - inUseErr when the machine already has a unit assigned (if unused is true)
 func (u *Unit) assignToMachineOps(
+	cfg config.Config,
 	m MachineRef,
 	unused bool,
 ) ([]txn.Op, error) {
@@ -1696,7 +1699,7 @@ func (u *Unit) assignToMachineOps(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	sb, err := NewStorageConfigBackend(u.st)
+	sb, err := NewStorageConfigBackend(u.st, cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1800,10 +1803,11 @@ func validateUnitMachineAssignment(
 // validateDynamicMachineStorageParams validates that the provided machine
 // storage parameters are compatible with the specified machine.
 func validateDynamicMachineStorageParams(
+	cfg config.Config,
 	m *Machine,
 	params *storageParams,
 ) error {
-	sb, err := NewStorageConfigBackend(m.st)
+	sb, err := NewStorageConfigBackend(m.st, cfg)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -1941,29 +1945,32 @@ func assignContextf(err *error, unitName string, target string) {
 
 // AssignToMachine assigns this unit to a given machine.
 func (u *Unit) AssignToMachine(
+	cfg config.Config,
 	m *Machine,
 ) (err error) {
 	defer assignContextf(&err, u.Name(), fmt.Sprintf("machine %s", m))
 	if u.doc.Principal != "" {
 		return fmt.Errorf("unit is a subordinate")
 	}
-	return u.assignToMachine(m, false)
+	return u.assignToMachine(cfg, m, false)
 }
 
 // AssignToMachine assigns this unit to a given machine.
 func (u *Unit) AssignToMachineRef(
+	cfg config.Config,
 	m MachineRef,
 ) (err error) {
 	defer assignContextf(&err, u.Name(), fmt.Sprintf("machine %s", m))
 	if u.doc.Principal != "" {
 		return fmt.Errorf("unit is a subordinate")
 	}
-	return u.assignToMachine(m, false)
+	return u.assignToMachine(cfg, m, false)
 }
 
 // assignToNewMachineOps returns txn.Ops to assign the unit to a machine
 // created according to the supplied params, with the supplied constraints.
 func (u *Unit) assignToNewMachineOps(
+	cfg config.Config,
 	template MachineTemplate,
 	parentId string,
 	containerType instance.ContainerType,
@@ -1986,7 +1993,7 @@ func (u *Unit) assignToNewMachineOps(
 	)
 	switch {
 	case parentId == "" && containerType == "":
-		mdoc, ops, err = u.st.addMachineOps(template)
+		mdoc, ops, err = u.st.addMachineOps(cfg, template)
 	case parentId == "":
 		if containerType == "" {
 			return nil, nil, errors.New("assignToNewMachine called without container type (should never happen)")
@@ -1995,9 +2002,9 @@ func (u *Unit) assignToNewMachineOps(
 		// regardless of its child.
 		parentParams := template
 		parentParams.Jobs = []MachineJob{JobHostUnits}
-		mdoc, ops, err = u.st.addMachineInsideNewMachineOps(template, parentParams, containerType)
+		mdoc, ops, err = u.st.addMachineInsideNewMachineOps(cfg, template, parentParams, containerType)
 	default:
-		mdoc, ops, err = u.st.addMachineInsideMachineOps(template, parentId, containerType)
+		mdoc, ops, err = u.st.addMachineInsideMachineOps(cfg, template, parentId, containerType)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -2080,15 +2087,20 @@ func (u *Unit) Constraints() (*constraints.Value, error) {
 // AssignToNewMachine assigns the unit to a new machine, with constraints
 // determined according to the application and model constraints at the
 // time of unit creation.
-func (u *Unit) AssignToNewMachine() (err error) {
+func (u *Unit) AssignToNewMachine(
+	cfg config.Config,
+) (err error) {
 	defer assignContextf(&err, u.Name(), "new machine")
-	return u.assignToNewMachine("")
+	return u.assignToNewMachine(cfg, "")
 }
 
 // assignToNewMachine assigns the unit to a new machine with the
 // optional placement directive, with constraints determined according
 // to the application and model constraints at the time of unit creation.
-func (u *Unit) assignToNewMachine(placement string) error {
+func (u *Unit) assignToNewMachine(
+	cfg config.Config,
+	placement string,
+) error {
 	if u.doc.Principal != "" {
 		return fmt.Errorf("unit is a subordinate")
 	}
@@ -2129,7 +2141,7 @@ func (u *Unit) assignToNewMachine(placement string) error {
 		// machine doc that will be added with those operations
 		// (which includes the machine id).
 		var ops []txn.Op
-		m, ops, err = u.assignToNewMachineOps(template, "", containerType)
+		m, ops, err = u.assignToNewMachineOps(cfg, template, "", containerType)
 		return ops, err
 	}
 	if err := u.st.db().Run(buildTxn); err != nil {

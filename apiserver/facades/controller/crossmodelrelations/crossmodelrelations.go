@@ -167,7 +167,14 @@ func (api *CrossModelRelationsAPIv3) PublishRelationChanges(
 				continue
 			}
 		}
-		if err := commoncrossmodel.PublishRelationChange(ctx, api.authorizer, api.st, api.modelID, relationTag, applicationTag, change); err != nil {
+
+		cfg, err := api.modelConfigService.ModelConfig(ctx)
+		if err != nil {
+			results.Results[i].Error = apiservererrors.ServerError(err)
+			continue
+		}
+
+		if err := commoncrossmodel.PublishRelationChange(ctx, api.authorizer, api.st, *cfg, api.modelID, relationTag, applicationTag, change); err != nil {
 			results.Results[i].Error = apiservererrors.ServerError(err)
 			continue
 		}

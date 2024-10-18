@@ -218,7 +218,13 @@ func (f *Facade) UnitIntroduction(ctx context.Context, args params.CAASUnitIntro
 	if err != nil {
 		return errResp(err)
 	}
-	_, err = application.UpsertCAASUnit(upsert)
+
+	cfg, err := f.modelConfigService.ModelConfig(ctx)
+	if err != nil {
+		return errResp(err)
+	}
+
+	_, err = application.UpsertCAASUnit(*cfg, upsert)
 	if err != nil {
 		return errResp(err)
 	}

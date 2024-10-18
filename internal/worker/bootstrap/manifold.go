@@ -249,6 +249,11 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 				Secrets:         applicationservice.NotImplementedSecretService{},
 			})
 
+			envCfg, err := controllerModelDomainServices.Config().ModelConfig(ctx)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+
 			w, err := NewWorker(WorkerConfig{
 				Agent:                   a,
 				ObjectStoreGetter:       objectStoreGetter,
@@ -267,6 +272,7 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 				BakeryConfigService:     controllerDomainServices.Macaroon(),
 				SystemState: &stateShim{
 					State: systemState,
+					cfg:   *envCfg,
 				},
 				BootstrapUnlocker:       bootstrapUnlocker,
 				AgentBinaryUploader:     config.AgentBinaryUploader,

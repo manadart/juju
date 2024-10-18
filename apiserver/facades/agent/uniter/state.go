@@ -5,6 +5,7 @@ package uniter
 
 import (
 	"context"
+	"github.com/juju/juju/environs/config"
 
 	"github.com/juju/errors"
 	"github.com/juju/names/v5"
@@ -51,12 +52,13 @@ type storageFilesystemInterface interface {
 
 var getStorageState = func(
 	st *state.State,
+	cfg config.Config,
 ) (storageAccess, error) {
 	m, err := st.Model()
 	if err != nil {
 		return nil, err
 	}
-	sb, err := state.NewStorageConfigBackend(st)
+	sb, err := state.NewStorageConfigBackend(st, cfg)
 	if err != nil {
 		return nil, err
 	}

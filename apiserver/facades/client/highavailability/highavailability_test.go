@@ -11,6 +11,7 @@ import (
 	jc "github.com/juju/testing/checkers"
 	gc "gopkg.in/check.v1"
 
+	"github.com/juju/juju/apiserver/common"
 	"github.com/juju/juju/apiserver/facade/facadetest"
 	"github.com/juju/juju/apiserver/facades/client/highavailability"
 	apiservertesting "github.com/juju/juju/apiserver/testing"
@@ -43,6 +44,12 @@ var (
 	controllerCons = constraints.MustParse("mem=16G cores=16")
 )
 
+// modelConfigService is a convenience function to get the controller model's
+// model config service inside a test.
+func (s *clientSuite) modelConfigService(c *gc.C) common.ModelConfigService {
+	return s.ControllerDomainServices(c).Config()
+}
+
 func (s *clientSuite) SetUpTest(c *gc.C) {
 	s.ApiServerSuite.SetUpTest(c)
 
@@ -63,6 +70,7 @@ func (s *clientSuite) SetUpTest(c *gc.C) {
 	// We have to ensure the agents are alive, or EnableHA will create more to
 	// replace them.
 	_, err = st.AddMachines(
+		s.modelConfigService(c),
 		state.MachineTemplate{
 			Base:        state.UbuntuBase("12.10"),
 			Jobs:        []state.MachineJob{state.JobManageModel},
@@ -373,6 +381,7 @@ func (s *clientSuite) TestEnableHAPlacementTo(c *gc.C) {
 	st := s.ControllerModel(c).State()
 	machine1Cons := constraints.MustParse("mem=8G")
 	_, err := st.AddMachines(
+		s.modelConfigService(c),
 		state.MachineTemplate{
 			Base:        state.UbuntuBase("12.10"),
 			Jobs:        []state.MachineJob{state.JobHostUnits},
@@ -381,7 +390,7 @@ func (s *clientSuite) TestEnableHAPlacementTo(c *gc.C) {
 	)
 	c.Assert(err, jc.ErrorIsNil)
 
-	_, err = st.AddMachine(state.UbuntuBase("12.10"), state.JobHostUnits)
+	_, err = st.AddMachine(s.modelConfigService(c), state.UbuntuBase("12.10"), state.JobHostUnits)
 	c.Assert(err, jc.ErrorIsNil)
 
 	placement := []string{"1", "2"}

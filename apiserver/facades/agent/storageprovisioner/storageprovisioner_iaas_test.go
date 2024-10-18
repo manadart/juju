@@ -103,6 +103,7 @@ func (s *iaasProvisionerSuite) newApi(c *gc.C, blockDeviceService storageprovisi
 func (s *iaasProvisionerSuite) setupVolumes(c *gc.C) {
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	machineService := s.ControllerDomainServices(c).Machine()
 	machine0UUID, err := machineService.CreateMachine(context.Background(), machine.Name("0"))
@@ -150,6 +151,7 @@ func (s *iaasProvisionerSuite) setupVolumes(c *gc.C) {
 	// TODO(axw) extend testing/factory to allow creating unprovisioned
 	// machines.
 	_, err = s.st.AddOneMachine(
+		s.modelConfigService(c),
 		state.MachineTemplate{
 			Base: state.UbuntuBase("12.10"),
 			Jobs: []state.MachineJob{state.JobHostUnits},
@@ -166,6 +168,7 @@ func (s *iaasProvisionerSuite) setupVolumes(c *gc.C) {
 func (s *iaasProvisionerSuite) setupFilesystems(c *gc.C) {
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	machineService := s.ControllerDomainServices(c).Machine()
 	machine0UUID, err := machineService.CreateMachine(context.Background(), machine.Name("0"))
@@ -210,6 +213,7 @@ func (s *iaasProvisionerSuite) setupFilesystems(c *gc.C) {
 	// TODO(axw) extend testing/factory to allow creating unprovisioned
 	// machines.
 	_, err = s.st.AddOneMachine(
+		s.modelConfigService(c),
 		state.MachineTemplate{
 			Base: state.UbuntuBase("12.10"),
 			Jobs: []state.MachineJob{state.JobHostUnits},
@@ -486,6 +490,7 @@ func (s *iaasProvisionerSuite) TestRemoveVolumeParams(c *gc.C) {
 
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	// Deploy an application that will create a storage instance,
 	// so we can release the storage and show the effects on the
@@ -625,6 +630,7 @@ func (s *iaasProvisionerSuite) TestRemoveFilesystemParams(c *gc.C) {
 
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	// Deploy an application that will create a storage instance,
 	// so we can release the storage and show the effects on the
@@ -955,6 +961,7 @@ func (s *iaasProvisionerSuite) TestWatchVolumes(c *gc.C) {
 
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	f.MakeMachine(c, nil)
 	c.Assert(s.resources.Count(), gc.Equals, 0)
@@ -1000,6 +1007,7 @@ func (s *iaasProvisionerSuite) TestWatchVolumeAttachments(c *gc.C) {
 
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	f.MakeMachine(c, nil)
 	c.Assert(s.resources.Count(), gc.Equals, 0)
@@ -1167,6 +1175,7 @@ func (s *iaasProvisionerSuite) TestWatchFilesystemAttachments(c *gc.C) {
 func (s *iaasProvisionerSuite) TestWatchBlockDevices(c *gc.C) {
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	f.MakeMachine(c, nil)
 	c.Assert(s.resources.Count(), gc.Equals, 0)
@@ -1213,6 +1222,7 @@ func (s *iaasProvisionerSuite) TestVolumeBlockDevices(c *gc.C) {
 
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	f.MakeMachine(c, nil)
 
@@ -1267,6 +1277,7 @@ func (s *iaasProvisionerSuite) TestVolumeBlockDevicesPlanBlockInfoSet(c *gc.C) {
 
 	f, release := s.NewFactory(c, s.st.ModelUUID())
 	defer release()
+	f = f.WithModelConfigService(s.modelConfigService(c))
 
 	f.MakeMachine(c, nil)
 

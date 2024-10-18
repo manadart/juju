@@ -5,6 +5,7 @@ package unitassigner
 
 import (
 	"github.com/juju/errors"
+	"github.com/juju/juju/environs/config"
 
 	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/state"
@@ -12,10 +13,11 @@ import (
 
 type stateShim struct {
 	*state.State
+	cfg config.Config
 }
 
 func (s stateShim) AssignStagedUnits(allSpaces network.SpaceInfos, ids []string) ([]state.UnitAssignmentResult, error) {
-	return s.State.AssignStagedUnits(allSpaces, ids)
+	return s.State.AssignStagedUnits(s.cfg, allSpaces, ids)
 }
 
 func (s stateShim) AssignedMachineId(unit string) (string, error) {

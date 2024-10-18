@@ -6,6 +6,7 @@ package highavailability
 import (
 	"context"
 	"fmt"
+	"github.com/juju/juju/environs/config"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,7 +69,7 @@ type HighAvailabilityAPI struct {
 	applicationService      ApplicationService
 	controllerConfigService ControllerConfigService
 	networkService          NetworkService
-	modelConfigService      common.ModelConfigService
+	cfg                     config.Config
 	blockCommandService     common.BlockCommandService
 	authorizer              facade.Authorizer
 	logger                  corelogger.Logger
@@ -161,7 +162,7 @@ func (api *HighAvailabilityAPI) enableHASingle(ctx context.Context, spec params.
 	}
 
 	// Might be nicer to pass the spec itself to this method.
-	changes, addedUnits, err := st.EnableHA(spec.NumControllers, spec.Constraints, referenceMachine.Base(), spec.Placement)
+	changes, addedUnits, err := st.EnableHA(api.cfg, spec.NumControllers, spec.Constraints, referenceMachine.Base(), spec.Placement)
 	if err != nil {
 		return params.ControllersChanges{}, err
 	}

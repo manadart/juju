@@ -5,6 +5,7 @@ package state
 
 import (
 	"github.com/juju/errors"
+	environsconfig "github.com/juju/juju/environs/config"
 	"github.com/juju/mgo/v3"
 	"github.com/juju/mgo/v3/bson"
 	"github.com/juju/mgo/v3/txn"
@@ -146,7 +147,9 @@ func (a *Application) MinUnits() int {
 
 // EnsureMinUnits adds new units if the application's MinUnits value is greater
 // than the number of alive units.
-func (a *Application) EnsureMinUnits() (err error) {
+func (a *Application) EnsureMinUnits(
+	cfg environsconfig.Config,
+) (err error) {
 	defer errors.DeferredAnnotatef(&err, "cannot ensure minimum units for application %q", a)
 	app := &Application{st: a.st, doc: a.doc}
 	for {
@@ -168,7 +171,7 @@ func (a *Application) EnsureMinUnits() (err error) {
 		if missing <= 0 {
 			return nil
 		}
-		name, ops, err := ensureMinUnitsOps(app)
+		name, ops, err := ensureMinUnitsOps(cfg, app)
 		if err != nil {
 			return err
 		}
@@ -180,7 +183,7 @@ func (a *Application) EnsureMinUnits() (err error) {
 			if err != nil {
 				return err
 			}
-			if err := app.st.AssignUnit(unit, AssignNew); err != nil {
+			if err := app.st.AssignUnit(cfg, unit, AssignNew); err != nil {
 				return err
 			}
 			// No need to proceed and refresh the application if this was the
@@ -211,7 +214,10 @@ func aliveUnitsCount(app *Application) (int, error) {
 // ensureMinUnitsOps returns the operations required to add a unit for the
 // application in MongoDB and the name for the new unit. The resulting transaction
 // will be aborted if the application document changes when running the operations.
-func ensureMinUnitsOps(app *Application) (string, []txn.Op, error) {
+func ensureMinUnitsOps(
+	cfg environsconfig.Config,
+	app *Application,
+) (string, []txn.Op, error) {
 	asserts := bson.D{{"txn-revno", app.doc.TxnRevno}}
-	return app.addUnitOps("", AddUnitParams{}, asserts)
+	return app.addUnitOps(cfg, "", AddUnitParams{}, asserts)
 }

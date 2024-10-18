@@ -6,6 +6,7 @@ package crossmodel
 import (
 	"context"
 	"fmt"
+	"github.com/juju/juju/environs/config"
 	"net"
 
 	"github.com/juju/errors"
@@ -36,6 +37,7 @@ func PublishRelationChange(
 	ctx context.Context,
 	auth authoriser,
 	backend Backend,
+	cfg config.Config,
 	modelID model.UUID,
 	relationTag,
 	applicationTag names.Tag,
@@ -112,7 +114,7 @@ func PublishRelationChange(
 		return errors.Trace(err)
 	}
 
-	return errors.Trace(handleChangedUnits(change, applicationTag, rel))
+	return errors.Trace(handleChangedUnits(cfg, change, applicationTag, rel))
 }
 
 type authoriser interface {
@@ -210,6 +212,7 @@ func handleDepartedUnits(change params.RemoteRelationChangeEvent, applicationTag
 }
 
 func handleChangedUnits(
+	cfg config.Config,
 	change params.RemoteRelationChangeEvent,
 	applicationTag names.Tag,
 	rel Relation,
@@ -231,7 +234,7 @@ func handleChangedUnits(
 		}
 		if !inScope {
 			logger.Debugf("%s entering scope (%v)", unitTag.Id(), settings)
-			err = ru.EnterScope(settings)
+			err = ru.EnterScope(cfg, settings)
 		} else {
 			logger.Debugf("%s updated settings (%v)", unitTag.Id(), settings)
 			err = ru.ReplaceSettings(settings)

@@ -48,7 +48,13 @@ func newStorageAPI(ctx facade.ModelContext) (*StorageAPI, error) {
 	}
 
 	domainServices := ctx.DomainServices()
-	storageAccessor, err := getStorageAccessor(st)
+
+	cfg, err := domainServices.Config().ModelConfig(context.Background())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	storageAccessor, err := getStorageAccessor(st, *cfg)
 	if err != nil {
 		return nil, errors.Annotate(err, "getting backend")
 	}

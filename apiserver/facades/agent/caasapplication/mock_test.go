@@ -122,9 +122,10 @@ type mockApplication struct {
 }
 
 func (a *mockApplication) UpsertCAASUnit(
+	modelConfigService common.ModelConfigService,
 	args state.UpsertCAASUnitParams,
 ) (caasapplication.Unit, error) {
-	a.MethodCall(a, "UpsertCAASUnit", args)
+	a.MethodCall(a, "UpsertCAASUnit", modelConfigService, args)
 	return a.unit, a.NextErr()
 }
 

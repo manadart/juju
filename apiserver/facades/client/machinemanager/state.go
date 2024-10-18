@@ -4,6 +4,7 @@
 package machinemanager
 
 import (
+	"github.com/juju/juju/environs/config"
 	"time"
 
 	"github.com/juju/errors"
@@ -75,6 +76,7 @@ type Charm interface {
 
 type stateShim struct {
 	*state.State
+	cfg config.Config
 }
 
 func (s stateShim) Application(name string) (Application, error) {
@@ -98,17 +100,17 @@ func (s stateShim) Machine(name string) (Machine, error) {
 }
 
 func (s stateShim) AddOneMachine(template state.MachineTemplate) (Machine, error) {
-	m, err := s.State.AddOneMachine(template)
+	m, err := s.State.AddOneMachine(s.cfg, template)
 	return machineShim{Machine: m}, err
 }
 
 func (s stateShim) AddMachineInsideNewMachine(template, parentTemplate state.MachineTemplate, containerType instance.ContainerType) (Machine, error) {
-	m, err := s.State.AddMachineInsideNewMachine(template, parentTemplate, containerType)
+	m, err := s.State.AddMachineInsideNewMachine(s.cfg, template, parentTemplate, containerType)
 	return machineShim{Machine: m}, err
 }
 
 func (s stateShim) AddMachineInsideMachine(template state.MachineTemplate, parentId string, containerType instance.ContainerType) (Machine, error) {
-	m, err := s.State.AddMachineInsideMachine(template, parentId, containerType)
+	m, err := s.State.AddMachineInsideMachine(s.cfg, template, parentId, containerType)
 	return machineShim{Machine: m}, err
 }
 

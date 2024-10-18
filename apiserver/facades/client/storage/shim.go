@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"github.com/juju/juju/environs/config"
 	"time"
 
 	"github.com/juju/names/v5"
@@ -99,8 +100,9 @@ type storageFile interface {
 
 var getStorageAccessor = func(
 	st *state.State,
+	cfg config.Config,
 ) (storageAccess, error) {
-	sb, err := state.NewStorageConfigBackend(st)
+	sb, err := state.NewStorageConfigBackend(st, cfg)
 	if err != nil {
 		return nil, err
 	}

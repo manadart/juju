@@ -1057,6 +1057,7 @@ type AddApplicationArgs struct {
 // supplied name (which must be unique). If the charm defines peer relations,
 // they will be created automatically.
 func (st *State) AddApplication(
+	cfg environsconfig.Config,
 	args AddApplicationArgs,
 	store objectstore.ObjectStore,
 ) (_ *Application, err error) {
@@ -1127,7 +1128,7 @@ func (st *State) AddApplication(
 	if args.Storage == nil {
 		args.Storage = make(map[string]StorageConstraints)
 	}
-	sb, err := NewStorageConfigBackend(st)
+	sb, err := NewStorageConfigBackend(st, cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1332,6 +1333,7 @@ func (st *State) AddApplication(
 		// Collect unit-adding operations.
 		for x := 0; x < args.NumUnits; x++ {
 			unitName, unitOps, err := app.addUnitOpsWithCons(
+				cfg,
 				applicationAddUnitOpsArgs{
 					cons:          args.Constraints,
 					storageCons:   args.Storage,
@@ -1510,6 +1512,7 @@ func assignUnitOps(unitName string, placement instance.Placement) []txn.Op {
 // AssignStagedUnits gets called by the UnitAssigner worker, and runs the given
 // assignments.
 func (st *State) AssignStagedUnits(
+	cfg environsconfig.Config,
 	allSpaces network.SpaceInfos,
 	ids []string,
 ) ([]UnitAssignmentResult, error) {
@@ -1520,7 +1523,7 @@ func (st *State) AssignStagedUnits(
 	}
 	results := make([]UnitAssignmentResult, len(unitAssignments))
 	for i, a := range unitAssignments {
-		err := st.assignStagedUnit(a, allSpaces)
+		err := st.assignStagedUnit(cfg, a, allSpaces)
 		results[i].Unit = a.Unit
 		results[i].Error = err
 	}
@@ -1560,6 +1563,7 @@ func removeStagedAssignmentOp(id string) txn.Op {
 }
 
 func (st *State) assignStagedUnit(
+	cfg environsconfig.Config,
 	a UnitAssignment,
 	allSpaces network.SpaceInfos,
 ) error {
@@ -1568,17 +1572,18 @@ func (st *State) assignStagedUnit(
 		return errors.Trace(err)
 	}
 	if a.Scope == "" && a.Directive == "" {
-		return errors.Trace(st.AssignUnit(u, AssignNew))
+		return errors.Trace(st.AssignUnit(cfg, u, AssignNew))
 	}
 
 	placement := &instance.Placement{Scope: a.Scope, Directive: a.Directive}
 
-	return errors.Trace(st.AssignUnitWithPlacement(u, placement, allSpaces))
+	return errors.Trace(st.AssignUnitWithPlacement(cfg, u, placement, allSpaces))
 }
 
 // AssignUnitWithPlacement chooses a machine using the given placement directive
 // and then assigns the unit to it.
 func (st *State) AssignUnitWithPlacement(
+	cfg environsconfig.Config,
 	unit *Unit,
 	placement *instance.Placement,
 	allSpaces network.SpaceInfos,
@@ -1591,14 +1596,14 @@ func (st *State) AssignUnitWithPlacement(
 		return errors.Trace(err)
 	}
 	if data.placementType() == directivePlacement {
-		return unit.assignToNewMachine(data.directive)
+		return unit.assignToNewMachine(cfg, data.directive)
 	}
 
-	m, err := st.addMachineWithPlacement(unit, data, allSpaces)
+	m, err := st.addMachineWithPlacement(cfg, unit, data, allSpaces)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return unit.AssignToMachine(m)
+	return unit.AssignToMachine(cfg, m)
 }
 
 // placementData is a helper type that encodes some of the logic behind how an
@@ -1650,6 +1655,7 @@ func (st *State) parsePlacement(placement *instance.Placement) (*placementData, 
 // addMachineWithPlacement finds a machine that matches the given
 // placement directive for the given unit.
 func (st *State) addMachineWithPlacement(
+	cfg environsconfig.Config,
 	unit *Unit,
 	data *placementData,
 	lookup network.SpaceInfos,
@@ -1734,9 +1740,9 @@ func (st *State) addMachineWithPlacement(
 			Constraints: cons,
 		}
 		if mId != "" {
-			return st.AddMachineInsideMachine(template, mId, data.containerType)
+			return st.AddMachineInsideMachine(cfg, template, mId, data.containerType)
 		}
-		return st.AddMachineInsideNewMachine(template, template, data.containerType)
+		return st.AddMachineInsideNewMachine(cfg, template, template, data.containerType)
 	case directivePlacement:
 		return nil, errors.NotSupportedf(
 			"programming error: directly adding a machine for %s with a non-machine placement directive", unit.Name())
@@ -2361,6 +2367,7 @@ func (st *State) UnitsInError() ([]*Unit, error) {
 // state of the model, this may lead to new instances being launched
 // within the model.
 func (st *State) AssignUnit(
+	cfg environsconfig.Config,
 	u *Unit,
 	policy AssignmentPolicy,
 ) (err error) {
@@ -2375,9 +2382,9 @@ func (st *State) AssignUnit(
 		if err != nil {
 			return errors.Trace(err)
 		}
-		return u.AssignToMachine(m)
+		return u.AssignToMachine(cfg, m)
 	case AssignNew:
-		return errors.Trace(u.AssignToNewMachine())
+		return errors.Trace(u.AssignToNewMachine(cfg))
 	}
 	return errors.Errorf("unknown unit assignment policy: %q", policy)
 }

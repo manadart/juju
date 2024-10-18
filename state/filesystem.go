@@ -1172,7 +1172,7 @@ func (sb *storageConfigBackend) filesystemParamsWithDefaults(params FilesystemPa
 			Size:  params.Size,
 			Count: 1,
 		}
-		poolName, err := defaultStoragePool(sb.modelType, storage.StorageKindFilesystem, cons)
+		poolName, err := defaultStoragePool(sb.modelType, sb.cfg, storage.StorageKindFilesystem, cons)
 		if err != nil {
 			return FilesystemParams{}, errors.Annotate(err, "getting default filesystem storage pool")
 		}

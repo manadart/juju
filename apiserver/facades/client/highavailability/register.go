@@ -60,6 +60,11 @@ func newHighAvailabilityAPI(ctx facade.ModelContext) (*HighAvailabilityAPI, erro
 		Secrets:         applicationservice.NotImplementedSecretService{},
 	})
 
+	cfg, err := domainServices.Config().ModelConfig(context.Background())
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return &HighAvailabilityAPI{
 		st:                      st,
 		nodeService:             domainServices.ControllerNode(),
@@ -67,7 +72,7 @@ func newHighAvailabilityAPI(ctx facade.ModelContext) (*HighAvailabilityAPI, erro
 		applicationService:      applicationService,
 		controllerConfigService: domainServices.ControllerConfig(),
 		networkService:          domainServices.Network(),
-		modelConfigService:      domainServices.Config(),
+		cfg:                     *cfg,
 		blockCommandService:     domainServices.BlockCommand(),
 		authorizer:              authorizer,
 		logger:                  ctx.Logger().Child("highavailability"),

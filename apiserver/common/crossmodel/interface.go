@@ -5,6 +5,7 @@ package crossmodel
 
 import (
 	"context"
+	"github.com/juju/juju/environs/config"
 	"time"
 
 	"github.com/go-macaroon-bakery/macaroon-bakery/v3/bakery"
@@ -175,7 +176,7 @@ type RelationUnit interface {
 	// EnterScope ensures that the unit has entered its scope in the
 	// relation. When the unit has already entered its scope, EnterScope
 	// will report success but make no changes to state.
-	EnterScope(settings map[string]interface{}) error
+	EnterScope(cfg config.Config, settings map[string]interface{}) error
 
 	// InScope returns whether the relation unit has entered scope and
 	// not left it.

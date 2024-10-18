@@ -5,6 +5,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/juju/juju/environs/config"
 	"strings"
 	"time"
 
@@ -73,6 +74,7 @@ func (ru *RelationUnit) UnitName() string {
 // intervention; the relation will not be able to become Dead until all units
 // have departed its scopes.
 func (ru *RelationUnit) EnterScope(
+	cfg config.Config,
 	settings map[string]interface{},
 ) error {
 	db, dbCloser := ru.st.newDB()
@@ -200,7 +202,7 @@ func (ru *RelationUnit) EnterScope(
 		})
 
 		// * If the unit should have a subordinate, and does not, create it.
-		if subOps, subName, err := ru.subordinateOps(); err != nil {
+		if subOps, subName, err := ru.subordinateOps(cfg); err != nil {
 			return nil, errors.Trace(err)
 		} else {
 			existingSubName = subName
@@ -240,7 +242,7 @@ func (ru *RelationUnit) counterpartApplicationSettingsKeys() []string {
 // subordinate state when entering scope. If a required subordinate unit
 // exists and is Alive, its name will be returned as well; if one exists
 // but is not Alive, ErrCannotEnterScopeYet is returned.
-func (ru *RelationUnit) subordinateOps() ([]txn.Op, string, error) {
+func (ru *RelationUnit) subordinateOps(cfg config.Config) ([]txn.Op, string, error) {
 	units, closer := ru.st.db().GetCollection(unitsC)
 	defer closer()
 
@@ -280,7 +282,7 @@ func (ru *RelationUnit) subordinateOps() ([]txn.Op, string, error) {
 		if err != nil {
 			return nil, "", err
 		}
-		_, ops, err := application.addUnitOps(unitName, AddUnitParams{
+		_, ops, err := application.addUnitOps(cfg, unitName, AddUnitParams{
 			machineID: principalMachineID,
 		}, nil)
 		return ops, "", err

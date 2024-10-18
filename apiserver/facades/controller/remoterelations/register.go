@@ -41,6 +41,12 @@ func makeAPI(stdCtx context.Context, ctx facade.ModelContext) (*API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("retrieving model info: %w", err)
 	}
+
+	cfg, err := domainServices.Config().ModelConfig(stdCtx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	return NewRemoteRelationsAPI(
 		modelInfo.UUID,
 		stateShim{st: ctx.State(), Backend: commoncrossmodel.GetBackend(ctx.State())},
@@ -51,7 +57,7 @@ func makeAPI(stdCtx context.Context, ctx facade.ModelContext) (*API, error) {
 				BackendUserSecretConfigGetter: secretservice.NotImplementedBackendUserSecretConfigGetter,
 			},
 		),
-		domainServices.Config(),
+		*cfg,
 		common.NewControllerConfigAPI(systemState, controllerConfigService, externalControllerService),
 		ctx.Resources(), ctx.Auth(),
 		ctx.Logger().Child("remoterelations", corelogger.CMR),

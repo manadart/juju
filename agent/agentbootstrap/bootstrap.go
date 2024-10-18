@@ -481,6 +481,14 @@ func (b *AgentBootstrap) initBootstrapMachine(
 
 	// TODO: move this call to the bootstrap worker
 	m, err := st.AddOneMachine(
+		// By design, we do not have access here to the Dqlite database. Hence
+		// the model config we pass here is not guaranteed to be equal to the
+		// "real" model config. This has potential to cause issues, but at this
+		// stage we are only using this to read the default storage pools, and
+		// furthermore, this call is not creating a machine, it's just
+		// recording the existing machine in state. Long-term, this should be
+		// removed once we move machines over to Dqlite.
+		*stateParams.ControllerModelConfig,
 		state.MachineTemplate{
 			Base:                    state.Base{OS: base.OS, Channel: base.Channel.String()},
 			Nonce:                   agent.BootstrapNonce,

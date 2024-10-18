@@ -32,6 +32,7 @@ import (
 	"github.com/juju/juju/core/network/firewall"
 	"github.com/juju/juju/core/objectstore"
 	"github.com/juju/juju/core/status"
+	envconfig "github.com/juju/juju/environs/config"
 	"github.com/juju/juju/internal/charm"
 	mgoutils "github.com/juju/juju/internal/mongo/utils"
 	internalpassword "github.com/juju/juju/internal/password"
@@ -1214,6 +1215,7 @@ func (a *Application) IsSidecar() (bool, error) {
 // changeCharmOps returns the operations necessary to set a application's
 // charm URL to a new value.
 func (a *Application) changeCharmOps(
+	cfg envconfig.Config,
 	ch *Charm,
 	updatedSettings charm.Settings,
 	forceUnits bool,
@@ -1275,7 +1277,7 @@ func (a *Application) changeCharmOps(
 		Assert: bson.D{{"unitcount", len(units)}},
 	})
 
-	checkStorageOps, upgradeStorageOps, storageConstraintsOps, err := a.newCharmStorageOps(ch, units, updatedStorageConstraints)
+	checkStorageOps, upgradeStorageOps, storageConstraintsOps, err := a.newCharmStorageOps(cfg, ch, units, updatedStorageConstraints)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1420,6 +1422,7 @@ func (a *Application) DeployedMachines() ([]*Machine, error) {
 }
 
 func (a *Application) newCharmStorageOps(
+	cfg envconfig.Config,
 	ch *Charm,
 	units []*Unit,
 	updatedStorageConstraints map[string]StorageConstraints,
@@ -1434,7 +1437,7 @@ func (a *Application) newCharmStorageOps(
 	// constraints, as incompatible charm changes will otherwise yield
 	// confusing error messages that would suggest the user has supplied
 	// invalid constraints.
-	sb, err := NewStorageConfigBackend(a.st)
+	sb, err := NewStorageConfigBackend(a.st, cfg)
 	if err != nil {
 		return fail(err)
 	}
@@ -1486,7 +1489,7 @@ func (a *Application) newCharmStorageOps(
 	}
 
 	// Upgrade charm storage.
-	upgradeStorageOps, err := a.upgradeStorageOps(ch.Meta(), oldMeta, units, newStorageConstraints)
+	upgradeStorageOps, err := a.upgradeStorageOps(cfg, ch.Meta(), oldMeta, units, newStorageConstraints)
 	if err != nil {
 		return fail(err)
 	}
@@ -1494,12 +1497,13 @@ func (a *Application) newCharmStorageOps(
 }
 
 func (a *Application) upgradeStorageOps(
+	cfg envconfig.Config,
 	meta, oldMeta *charm.Meta,
 	units []*Unit,
 	allStorageCons map[string]StorageConstraints,
 ) (_ []txn.Op, err error) {
 
-	sb, err := NewStorageConfigBackend(a.st)
+	sb, err := NewStorageConfigBackend(a.st, cfg)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1630,6 +1634,7 @@ func (a *Application) validateSetCharmConfig(cfg SetCharmConfig) error {
 
 // SetCharm changes the charm for the application.
 func (a *Application) SetCharm(
+	envCfg envconfig.Config,
 	cfg SetCharmConfig,
 	store objectstore.ObjectStore,
 ) (err error) {
@@ -1707,6 +1712,7 @@ func (a *Application) SetCharm(
 			}
 
 			chng, err := a.changeCharmOps(
+				envCfg,
 				cfg.Charm,
 				updatedSettings,
 				cfg.ForceUnits,
@@ -2158,6 +2164,7 @@ func (a *Application) newUnitName() (string, error) {
 // to include additional assertions for the application document.  This method
 // assumes that the application already exists in the db.
 func (a *Application) addUnitOps(
+	cfg envconfig.Config,
 	principalName string,
 	args AddUnitParams,
 	asserts bson.D,
@@ -2195,6 +2202,7 @@ func (a *Application) addUnitOps(
 		return "", nil, errors.Trace(err)
 	}
 	uNames, ops, err := a.addUnitOpsWithCons(
+		cfg,
 		applicationAddUnitOpsArgs{
 			cons:               cons,
 			principalName:      principalName,
@@ -2235,6 +2243,7 @@ type applicationAddUnitOpsArgs struct {
 
 // addUnitOpsWithCons is a helper method for returning addUnitOps.
 func (a *Application) addUnitOpsWithCons(
+	cfg envconfig.Config,
 	args applicationAddUnitOpsArgs,
 ) (string, []txn.Op, error) {
 	if a.doc.Subordinate && args.principalName == "" {
@@ -2259,7 +2268,7 @@ func (a *Application) addUnitOpsWithCons(
 		return "", nil, errors.Trace(err)
 	}
 	storageOps, numStorageAttachments, err := a.addUnitStorageOps(
-		args, unitTag, appCharm,
+		cfg, args, unitTag, appCharm,
 	)
 	if err != nil {
 		return "", nil, errors.Trace(err)
@@ -2365,11 +2374,12 @@ func (a *Application) addUnitOpsWithCons(
 }
 
 func (a *Application) addUnitStorageOps(
+	cfg envconfig.Config,
 	args applicationAddUnitOpsArgs,
 	unitTag names.UnitTag,
 	charm *Charm,
 ) ([]txn.Op, int, error) {
-	sb, err := NewStorageConfigBackend(a.st)
+	sb, err := NewStorageConfigBackend(a.st, cfg)
 	if err != nil {
 		return nil, -1, errors.Trace(err)
 	}
@@ -2554,10 +2564,11 @@ type AddUnitParams struct {
 
 // AddUnit adds a new principal unit to the application.
 func (a *Application) AddUnit(
+	cfg envconfig.Config,
 	args AddUnitParams,
 ) (unit *Unit, err error) {
 	defer errors.DeferredAnnotatef(&err, "cannot add unit to application %q", a)
-	name, ops, err := a.addUnitOps("", args, nil)
+	name, ops, err := a.addUnitOps(cfg, "", args, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -2590,7 +2601,10 @@ type UpsertCAASUnitParams struct {
 	ObservedAttachedVolumeIDs []string
 }
 
-func (a *Application) UpsertCAASUnit(args UpsertCAASUnitParams) (*Unit, error) {
+func (a *Application) UpsertCAASUnit(
+	cfg envconfig.Config,
+	args UpsertCAASUnitParams,
+) (*Unit, error) {
 	if args.PasswordHash == nil {
 		return nil, errors.NotValidf("password hash")
 	}
@@ -2652,7 +2666,7 @@ func (a *Application) UpsertCAASUnit(args UpsertCAASUnitParams) (*Unit, error) {
 		}
 
 		if unit == nil {
-			return a.insertCAASUnitOps(args)
+			return a.insertCAASUnitOps(cfg, args)
 		}
 
 		if unit.Life() == Dead {
@@ -2699,6 +2713,7 @@ func (a *Application) UpsertCAASUnit(args UpsertCAASUnitParams) (*Unit, error) {
 }
 
 func (a *Application) insertCAASUnitOps(
+	cfg envconfig.Config,
 	args UpsertCAASUnitParams,
 ) ([]txn.Op, error) {
 	if args.UnitName == nil {
@@ -2712,7 +2727,7 @@ func (a *Application) insertCAASUnitOps(
 	//	return nil, errors.NotAssignedf("unrequired unit %s is", *args.UnitName)
 	//}
 
-	_, addOps, err := a.addUnitOps("", args.AddUnitParams, nil)
+	_, addOps, err := a.addUnitOps(cfg, "", args.AddUnitParams, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -3533,11 +3548,13 @@ func (op *UpdateUnitsOperation) Done(err error) error {
 
 // AddOperation returns a model operation that will add a unit.
 func (a *Application) AddOperation(
+	cfg envconfig.Config,
 	props UnitUpdateProperties,
 ) *AddUnitOperation {
 	return &AddUnitOperation{
 		application: &Application{st: a.st, doc: a.doc},
 		props:       props,
+		cfg:         cfg,
 	}
 }
 
@@ -3545,6 +3562,7 @@ func (a *Application) AddOperation(
 type AddUnitOperation struct {
 	application *Application
 	props       UnitUpdateProperties
+	cfg         envconfig.Config
 
 	unitName string
 }
@@ -3565,7 +3583,7 @@ func (op *AddUnitOperation) Build(attempt int) ([]txn.Op, error) {
 		Ports:      op.props.Ports,
 		UnitName:   op.props.UnitName,
 	}
-	name, addOps, err := op.application.addUnitOps("", addUnitArgs, nil)
+	name, addOps, err := op.application.addUnitOps(op.cfg, "", addUnitArgs, nil)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

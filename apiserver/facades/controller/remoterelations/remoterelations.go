@@ -5,6 +5,7 @@ package remoterelations
 
 import (
 	"context"
+	"github.com/juju/juju/environs/config"
 
 	"github.com/juju/errors"
 	"github.com/juju/names/v5"
@@ -34,14 +35,14 @@ type ExternalControllerService interface {
 // API provides access to the remote relations API facade.
 type API struct {
 	ControllerConfigAPI
-	st                 RemoteRelationsState
-	ecService          ExternalControllerService
-	secretService      SecretService
-	modelConfigService common.ModelConfigService
-	resources          facade.Resources
-	authorizer         facade.Authorizer
-	logger             corelogger.Logger
-	modelID            model.UUID
+	st            RemoteRelationsState
+	ecService     ExternalControllerService
+	secretService SecretService
+	cfg           config.Config
+	resources     facade.Resources
+	authorizer    facade.Authorizer
+	logger        corelogger.Logger
+	modelID       model.UUID
 }
 
 // NewRemoteRelationsAPI returns a new server-side API facade.
@@ -50,7 +51,7 @@ func NewRemoteRelationsAPI(
 	st RemoteRelationsState,
 	ecService ExternalControllerService,
 	secretService SecretService,
-	modelConfigService common.ModelConfigService,
+	cfg config.Config,
 	controllerCfgAPI ControllerConfigAPI,
 	resources facade.Resources,
 	authorizer facade.Authorizer,
@@ -63,7 +64,7 @@ func NewRemoteRelationsAPI(
 		st:                  st,
 		ecService:           ecService,
 		secretService:       secretService,
-		modelConfigService:  modelConfigService,
+		cfg:                 cfg,
 		ControllerConfigAPI: controllerCfgAPI,
 		resources:           resources,
 		authorizer:          authorizer,
@@ -391,7 +392,7 @@ func (api *API) ConsumeRemoteRelationChanges(ctx context.Context, changes params
 			continue
 		}
 		api.logger.Debugf("ConsumeRemoteRelationChanges: rel tag %v; app tag: %v", relationTag, applicationTag)
-		if err := commoncrossmodel.PublishRelationChange(ctx, api.authorizer, api.st, api.modelID, relationTag, applicationTag, change); err != nil {
+		if err := commoncrossmodel.PublishRelationChange(ctx, api.authorizer, api.st, api.cfg, api.modelID, relationTag, applicationTag, change); err != nil {
 			results.Results[i].Error = apiservererrors.ServerError(err)
 			continue
 		}

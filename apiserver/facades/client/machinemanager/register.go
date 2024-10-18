@@ -31,7 +31,7 @@ func Register(registry facade.FacadeRegistry) {
 // makeMachineManagerFacadeV11 create a new server-side MachineManager API
 // facade. This is used for facade registration.
 func makeFacadeV11(stdCtx context.Context, ctx facade.ModelContext) (*MachineManagerAPI, error) {
-	// Check the the user is authenticated for this API before creating.
+	// Check that the user is authenticated for this API before creating.
 	if !ctx.Auth().AuthClient() {
 		return nil, apiservererrors.ErrPerm
 	}
@@ -39,8 +39,14 @@ func makeFacadeV11(stdCtx context.Context, ctx facade.ModelContext) (*MachineMan
 	st := ctx.State()
 	domainServices := ctx.DomainServices()
 
+	cfg, err := domainServices.Config().ModelConfig(stdCtx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
 	backend := &stateShim{
 		State: st,
+		cfg:   *cfg,
 	}
 	storageAccess, err := getStorageState(st)
 	if err != nil {
