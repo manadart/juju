@@ -10,7 +10,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/names/v6"
 	jc "github.com/juju/testing/checkers"
-	gomock "go.uber.org/mock/gomock"
+	"go.uber.org/mock/gomock"
 	gc "gopkg.in/check.v1"
 
 	"github.com/juju/juju/core/credential"
@@ -135,9 +135,8 @@ func (i *importSuite) TestModelCreate(c *gc.C) {
 
 	args := model.ModelImportArgs{
 		GlobalModelCreationArgs: model.GlobalModelCreationArgs{
-			AgentVersion: jujuversion.Current,
-			Cloud:        "AWS",
-			CloudRegion:  "region1",
+			Cloud:       "AWS",
+			CloudRegion: "region1",
 			Credential: credential.Key{
 				Name:  "my-credential",
 				Owner: usertesting.GenNewName(c, "tlm"),
@@ -146,7 +145,8 @@ func (i *importSuite) TestModelCreate(c *gc.C) {
 			Name:  "test-model",
 			Owner: userUUID,
 		},
-		ID: modelUUID,
+		ID:           modelUUID,
+		AgentVersion: jujuversion.Current,
 	}
 
 	activated := false
@@ -159,7 +159,7 @@ func (i *importSuite) TestModelCreate(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 
 	i.modelImportService.EXPECT().ImportModel(gomock.Any(), args).Return(activator, nil)
-	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID).Return(nil)
+	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID, jujuversion.Current).Return(nil)
 
 	model := description.NewModel(description.ModelArgs{
 		Config: map[string]any{
@@ -211,9 +211,8 @@ func (i *importSuite) TestModelCreateRollbacksOnFailure(c *gc.C) {
 
 	args := model.ModelImportArgs{
 		GlobalModelCreationArgs: model.GlobalModelCreationArgs{
-			AgentVersion: jujuversion.Current,
-			Cloud:        "AWS",
-			CloudRegion:  "region1",
+			Cloud:       "AWS",
+			CloudRegion: "region1",
 			Credential: credential.Key{
 				Name:  "my-credential",
 				Owner: usertesting.GenNewName(c, "tlm"),
@@ -222,7 +221,8 @@ func (i *importSuite) TestModelCreateRollbacksOnFailure(c *gc.C) {
 			Name:  "test-model",
 			Owner: userUUID,
 		},
-		ID: modelUUID,
+		ID:           modelUUID,
+		AgentVersion: jujuversion.Current,
 	}
 
 	var activated bool
@@ -234,7 +234,7 @@ func (i *importSuite) TestModelCreateRollbacksOnFailure(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 
 	i.modelImportService.EXPECT().ImportModel(gomock.Any(), args).Return(activator, nil)
-	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID).Return(errors.New("boom"))
+	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID, jujuversion.Current).Return(errors.New("boom"))
 	i.modelImportService.EXPECT().DeleteModel(gomock.Any(), modelUUID, gomock.Any()).DoAndReturn(func(_ context.Context, _ coremodel.UUID, options ...model.DeleteModelOption) error {
 		opts := model.DefaultDeleteModelOptions()
 		for _, fn := range options {
@@ -298,9 +298,8 @@ func (i *importSuite) TestModelCreateRollbacksOnFailureIgnoreNotFoundModel(c *gc
 
 	args := model.ModelImportArgs{
 		GlobalModelCreationArgs: model.GlobalModelCreationArgs{
-			AgentVersion: jujuversion.Current,
-			Cloud:        "AWS",
-			CloudRegion:  "region1",
+			Cloud:       "AWS",
+			CloudRegion: "region1",
 			Credential: credential.Key{
 				Name:  "my-credential",
 				Owner: usertesting.GenNewName(c, "tlm"),
@@ -309,7 +308,8 @@ func (i *importSuite) TestModelCreateRollbacksOnFailureIgnoreNotFoundModel(c *gc
 			Name:  "test-model",
 			Owner: userUUID,
 		},
-		ID: modelUUID,
+		ID:           modelUUID,
+		AgentVersion: jujuversion.Current,
 	}
 
 	activated := false
@@ -321,7 +321,7 @@ func (i *importSuite) TestModelCreateRollbacksOnFailureIgnoreNotFoundModel(c *gc
 	c.Assert(err, jc.ErrorIsNil)
 
 	i.modelImportService.EXPECT().ImportModel(gomock.Any(), args).Return(activator, nil)
-	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID).Return(errors.New("boom"))
+	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID, jujuversion.Current).Return(errors.New("boom"))
 	i.modelImportService.EXPECT().DeleteModel(gomock.Any(), modelUUID, gomock.Any()).Return(modelerrors.NotFound)
 	i.modelDetailService.EXPECT().DeleteModel(gomock.Any()).Return(nil)
 
@@ -384,9 +384,8 @@ func (i *importSuite) TestModelCreateRollbacksOnFailureIgnoreNotFoundReadOnlyMod
 
 	args := model.ModelImportArgs{
 		GlobalModelCreationArgs: model.GlobalModelCreationArgs{
-			AgentVersion: jujuversion.Current,
-			Cloud:        "AWS",
-			CloudRegion:  "region1",
+			Cloud:       "AWS",
+			CloudRegion: "region1",
 			Credential: credential.Key{
 				Name:  "my-credential",
 				Owner: usertesting.GenNewName(c, "tlm"),
@@ -395,13 +394,14 @@ func (i *importSuite) TestModelCreateRollbacksOnFailureIgnoreNotFoundReadOnlyMod
 			Name:  "test-model",
 			Owner: userUUID,
 		},
-		ID: modelUUID,
+		ID:           modelUUID,
+		AgentVersion: jujuversion.Current,
 	}
 	controllerUUID, err := uuid.UUIDFromString(testing.ControllerTag.Id())
 	c.Assert(err, jc.ErrorIsNil)
 
 	i.modelImportService.EXPECT().ImportModel(gomock.Any(), args).Return(activator, nil)
-	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID).Return(errors.New("boom"))
+	i.modelDetailService.EXPECT().CreateModel(gomock.Any(), controllerUUID, jujuversion.Current).Return(errors.New("boom"))
 	i.modelImportService.EXPECT().DeleteModel(gomock.Any(), modelUUID, gomock.Any()).Return(nil)
 	i.modelDetailService.EXPECT().DeleteModel(gomock.Any()).Return(nil)
 

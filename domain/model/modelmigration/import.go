@@ -59,9 +59,9 @@ type ModelImportService interface {
 // ModelDetailService defines a service for interacting with the
 // model information found in a model database.
 type ModelDetailService interface {
-	// CreateModel is responsible for creating a new read only model
+	// CreateModel is responsible for adding the details of the model
 	// that is being imported.
-	CreateModel(context.Context, uuid.UUID) error
+	CreateModel(context.Context, uuid.UUID, version.Number) error
 
 	// DeleteModel is responsible for removing a read only model from the system.
 	DeleteModel(context.Context) error
@@ -186,14 +186,14 @@ func (i *importOperation) Execute(ctx context.Context, model description.Model) 
 
 	args := domainmodel.ModelImportArgs{
 		GlobalModelCreationArgs: domainmodel.GlobalModelCreationArgs{
-			AgentVersion: agentVersion,
-			Cloud:        model.Cloud(),
-			CloudRegion:  model.CloudRegion(),
-			Credential:   cred,
-			Name:         modelName,
-			Owner:        user.UUID,
+			Cloud:       model.Cloud(),
+			CloudRegion: model.CloudRegion(),
+			Credential:  cred,
+			Name:        modelName,
+			Owner:       user.UUID,
 		},
-		ID: modelID,
+		ID:           modelID,
+		AgentVersion: agentVersion,
 	}
 
 	controllerConfig, err := i.controllerConfigService.ControllerConfig(ctx)
@@ -236,7 +236,7 @@ func (i *importOperation) Execute(ctx context.Context, model description.Model) 
 	}
 
 	// We need to establish the read only model information in the model database.
-	err = i.modelDetailServiceFunc(modelID).CreateModel(ctx, controllerUUID)
+	err = i.modelDetailServiceFunc(modelID).CreateModel(ctx, controllerUUID, args.AgentVersion)
 	if err != nil {
 		return fmt.Errorf(
 			"importing read only model %q with uuid %q during migration: %w",
