@@ -19,6 +19,7 @@ import (
 	coremodel "github.com/juju/juju/core/model"
 	modeltesting "github.com/juju/juju/core/model/testing"
 	corestatus "github.com/juju/juju/core/status"
+	"github.com/juju/juju/core/version"
 	machineerrors "github.com/juju/juju/domain/machine/errors"
 	"github.com/juju/juju/domain/model"
 	modelerrors "github.com/juju/juju/domain/model/errors"
@@ -259,7 +260,7 @@ func (s *legacyModelServiceSuite) TestModelCreation(c *gc.C) {
 	s.controllerState.models[id] = m
 	s.modelState.models[id] = m
 
-	err := svc.CreateModel(context.Background(), s.controllerUUID)
+	err := svc.CreateModel(context.Background(), s.controllerUUID, version.Current)
 	c.Assert(err, jc.ErrorIsNil)
 
 	readonlyVal, err := svc.GetModelInfo(context.Background())
@@ -291,7 +292,7 @@ func (s *legacyModelServiceSuite) TestGetModelMetrics(c *gc.C) {
 	s.controllerState.models[id] = m
 	s.modelState.models[id] = m
 
-	err := svc.CreateModel(context.Background(), s.controllerUUID)
+	err := svc.CreateModel(context.Background(), s.controllerUUID, version.Current)
 	c.Assert(err, jc.ErrorIsNil)
 
 	readonlyVal, err := svc.GetModelMetrics(context.Background())
@@ -324,7 +325,7 @@ func (s *legacyModelServiceSuite) TestModelDeletion(c *gc.C) {
 	s.controllerState.models[id] = m
 	s.modelState.models[id] = m
 
-	err := svc.CreateModel(context.Background(), s.controllerUUID)
+	err := svc.CreateModel(context.Background(), s.controllerUUID, version.Current)
 	c.Assert(err, jc.ErrorIsNil)
 
 	err = svc.DeleteModel(context.Background())
@@ -437,13 +438,12 @@ func (d *dummyControllerModelState) GetModel(ctx context.Context, id coremodel.U
 	}
 
 	return coremodel.Model{
-		UUID:         args.UUID,
-		Name:         args.Name,
-		ModelType:    args.Type,
-		AgentVersion: args.AgentVersion,
-		Cloud:        args.Cloud,
-		CloudType:    args.CloudType,
-		CloudRegion:  args.CloudRegion,
+		UUID:        args.UUID,
+		Name:        args.Name,
+		ModelType:   args.Type,
+		Cloud:       args.Cloud,
+		CloudType:   args.CloudType,
+		CloudRegion: args.CloudRegion,
 		Credential: corecredential.Key{
 			Name:  args.CredentialName,
 			Owner: args.CredentialOwner,
@@ -491,7 +491,6 @@ func (d *dummyModelState) GetModel(ctx context.Context) (coremodel.ModelInfo, er
 	args := d.models[d.setID]
 	return coremodel.ModelInfo{
 		UUID:            args.UUID,
-		AgentVersion:    args.AgentVersion,
 		ControllerUUID:  args.ControllerUUID,
 		Name:            args.Name,
 		Type:            args.Type,
@@ -512,7 +511,6 @@ func (d *dummyModelState) GetModelMetrics(ctx context.Context) (coremodel.ModelM
 	return coremodel.ModelMetrics{
 		Model: coremodel.ModelInfo{
 			UUID:            args.UUID,
-			AgentVersion:    args.AgentVersion,
 			ControllerUUID:  args.ControllerUUID,
 			Name:            args.Name,
 			Type:            args.Type,
