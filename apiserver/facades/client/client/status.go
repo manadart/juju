@@ -408,8 +408,8 @@ func (c *Client) modelStatus(ctx context.Context) (params.ModelStatusInfo, error
 	info.CloudTag = names.NewCloudTag(modelInfo.Cloud).String()
 	info.CloudRegion = modelInfo.CloudRegion
 
-	currentVersion := modelInfo.AgentVersion
-	info.Version = currentVersion.String()
+	// currentVersion := modelInfo.AgentVersion
+	// info.Version = currentVersion.String()
 
 	// // TODO: replace here once we implement the latest agent version in Dqlite.
 	// m, err := c.stateAccessor.Model()

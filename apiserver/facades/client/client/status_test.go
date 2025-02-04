@@ -10,7 +10,6 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/testing"
 	jc "github.com/juju/testing/checkers"
-	"github.com/juju/version/v2"
 	gomock "go.uber.org/mock/gomock"
 	gc "gopkg.in/check.v1"
 
