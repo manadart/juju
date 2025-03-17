@@ -26,6 +26,7 @@ require (
 	github.com/canonical/go-dqlite v1.21.0
 	github.com/canonical/lxd v0.0.0-20241209155119-76da976c6ee7
 	github.com/canonical/pebble v1.19.0
+	github.com/canonical/starform v0.0.0-20250206205114-05036e724cc7
 	github.com/chzyer/readline v1.5.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/docker/distribution v2.8.3+incompatible
@@ -106,6 +107,7 @@ require (
 	github.com/rs/xid v1.6.0
 	github.com/vishvananda/netlink v1.3.0
 	github.com/vmware/govmomi v0.34.1
+	go.starlark.net v0.0.0-20241125201518-c05ff208a98f
 	go.uber.org/mock v0.5.0
 	golang.org/x/crypto v0.36.0
 	golang.org/x/net v0.37.0
@@ -166,6 +168,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.26.6 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/canonical/go-flags v0.0.0-20230403090104-105d09a091b8 // indirect
+	github.com/canonical/starlark v0.0.0-20250127110116-8c33ed2b410b // indirect
 	github.com/canonical/x-go v0.0.0-20230522092633-7947a7587f5b // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect

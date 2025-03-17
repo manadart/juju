@@ -4,6 +4,7 @@
 package state
 
 import (
+	"context"
 	stderrors "errors"
 	"fmt"
 	"net"
@@ -11,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/canonical/starform/starform"
+	"github.com/canonical/starlark/starlark"
 	"github.com/juju/charm/v12"
 	"github.com/juju/collections/set"
 	"github.com/juju/errors"
@@ -743,8 +746,8 @@ func (a *Application) removeUnitAssignmentsOps() (ops []txn.Op, err error) {
 	unitAssignments, err := a.st.unitAssignments(bson.D{
 		{
 			Name: "_id", Value: bson.D{
-				{Name: "$regex", Value: pattern},
-			},
+			{Name: "$regex", Value: pattern},
+		},
 		},
 	})
 	if err != nil {
@@ -3229,6 +3232,28 @@ func (a *Application) UpdateCharmConfig(branchName string, changes charm.Setting
 	current, err := readSettings(a.st.db(), settingsC, a.charmConfigKey())
 	if err != nil {
 		return errors.Annotatef(err, "charm config for application %q", a.doc.Name)
+	}
+
+	sApp := &starform.AppObject{
+		Name: "config-scriptlets",
+		Methods: []*starlark.Builtin{
+			// TODO
+		},
+	}
+
+	sOpts := &starform.ScriptSetOptions{
+		App:            sApp,
+		RequiredSafety: starlark.MemSafe,
+		MaxAllocs:      10 * 1024 * 1024,
+	}
+
+	scriptSet, err := starform.NewScriptSet(sOpts)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if err := scriptSet.LoadSources(context.TODO(), []starform.ScriptSource{}); err != nil {
+		return errors.Trace(err)
 	}
 
 	if branchName == model.GenerationMaster {
