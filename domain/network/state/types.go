@@ -291,7 +291,7 @@ type linkLayerDeviceDML struct {
 // It is expected that the map will be populated as part of the reconciliation
 // process prior to calling this method.
 func netInterfaceToDML(
-	dev network.NetInterface, nodeUUID string, nameToUUID map[string]string,
+	dev network.NetInterface, nodeUUID string, nameToUUID map[string]network.InterfaceUUID,
 ) (linkLayerDeviceDML, error) {
 	var dml linkLayerDeviceDML
 
@@ -311,7 +311,7 @@ func netInterfaceToDML(
 	}
 
 	dml = linkLayerDeviceDML{
-		UUID:              devUUID,
+		UUID:              devUUID.String(),
 		NetNodeUUID:       nodeUUID,
 		Name:              dev.Name,
 		MTU:               dev.MTU,
