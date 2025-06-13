@@ -358,7 +358,8 @@ func (st *State) reconcileNetConfigAddresses(
 	)
 
 	for _, n := range nics {
-		// If we don't know this NIC, we can assume that it is a deletion candidate.
+		// If we don't know this NIC, we can assume
+		// that it is a deletion candidate.
 		devUUID, ok := nicNameToUUID[n.Name]
 		if !ok {
 			continue
