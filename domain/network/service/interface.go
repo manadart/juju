@@ -50,6 +50,7 @@ type State interface {
 	SpaceState
 	SubnetState
 	NetConfigState
+	ContainerState
 	NetConfigMigrationState
 }
 
