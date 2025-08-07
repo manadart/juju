@@ -72,6 +72,7 @@ WHERE  m.machine_uuid = $entityUUID.uuid`
 
 // GetMachineAppBindings returns the bound spaces for applications
 // with units assigned to the machine with the input UUID.
+// Subordinate applications are not considered.
 func (st *State) GetMachineAppBindings(ctx context.Context, machineUUID string) ([]internal.SpaceName, error) {
 	db, err := st.DB()
 	if err != nil {
@@ -93,9 +94,12 @@ SELECT DISTINCT
        s.name AS &spaceConstraint.space
 FROM   machine m
        JOIN unit u ON m.net_node_uuid = u.net_node_uuid
+       JOIN application a ON u.application_uuid = a.uuid
+       JOIN charm_metadata m on a.charm_uuid = m.charm_uuid
        JOIN all_bound b ON u.application_uuid = b.application_uuid
        JOIN space s ON b.space_uuid = s.uuid
 WHERE  m.uuid = $entityUUID.uuid
+AND    m.subordinate = 0
 AND    s.name IS NOT NULL`
 
 	stmt, err := st.Prepare(qry, mUUID, spaceConstraint{})
