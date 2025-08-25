@@ -72,9 +72,6 @@ func ParamsNetworkConfigToDomain(
 		}
 
 		nics[i].Addrs = addrs
-
-		// TODO (manadart 2025-05-30): Process shadow addresses for
-		// payloads coming from the provider.
 	}
 
 	return nics, nil
