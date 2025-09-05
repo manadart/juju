@@ -57,6 +57,7 @@ type ApplicationState interface {
 func (s *Service) RemoveApplication(
 	ctx context.Context,
 	appUUID coreapplication.ID,
+	destroyStorage bool,
 	force bool,
 	wait time.Duration,
 ) (removal.UUID, error) {
@@ -113,7 +114,7 @@ func (s *Service) RemoveApplication(
 		// we need to schedule their removal as well.
 		s.logger.Infof(ctx, "application has units %v, scheduling removal", artifacts.UnitUUIDs)
 
-		s.removeUnits(ctx, artifacts.UnitUUIDs, force, wait)
+		s.removeUnits(ctx, artifacts.UnitUUIDs, destroyStorage, force, wait)
 	}
 
 	if len(artifacts.MachineUUIDs) > 0 {
