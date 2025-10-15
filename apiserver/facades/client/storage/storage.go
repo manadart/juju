@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"time"
 
 	"github.com/juju/errors"
 	"github.com/juju/names/v6"
@@ -18,8 +19,10 @@ import (
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/core/unit"
+	"github.com/juju/juju/domain/removal"
 	domainstorage "github.com/juju/juju/domain/storage"
 	storageservice "github.com/juju/juju/domain/storage/service"
+	"github.com/juju/juju/domain/storageprovisioning"
 	"github.com/juju/juju/internal/storage"
 	"github.com/juju/juju/rpc/params"
 )
@@ -89,6 +92,13 @@ type ApplicationService interface {
 	GetUnitMachineName(ctx context.Context, unitName unit.Name) (machine.Name, error)
 }
 
+// RemovalService provides the facility for removing various storage entities.
+type RemovalService interface {
+	RemoveStorageAttachment(
+		ctx context.Context, saUUID storageprovisioning.StorageAttachmentUUID, force bool, wait time.Duration,
+	) (removal.UUID, error)
+}
+
 // StorageAPIv6 provides the Storage API facade for version 6.
 type StorageAPIv6 struct {
 	*StorageAPI
@@ -96,11 +106,12 @@ type StorageAPIv6 struct {
 
 // StorageAPI implements the latest version (v7) of the Storage API.
 type StorageAPI struct {
-	blockDeviceService  BlockDeviceService
-	storageService      StorageService
-	applicationService  ApplicationService
-	authorizer          facade.Authorizer
-	blockCommandService common.BlockCommandService
+	blockDeviceService    BlockDeviceService
+	storageService        StorageService
+	applicationService    ApplicationService
+	removalService        RemovalService
+	authorizer            facade.Authorizer
+	blockCommandService   common.BlockCommandService
 
 	controllerUUID string
 	modelUUID      coremodel.UUID
@@ -112,6 +123,7 @@ func NewStorageAPI(
 	blockDeviceService BlockDeviceService,
 	storageService StorageService,
 	applicationService ApplicationService,
+	removalService RemovalService,
 	authorizer facade.Authorizer,
 	blockCommandService common.BlockCommandService,
 ) *StorageAPI {
@@ -276,8 +288,8 @@ func (a *StorageAPI) Remove(ctx context.Context, args params.RemoveStorage) (par
 	return params.ErrorResults{Results: result}, nil
 }
 
-// DetachStorage sets the specified storage attachments to Dying, unless they are
-// already Dying or Dead. Any associated, persistent storage will remain
+// DetachStorage sets the specified storage attachments to Dying, unless they
+// are already Dying or Dead. Any associated, persistent storage will remain
 // alive. This call can be forced.
 func (a *StorageAPI) DetachStorage(
 	ctx context.Context,
