@@ -139,8 +139,6 @@ CREATE TABLE unit_storage_directive (
 CREATE INDEX idx_unit_storage_directive
 ON unit_storage_directive (unit_uuid);
 
-
-
 CREATE TABLE storage_instance (
     uuid TEXT NOT NULL PRIMARY KEY,
     -- charm_name is the charm name that this storage instance serves. This
