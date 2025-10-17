@@ -27,7 +27,9 @@ func NewStorageAccessor(facade base.FacadeCaller) *StorageAccessor {
 }
 
 // UnitStorageAttachments returns the IDs of a unit's storage attachments.
-func (sa *StorageAccessor) UnitStorageAttachments(ctx context.Context, unitTag names.UnitTag) ([]params.StorageAttachmentId, error) {
+func (sa *StorageAccessor) UnitStorageAttachments(
+	ctx context.Context, unitTag names.UnitTag,
+) ([]params.StorageAttachmentId, error) {
 	args := params.Entities{
 		Entities: []params.Entity{{Tag: unitTag.String()}},
 	}
@@ -48,6 +50,7 @@ func (sa *StorageAccessor) UnitStorageAttachments(ctx context.Context, unitTag n
 
 // DestroyUnitStorageAttachments ensures that the specified unit's storage
 // attachments will be removed at some point in the future.
+// THIS SHOULD CALL REMOVESTORAGE (DYING + JOB).
 func (sa *StorageAccessor) DestroyUnitStorageAttachments(ctx context.Context, unitTag names.UnitTag) error {
 	args := params.Entities{
 		Entities: []params.Entity{{Tag: unitTag.String()}},
@@ -70,7 +73,9 @@ func (sa *StorageAccessor) DestroyUnitStorageAttachments(ctx context.Context, un
 // WatchUnitStorageAttachments starts a watcher for changes to storage
 // attachments related to the unit. The watcher will return the
 // IDs of the corresponding storage instances.
-func (sa *StorageAccessor) WatchUnitStorageAttachments(ctx context.Context, unitTag names.UnitTag) (watcher.StringsWatcher, error) {
+func (sa *StorageAccessor) WatchUnitStorageAttachments(
+	ctx context.Context, unitTag names.UnitTag,
+) (watcher.StringsWatcher, error) {
 	var results params.StringsWatchResults
 	args := params.Entities{
 		Entities: []params.Entity{{Tag: unitTag.String()}},
@@ -92,7 +97,9 @@ func (sa *StorageAccessor) WatchUnitStorageAttachments(ctx context.Context, unit
 
 // StorageAttachment returns the storage attachment with the specified
 // unit and storage tags.
-func (sa *StorageAccessor) StorageAttachment(ctx context.Context, storageTag names.StorageTag, unitTag names.UnitTag) (params.StorageAttachment, error) {
+func (sa *StorageAccessor) StorageAttachment(
+	ctx context.Context, storageTag names.StorageTag, unitTag names.UnitTag,
+) (params.StorageAttachment, error) {
 	args := params.StorageAttachmentIds{
 		Ids: []params.StorageAttachmentId{{
 			StorageTag: storageTag.String(),
@@ -116,8 +123,10 @@ func (sa *StorageAccessor) StorageAttachment(ctx context.Context, storageTag nam
 
 // StorageAttachmentLife returns the lifecycle state of the storage attachments
 // with the specified IDs.
-func (sa *StorageAccessor) StorageAttachmentLife(ctx context.Context, ids []params.StorageAttachmentId) ([]params.LifeResult, error) {
-	args := params.StorageAttachmentIds{ids}
+func (sa *StorageAccessor) StorageAttachmentLife(
+	ctx context.Context, ids []params.StorageAttachmentId,
+) ([]params.LifeResult, error) {
+	args := params.StorageAttachmentIds{Ids: ids}
 	var results params.LifeResults
 	err := sa.facade.FacadeCall(ctx, "StorageAttachmentLife", args, &results)
 	if err != nil {
@@ -131,7 +140,9 @@ func (sa *StorageAccessor) StorageAttachmentLife(ctx context.Context, ids []para
 
 // WatchStorageAttachments starts a watcher for changes to the info
 // of the storage attachment with the specified unit and storage tags.
-func (sa *StorageAccessor) WatchStorageAttachment(ctx context.Context, storageTag names.StorageTag, unitTag names.UnitTag) (watcher.NotifyWatcher, error) {
+func (sa *StorageAccessor) WatchStorageAttachment(
+	ctx context.Context, storageTag names.StorageTag, unitTag names.UnitTag,
+) (watcher.NotifyWatcher, error) {
 	var results params.NotifyWatchResults
 	args := params.StorageAttachmentIds{
 		Ids: []params.StorageAttachmentId{{
@@ -157,7 +168,10 @@ func (sa *StorageAccessor) WatchStorageAttachment(ctx context.Context, storageTa
 // RemoveStorageAttachment removes the storage attachment with the
 // specified unit and storage tags from state. This method is only
 // expected to succeed if the storage attachment is Dead.
-func (sa *StorageAccessor) RemoveStorageAttachment(ctx context.Context, storageTag names.StorageTag, unitTag names.UnitTag) error {
+// THIS SHOULD MARK DEAD.
+func (sa *StorageAccessor) RemoveStorageAttachment(
+	ctx context.Context, storageTag names.StorageTag, unitTag names.UnitTag,
+) error {
 	var results params.ErrorResults
 	args := params.StorageAttachmentIds{
 		Ids: []params.StorageAttachmentId{{

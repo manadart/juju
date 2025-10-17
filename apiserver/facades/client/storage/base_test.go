@@ -38,7 +38,9 @@ type baseStorageSuite struct {
 	blockCommandService *storage.MockBlockCommandService
 	storageService      *storage.MockStorageService
 	applicationService  *storage.MockApplicationService
-	poolsInUse          []string
+	removalService      *storage.MockRemovalService
+
+	poolsInUse []string
 }
 
 func (s *baseStorageSuite) setupMocks(c *tc.C) *gomock.Controller {
@@ -53,7 +55,11 @@ func (s *baseStorageSuite) setupMocks(c *tc.C) *gomock.Controller {
 	s.blockCommandService = storage.NewMockBlockCommandService(ctrl)
 	s.storageService = storage.NewMockStorageService(ctrl)
 	s.applicationService = storage.NewMockApplicationService(ctrl)
-	s.applicationService.EXPECT().GetUnitMachineName(gomock.Any(), unit.Name("mysql/0")).DoAndReturn(func(ctx context.Context, u unit.Name) (machine.Name, error) {
+	s.removalService = storage.NewMockRemovalService(ctrl)
+
+	s.applicationService.EXPECT().GetUnitMachineName(
+		gomock.Any(), unit.Name("mysql/0"),
+	).DoAndReturn(func(ctx context.Context, u unit.Name) (machine.Name, error) {
 		c.Assert(u.String(), tc.Equals, s.unitTag.Id())
 		return machine.Name(s.machineTag.Id()), nil
 	}).AnyTimes()

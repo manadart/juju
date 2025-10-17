@@ -23,6 +23,7 @@ import (
 	domainstorage "github.com/juju/juju/domain/storage"
 	storageservice "github.com/juju/juju/domain/storage/service"
 	"github.com/juju/juju/domain/storageprovisioning"
+	storageerrors "github.com/juju/juju/domain/storageprovisioning/errors"
 	"github.com/juju/juju/internal/storage"
 	"github.com/juju/juju/rpc/params"
 )
@@ -85,6 +86,13 @@ type StorageService interface {
 	// The following errors can be expected:
 	// - [storageerrors.PoolNotFoundError] if a pool with the specified name does not exist.
 	GetStoragePoolByName(ctx context.Context, name string) (domainstorage.StoragePool, error)
+
+	// GetStorageAttachmentUUIDByInstanceID returns the unit storage attachment
+	// UUID for the storage instance with the input ID.
+	// At the time of writing a storage instance has at most one unit attachment.
+	GetStorageAttachmentUUIDByInstanceID(
+		ctx context.Context, id string,
+	) (storageprovisioning.StorageAttachmentUUID, error)
 }
 
 // ApplicationService defines apis on the application service.
@@ -295,8 +303,42 @@ func (a *StorageAPI) DetachStorage(
 	ctx context.Context,
 	args params.StorageDetachmentParams,
 ) (params.ErrorResults, error) {
+	var (
+		force bool
+		wait time.Duration
+	)
+	if args.Force != nil {
+		force = *args.Force
+	}
+	if args.MaxWait != nil {
+		wait = *args.MaxWait
+	}
 
 	result := make([]params.ErrorResult, len(args.StorageIds.Ids))
+
+	for i, stID := range args.StorageIds.Ids {
+		stTag, err := names.ParseStorageTag(stID.StorageTag)
+		if err != nil {
+			result[i].Error = apiservererrors.ServerError(err)
+			continue
+		}
+
+		stID := stTag.Id()
+		saUUID, err := a.storageService.GetStorageAttachmentUUIDByInstanceID(ctx, stID))
+		if err != nil {
+			if errors.Is(err, storageerrors.StorageAttachmentNotFound) {
+				result[i].Error = apiservererrors.ParamsErrorf(params.CodeNotFound, "attachment to %q not found", stID)
+				continue	
+			}
+
+			result[i].Error = apiservererrors.ServerError(err)
+			continue
+		}
+
+		if _, err := a.removalService.RemoveStorageAttachment(ctx, saUUID, force, wait); err != nil {
+			result[i].Error = apiservererrors.ServerError(err)
+		}
+	}
 
 	return params.ErrorResults{Results: result}, nil
 }

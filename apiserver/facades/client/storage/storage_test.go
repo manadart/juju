@@ -32,10 +32,6 @@ func (s *storageSuite) TestStub(c *tc.C) {
 - TestShowStorage
 - TestShowStorageInvalidId
 - TestRemove
-- TestDetach
-- TestDetachSpecifiedNotFound
-- TestDetachAttachmentNotFoundConcurrent
-- TestDetachNoAttachmentsStorageNotFound
 - TestAttach
 - TestImportFilesystem
 - TestImportFilesystemVolumeBacked
@@ -47,4 +43,9 @@ func (s *storageSuite) TestStub(c *tc.C) {
 - TestListStorageAsAdminOnNotOwnedModel
 - TestListStorageAsNonAdminOnNotOwnedModel
 `)
+}
+
+func (s *storageSuite) TestDetatchNotFound(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
 }
