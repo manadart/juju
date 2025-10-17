@@ -156,6 +156,45 @@ func (c *MockStateGetModelDetailsCall) DoAndReturn(f func() (storage0.ModelDetai
 	return c
 }
 
+// GetStorageAttachmentUUIDByInstanceID mocks base method.
+func (m *MockState) GetStorageAttachmentUUIDByInstanceID(arg0 context.Context, arg1 string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetStorageAttachmentUUIDByInstanceID", arg0, arg1)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStorageAttachmentUUIDByInstanceID indicates an expected call of GetStorageAttachmentUUIDByInstanceID.
+func (mr *MockStateMockRecorder) GetStorageAttachmentUUIDByInstanceID(arg0, arg1 any) *MockStateGetStorageAttachmentUUIDByInstanceIDCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStorageAttachmentUUIDByInstanceID", reflect.TypeOf((*MockState)(nil).GetStorageAttachmentUUIDByInstanceID), arg0, arg1)
+	return &MockStateGetStorageAttachmentUUIDByInstanceIDCall{Call: call}
+}
+
+// MockStateGetStorageAttachmentUUIDByInstanceIDCall wrap *gomock.Call
+type MockStateGetStorageAttachmentUUIDByInstanceIDCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockStateGetStorageAttachmentUUIDByInstanceIDCall) Return(arg0 string, arg1 error) *MockStateGetStorageAttachmentUUIDByInstanceIDCall {
+	c.Call = c.Call.Return(arg0, arg1)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockStateGetStorageAttachmentUUIDByInstanceIDCall) Do(f func(context.Context, string) (string, error)) *MockStateGetStorageAttachmentUUIDByInstanceIDCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockStateGetStorageAttachmentUUIDByInstanceIDCall) DoAndReturn(f func(context.Context, string) (string, error)) *MockStateGetStorageAttachmentUUIDByInstanceIDCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // GetStoragePool mocks base method.
 func (m *MockState) GetStoragePool(arg0 context.Context, arg1 storage0.StoragePoolUUID) (storage0.StoragePool, error) {
 	m.ctrl.T.Helper()

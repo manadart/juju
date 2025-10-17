@@ -9,18 +9,28 @@ import (
 	coreerrors "github.com/juju/juju/core/errors"
 	"github.com/juju/juju/core/logger"
 	corestorage "github.com/juju/juju/core/storage"
+	"github.com/juju/juju/core/trace"
 	"github.com/juju/juju/domain/storage"
+	"github.com/juju/juju/domain/storageprovisioning"
 	"github.com/juju/juju/internal/errors"
 )
 
 // StorageState defines an interface for interacting with the underlying state.
 type StorageState interface {
-	// GetModelDetails returns the model and controller UUID for the current model.
+	// GetModelDetails returns the model and
+	// controller UUID for the current model.
 	GetModelDetails() (storage.ModelDetails, error)
-	// ImportFilesystem associates a filesystem (either native or volume backed) hosted by a cloud provider
-	// with a new storage instance (and storage pool) in a model.
-	ImportFilesystem(ctx context.Context, name corestorage.Name,
-		filesystem storage.FilesystemInfo) (corestorage.ID, error)
+
+	// GetStorageAttachmentUUIDByInstanceID returns the unit storage attachment
+	// UUID for the storage instance with the input ID.
+	GetStorageAttachmentUUIDByInstanceID(ctx context.Context, id string) (string, error)
+
+	// ImportFilesystem associates a filesystem (either native or volume backed)
+	// hosted by a cloud provider with a new storage instance (and storage pool)
+	// in a model.
+	ImportFilesystem(
+		ctx context.Context, name corestorage.Name, filesystem storage.FilesystemInfo,
+	) (corestorage.ID, error)
 }
 
 // StorageService defines a service for storage related behaviour.
@@ -28,6 +38,22 @@ type StorageService struct {
 	st             State
 	logger         logger.Logger
 	registryGetter corestorage.ModelStorageRegistryGetter
+}
+
+// GetStorageAttachmentUUIDByInstanceID returns the unit storage attachment
+// UUID for the storage instance with the input ID.
+// At the time of writing a storage instance has at most one unit attachment.
+func (s *StorageService) GetStorageAttachmentUUIDByInstanceID(
+	ctx context.Context, id string,
+) (storageprovisioning.StorageAttachmentUUID, error) {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	attachmentUUID, err := s.st.GetStorageAttachmentUUIDByInstanceID(ctx, id)
+	if err != nil {
+		return "", errors.Errorf("getting unit attachment for %q: %w", id, err)
+	}
+	return storageprovisioning.StorageAttachmentUUID(attachmentUUID), nil
 }
 
 // ImportFilesystem associates a filesystem (either native or volume backed) hosted by a cloud provider

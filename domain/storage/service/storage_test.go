@@ -14,6 +14,8 @@ import (
 	corestorage "github.com/juju/juju/core/storage"
 	domainstorage "github.com/juju/juju/domain/storage"
 	storageerrors "github.com/juju/juju/domain/storage/errors"
+	"github.com/juju/juju/domain/storageprovisioning"
+	storageprovisioningerrors "github.com/juju/juju/domain/storageprovisioning/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
 	"github.com/juju/juju/internal/storage"
 	"github.com/juju/juju/internal/testhelpers"
@@ -36,47 +38,26 @@ func TestStorageSuite(t *testing.T) {
 	tc.Run(t, &storageSuite{})
 }
 
-type volumeImporter struct {
-	*MockVolumeSource
-	*MockVolumeImporter
+func (s *storageSuite) TestGetStorageAttachmentUUIDByInstanceIDNotFound(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.state.EXPECT().GetStorageAttachmentUUIDByInstanceID(
+		gomock.Any(), "charm/0",
+	).Return("", storageprovisioningerrors.StorageAttachmentNotFound)
+
+	_, err := s.service(c).GetStorageAttachmentUUIDByInstanceID(c.Context(), "charm/0")
+	c.Check(err, tc.ErrorIs, storageprovisioningerrors.StorageAttachmentNotFound)
 }
 
-type filesystemImporter struct {
-	*MockFilesystemSource
-	*MockFilesystemImporter
-}
+func (s *storageSuite) TestGetStorageAttachmentUUIDByInstanceID(c *tc.C) {
+	defer s.setupMocks(c).Finish()
 
-func (s *storageSuite) setupMocks(c *tc.C) *gomock.Controller {
-	ctrl := gomock.NewController(c)
+	s.state.EXPECT().GetStorageAttachmentUUIDByInstanceID(gomock.Any(), "charm/0").Return("attachment-uuid", nil)
 
-	s.state = NewMockState(ctrl)
-	s.volumeSource = NewMockVolumeSource(ctrl)
-	s.volumeImporter = NewMockVolumeImporter(ctrl)
-	s.filesystemSource = NewMockFilesystemSource(ctrl)
-	s.filesystemImporter = NewMockFilesystemImporter(ctrl)
-	s.provider = NewMockProvider(ctrl)
+	attachment, err := s.service(c).GetStorageAttachmentUUIDByInstanceID(c.Context(), "charm/0")
+	c.Assert(err, tc.ErrorIsNil)
 
-	s.registry = NewMockProviderRegistry(ctrl)
-	s.registry.EXPECT().StorageProvider(storage.ProviderType("ebs")).Return(s.provider, nil).AnyTimes()
-	s.registry.EXPECT().StorageProvider(storage.ProviderType("elastic")).Return(s.provider, nil).AnyTimes()
-
-	c.Cleanup(func() {
-		s.state = nil
-		s.volumeSource = nil
-		s.volumeImporter = nil
-		s.filesystemSource = nil
-		s.filesystemImporter = nil
-		s.provider = nil
-		s.registry = nil
-	})
-
-	return ctrl
-}
-
-func (s *storageSuite) service(c *tc.C) *Service {
-	return NewService(s.state, loggertesting.WrapCheckLog(c), modelStorageRegistryGetter(func() storage.ProviderRegistry {
-		return s.registry
-	}))
+	c.Check(attachment, tc.Equals, storageprovisioning.StorageAttachmentUUID("attachment-uuid"))
 }
 
 func (s *storageSuite) TestImportFilesystemValidate(c *tc.C) {
@@ -305,4 +286,47 @@ func (s *storageSuite) TestImportFilesystemVolumeBackedNotSupported(c *tc.C) {
 		StorageName: "pgdata",
 	})
 	c.Assert(err, tc.ErrorIs, errors.NotSupported)
+}
+
+func (s *storageSuite) setupMocks(c *tc.C) *gomock.Controller {
+	ctrl := gomock.NewController(c)
+
+	s.state = NewMockState(ctrl)
+	s.volumeSource = NewMockVolumeSource(ctrl)
+	s.volumeImporter = NewMockVolumeImporter(ctrl)
+	s.filesystemSource = NewMockFilesystemSource(ctrl)
+	s.filesystemImporter = NewMockFilesystemImporter(ctrl)
+	s.provider = NewMockProvider(ctrl)
+
+	s.registry = NewMockProviderRegistry(ctrl)
+	s.registry.EXPECT().StorageProvider(storage.ProviderType("ebs")).Return(s.provider, nil).AnyTimes()
+	s.registry.EXPECT().StorageProvider(storage.ProviderType("elastic")).Return(s.provider, nil).AnyTimes()
+
+	c.Cleanup(func() {
+		s.state = nil
+		s.volumeSource = nil
+		s.volumeImporter = nil
+		s.filesystemSource = nil
+		s.filesystemImporter = nil
+		s.provider = nil
+		s.registry = nil
+	})
+
+	return ctrl
+}
+
+type volumeImporter struct {
+	*MockVolumeSource
+	*MockVolumeImporter
+}
+
+type filesystemImporter struct {
+	*MockFilesystemSource
+	*MockFilesystemImporter
+}
+
+func (s *storageSuite) service(c *tc.C) *Service {
+	return NewService(s.state, loggertesting.WrapCheckLog(c), modelStorageRegistryGetter(func() storage.ProviderRegistry {
+		return s.registry
+	}))
 }
