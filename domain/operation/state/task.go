@@ -51,8 +51,8 @@ func (st *State) GetTask(ctx context.Context, taskID string) (operation.Task, *s
 
 // GetMachineTaskIDsWithStatus retrieves all task IDs for a machine specified by
 // name and a status filter.
-func (s *State) GetMachineTaskIDsWithStatus(ctx context.Context, machineName string, statusFilter string) ([]string, error) {
-	db, err := s.DB(ctx)
+func (st *State) GetMachineTaskIDsWithStatus(ctx context.Context, machineName string, statusFilter string) ([]string, error) {
+	db, err := st.DB(ctx)
 	if err != nil {
 		return nil, errors.Capture(err)
 	}
@@ -67,7 +67,7 @@ func (s *State) GetMachineTaskIDsWithStatus(ctx context.Context, machineName str
 		Status:  statusFilter,
 	}
 
-	stmt, err := s.Prepare(`
+	stmt, err := st.Prepare(`
 SELECT ot.task_id AS &taskIdent.task_id
 FROM   operation_task AS ot
 JOIN   operation_machine_task AS omt ON ot.uuid = omt.task_uuid

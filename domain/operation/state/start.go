@@ -357,7 +357,7 @@ VALUES ($insertOperation.*)
 	return errors.Capture(tx.Query(ctx, stmt, args).Run())
 }
 
-func (s *State) insertOperationParameter(ctx context.Context, tx *sqlair.TX, operationUUID, key string,
+func (st *State) insertOperationParameter(ctx context.Context, tx *sqlair.TX, operationUUID, key string,
 	value any) error {
 
 	param := taskParameter{
@@ -370,7 +370,7 @@ func (s *State) insertOperationParameter(ctx context.Context, tx *sqlair.TX, ope
 INSERT INTO operation_parameter (operation_uuid, key, value)
 VALUES ($taskParameter.*)
 `
-	stmt, err := s.Prepare(query, param)
+	stmt, err := st.Prepare(query, param)
 	if err != nil {
 		return errors.Errorf("preparing insert operation parameter statement: %w", err)
 	}
