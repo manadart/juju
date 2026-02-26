@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/juju/core/status"
 	"github.com/juju/juju/core/trace"
+	objectstoreerrors "github.com/juju/juju/domain/objectstore/errors"
 	"github.com/juju/juju/domain/operation"
 	operationerrors "github.com/juju/juju/domain/operation/errors"
 	"github.com/juju/juju/domain/operation/internal"
@@ -40,8 +41,17 @@ func (s *Service) FinishTask(ctx context.Context, result operation.CompletedTask
 		return errors.Capture(err)
 	}
 
-	// Use the task's UUID as the path in the object store for
-	// it's results
+	// FinishTask can be retried by the uniter in some failure situations.
+	// If the task is already in an inactive state, treat this call as a no-op.
+	currentStatus, err := s.st.GetTaskStatusByID(ctx, result.TaskID)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	if status.Status(currentStatus).IsInActiveTaskStatus() {
+		return nil
+	}
+
+	// Use the task's UUID as the path in the object store for its results.
 	taskUUID, err := s.st.GetTaskUUIDByID(ctx, result.TaskID)
 	if err != nil {
 		return errors.Capture(err)
@@ -94,7 +104,9 @@ func (s *Service) storeTaskResults(ctx context.Context, taskUUID string, results
 		reader,
 		size,
 	)
-	if err != nil {
+	if errors.Is(err, objectstoreerrors.ErrHashAndSizeAlreadyExists) {
+		err = nil
+	} else if err != nil {
 		return "", nil, errors.Errorf("failed to store results: %w", err)
 	}
 

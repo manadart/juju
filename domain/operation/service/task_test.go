@@ -14,6 +14,7 @@ import (
 
 	coreerrors "github.com/juju/juju/core/errors"
 	corestatus "github.com/juju/juju/core/status"
+	domainobjectstoreerrors "github.com/juju/juju/domain/objectstore/errors"
 	"github.com/juju/juju/domain/operation"
 	operationerrors "github.com/juju/juju/domain/operation/errors"
 	"github.com/juju/juju/domain/operation/internal"
@@ -269,6 +270,7 @@ func (s *serviceSuite) TestFinishTask(c *tc.C) {
 
 	// Arrange
 	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
 	taskUUID := uuid.MustNewUUID().String()
 	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return(taskUUID, nil)
 
@@ -303,6 +305,7 @@ func (s *serviceSuite) TestFinishTaskTaskFailed(c *tc.C) {
 
 	// Arrange
 	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
 	taskUUID := uuid.MustNewUUID().String()
 	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return(taskUUID, nil)
 
@@ -322,6 +325,72 @@ func (s *serviceSuite) TestFinishTaskTaskFailed(c *tc.C) {
 	// Act
 	err := s.service(c).FinishTask(c.Context(), arg)
 	// Assert
+	c.Assert(err, tc.IsNil)
+}
+
+func (s *serviceSuite) TestFinishTaskAlreadyInactiveNoop(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Completed.String(), nil)
+
+	arg := operation.CompletedTaskResult{
+		TaskID:  taskID,
+		Message: "done",
+		Status:  corestatus.Completed.String(),
+		Results: map[string]interface{}{"foo": "bar"},
+	}
+
+	err := s.service(c).FinishTask(c.Context(), arg)
+	c.Assert(err, tc.IsNil)
+}
+
+func (s *serviceSuite) TestFinishTaskGetCurrentStatusError(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return("", errors.New("status lookup failed"))
+
+	arg := operation.CompletedTaskResult{
+		TaskID:  taskID,
+		Message: "done",
+		Status:  corestatus.Completed.String(),
+		Results: map[string]interface{}{"foo": "bar"},
+	}
+
+	err := s.service(c).FinishTask(c.Context(), arg)
+	c.Assert(err, tc.ErrorMatches, "status lookup failed")
+}
+
+func (s *serviceSuite) TestFinishTaskStorePutAlreadyExists(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
+	taskUUID := uuid.MustNewUUID().String()
+	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return(taskUUID, nil)
+
+	s.mockObjectStoreGetter.EXPECT().GetObjectStore(gomock.Any()).Return(s.mockObjectStore, nil)
+	inputJSON := `{"foo":"bar"}`
+	reader := strings.NewReader(inputJSON)
+	s.mockObjectStore.EXPECT().Put(gomock.Any(), taskUUID, reader, int64(len(inputJSON))).Return("", domainobjectstoreerrors.ErrHashAndSizeAlreadyExists)
+
+	input := internal.CompletedTask{
+		TaskUUID:  taskUUID,
+		StorePath: taskUUID, // store path is the same as task UUID
+		Status:    corestatus.Completed.String(),
+		Message:   "done",
+	}
+	s.state.EXPECT().FinishTask(gomock.Any(), input).Return(nil)
+
+	arg := operation.CompletedTaskResult{
+		TaskID:  taskID,
+		Message: "done",
+		Status:  corestatus.Completed.String(),
+		Results: map[string]interface{}{"foo": "bar"},
+	}
+
+	err := s.service(c).FinishTask(c.Context(), arg)
 	c.Assert(err, tc.IsNil)
 }
 
@@ -375,6 +444,7 @@ func (s *serviceSuite) TestFinishTaskError(c *tc.C) {
 
 	// Arrange
 	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
 
 	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return("", errors.New("boom"))
 
@@ -424,6 +494,7 @@ func (s *serviceSuite) TestFinishTaskFailStorePut(c *tc.C) {
 
 	// Arrange
 	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
 	taskUUID := uuid.MustNewUUID().String()
 	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return(taskUUID, nil)
 
@@ -450,6 +521,7 @@ func (s *serviceSuite) TestFinishTaskFailState(c *tc.C) {
 
 	// Arrange
 	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
 	taskUUID := uuid.MustNewUUID().String()
 	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return(taskUUID, nil)
 
@@ -487,6 +559,7 @@ func (s *serviceSuite) TestFinishTaskNoStore(c *tc.C) {
 
 	// Arrange
 	taskID := "42"
+	s.state.EXPECT().GetTaskStatusByID(gomock.Any(), taskID).Return(corestatus.Running.String(), nil)
 	taskUUID := uuid.MustNewUUID().String()
 	s.state.EXPECT().GetTaskUUIDByID(gomock.Any(), taskID).Return(taskUUID, nil)
 
