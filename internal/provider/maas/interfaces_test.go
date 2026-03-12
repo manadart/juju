@@ -1004,6 +1004,118 @@ func (s *interfacesSuite) TestMAASNetworkInterfaces(c *gc.C) {
 	c.Check(infos, jc.DeepEquals, expected)
 }
 
+func (s *interfacesSuite) TestMAASNetworkInterfacesPreferIPv4Links(c *gc.C) {
+	vlan := fakeVLAN{
+		id:  5001,
+		vid: 0,
+		mtu: 1500,
+	}
+
+	subnetV4 := fakeSubnet{
+		id:         3,
+		space:      "freckles",
+		vlan:       vlan,
+		gateway:    "10.20.19.2",
+		cidr:       "10.20.19.0/24",
+		dnsServers: []string{"10.20.19.2"},
+	}
+
+	subnetV6 := fakeSubnet{
+		id:         4,
+		space:      "freckles",
+		vlan:       vlan,
+		gateway:    "fd00::1",
+		cidr:       "fd00::/64",
+		dnsServers: []string{"fd00::1"},
+	}
+
+	exampleInterfaces := []gomaasapi.Interface{
+		&fakeInterface{
+			id:         91,
+			name:       "eth0",
+			type_:      "physical",
+			enabled:    true,
+			macAddress: "52:54:00:70:9b:fe",
+			vlan:       vlan,
+			links: []gomaasapi.Link{
+				&fakeLink{
+					id:        437,
+					subnet:    &subnetV6,
+					ipAddress: "fd00::103",
+					mode:      "static",
+				},
+				&fakeLink{
+					id:        436,
+					subnet:    &subnetV4,
+					ipAddress: "10.20.19.103",
+					mode:      "static",
+				},
+			},
+		},
+	}
+	machine := &fakeMachine{interfaceSet: exampleInterfaces}
+	instance := &maasInstance{machine: machine}
+
+	expected := network.InterfaceInfos{{
+		DeviceIndex:       0,
+		MACAddress:        "52:54:00:70:9b:fe",
+		ProviderId:        "91",
+		ProviderSubnetId:  "3",
+		ProviderSpaceId:   "freckles-id",
+		VLANTag:           0,
+		ProviderVLANId:    "5001",
+		ProviderAddressId: "436",
+		InterfaceName:     "eth0",
+		InterfaceType:     "ethernet",
+		Disabled:          false,
+		NoAutoStart:       false,
+		Addresses: network.ProviderAddresses{
+			newAddressOnSpaceWithId(
+				"freckles", "freckles-id", "10.20.19.103",
+				network.WithCIDR(subnetV4.cidr), network.WithConfigType(network.ConfigStatic),
+			),
+		},
+		DNSServers: network.ProviderAddresses{
+			newAddressOnSpaceWithId("freckles", "freckles-id", "10.20.19.2"),
+		},
+		MTU:            1500,
+		GatewayAddress: newAddressOnSpaceWithId("freckles", "freckles-id", "10.20.19.2"),
+		Origin:         network.OriginProvider,
+	}, {
+		DeviceIndex:       0,
+		MACAddress:        "52:54:00:70:9b:fe",
+		ProviderId:        "91",
+		ProviderSubnetId:  "4",
+		ProviderSpaceId:   "freckles-id",
+		VLANTag:           0,
+		ProviderVLANId:    "5001",
+		ProviderAddressId: "437",
+		InterfaceName:     "eth0",
+		InterfaceType:     "ethernet",
+		Disabled:          false,
+		NoAutoStart:       false,
+		Addresses: network.ProviderAddresses{
+			newAddressOnSpaceWithId(
+				"freckles", "freckles-id", "fd00::103",
+				network.WithCIDR(subnetV6.cidr), network.WithConfigType(network.ConfigStatic),
+			),
+		},
+		DNSServers: network.ProviderAddresses{
+			newAddressOnSpaceWithId("freckles", "freckles-id", "fd00::1"),
+		},
+		MTU:            1500,
+		GatewayAddress: newAddressOnSpaceWithId("freckles", "freckles-id", "fd00::1"),
+		Origin:         network.OriginProvider,
+	}}
+
+	infos, err := maasNetworkInterfaces(s.callCtx, instance, map[string]network.Id{
+		subnetV4.cidr: "freckles-id",
+		subnetV6.cidr: "freckles-id",
+	})
+	c.Assert(err, jc.ErrorIsNil)
+	c.Check(infos, jc.DeepEquals, expected)
+}
+
 func (s *interfacesSuite) TestMAASInterfacesNilVLAN(c *gc.C) {
 	vlan0 := fakeVLAN{
 		id:  5001,

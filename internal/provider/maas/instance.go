@@ -5,6 +5,7 @@ package maas
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/juju/errors"
@@ -84,6 +85,9 @@ func (mi *maasInstance) Addresses(ctx context.ProviderCallContext) (corenetwork.
 			logger.Debugf("no address found on interface %q", iface.InterfaceName)
 		}
 	}
+	sort.SliceStable(addresses, func(i, j int) bool {
+		return lessPreferredMAASAddress(addresses[i], addresses[j])
+	})
 
 	logger.Debugf("%q has addresses %q", mi.machine.Hostname(), addresses)
 	return addresses, nil

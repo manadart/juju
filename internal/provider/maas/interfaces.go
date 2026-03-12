@@ -6,10 +6,12 @@ package maas
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/juju/collections/set"
 	"github.com/juju/errors"
+	"github.com/juju/gomaasapi/v2"
 
 	"github.com/juju/juju/core/instance"
 	corenetwork "github.com/juju/juju/core/network"
@@ -210,7 +212,11 @@ func maasNetworkInterfaces(
 			continue
 		}
 
-		for _, link := range iface.Links() {
+		links := append([]gomaasapi.Link(nil), iface.Links()...)
+		sort.SliceStable(links, func(i, j int) bool {
+			return lessPreferredMAASLink(links[i], links[j])
+		})
+		for _, link := range links {
 			configType := maasLinkToInterfaceConfigType(link.Mode())
 
 			if link.IPAddress() == "" && link.Subnet() == nil {
@@ -276,6 +282,38 @@ func maasNetworkInterfaces(
 		}
 	}
 	return infos, nil
+}
+
+func lessPreferredMAASLink(left, right gomaasapi.Link) bool {
+	leftAddr := left.IPAddress()
+	rightAddr := right.IPAddress()
+	switch {
+	case leftAddr == "" && rightAddr == "":
+		return left.ID() < right.ID()
+	case leftAddr == "":
+		return false
+	case rightAddr == "":
+		return true
+	}
+
+	leftIP := corenetwork.NewMachineAddress(leftAddr)
+	rightIP := corenetwork.NewMachineAddress(rightAddr)
+	if lessPreferredMAASAddress(leftIP, rightIP) {
+		return true
+	}
+	if lessPreferredMAASAddress(rightIP, leftIP) {
+		return false
+	}
+	return left.ID() < right.ID()
+}
+
+func lessPreferredMAASAddress(left, right corenetwork.Address) bool {
+	order1 := corenetwork.SortOrderMostPublic(left)
+	order2 := corenetwork.SortOrderMostPublic(right)
+	if order1 == order2 {
+		return left.Host() < right.Host()
+	}
+	return order1 < order2
 }
 
 func parseInterfaces(jsonBytes []byte) ([]maasInterface, error) {

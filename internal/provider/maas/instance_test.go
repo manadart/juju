@@ -83,6 +83,83 @@ func (s *maasInstanceSuite) TestAddresses(c *gc.C) {
 	c.Assert(addresses, jc.SameContents, expectedAddresses)
 }
 
+func (s *maasInstanceSuite) TestAddressesPreferIPv4RegardlessOfInterfaceOrder(c *gc.C) {
+	vlan := fakeVLAN{vid: 66}
+	subnetV4 := fakeSubnet{
+		id:    99,
+		vlan:  vlan,
+		cidr:  "192.168.10.0/24",
+		space: "freckles",
+	}
+	subnetV6 := fakeSubnet{
+		id:    100,
+		vlan:  vlan,
+		cidr:  "fd00::/64",
+		space: "freckles",
+	}
+	machine := &fakeMachine{
+		systemID: "1",
+		interfaceSet: []gomaasapi.Interface{
+			&fakeInterface{
+				id:         92,
+				name:       "eth1",
+				type_:      "physical",
+				enabled:    true,
+				macAddress: "52:54:00:70:9b:ff",
+				vlan:       vlan,
+				links: []gomaasapi.Link{
+					&fakeLink{
+						id:        437,
+						subnet:    &subnetV6,
+						ipAddress: "fd00::1",
+						mode:      "static",
+					},
+				},
+			},
+			&fakeInterface{
+				id:         91,
+				name:       "eth0",
+				type_:      "physical",
+				enabled:    true,
+				macAddress: "52:54:00:70:9b:fe",
+				vlan:       vlan,
+				links: []gomaasapi.Link{
+					&fakeLink{
+						id:        436,
+						subnet:    &subnetV4,
+						ipAddress: "192.168.10.1",
+						mode:      "static",
+					},
+				},
+			},
+		},
+	}
+	controller := &fakeController{
+		spaces: []gomaasapi.Space{
+			fakeSpace{
+				name:    "freckles",
+				id:      4567,
+				subnets: []gomaasapi.Subnet{subnetV4, subnetV6},
+			},
+		},
+		machines: []gomaasapi.Machine{machine},
+	}
+	instance := &maasInstance{machine: machine, environ: s.makeEnviron(c, controller)}
+	addresses, err := instance.Addresses(s.callCtx)
+
+	expectedAddresses := network.ProviderAddresses{
+		newAddressOnSpaceWithId(
+			"freckles", "4567", "192.168.10.1", network.WithCIDR(subnetV4.cidr), network.WithConfigType(network.ConfigStatic),
+		),
+		newAddressOnSpaceWithId(
+			"freckles", "4567", "fd00::1", network.WithCIDR(subnetV6.cidr), network.WithConfigType(network.ConfigStatic),
+		),
+	}
+
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addresses, gc.DeepEquals, expectedAddresses)
+}
+
 func (s *maasInstanceSuite) TestZone(c *gc.C) {
 	machine := &fakeMachine{zoneName: "inflatable"}
 	instance := &maasInstance{machine: machine}
