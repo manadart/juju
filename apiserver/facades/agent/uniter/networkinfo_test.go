@@ -270,6 +270,49 @@ func (s *networkInfoSuite) TestAPIRequestForRelationIAASHostNameIngressNoEgress(
 	c.Check(addrs[0].Address, gc.Equals, ip)
 }
 
+func (s *networkInfoSuite) TestAPIRequestForRelationIAASHostNamePrefersIPv4(c *gc.C) {
+	prr := s.newProReqRelation(c, charm.ScopeGlobal)
+	err := prr.pu0.AssignToNewMachine()
+	c.Assert(err, jc.ErrorIsNil)
+	id, err := prr.pu0.AssignedMachineId()
+	c.Assert(err, jc.ErrorIsNil)
+	machine, err := s.State.Machine(id)
+	c.Assert(err, jc.ErrorIsNil)
+
+	host := "host.at.somewhere"
+	ipv4 := "100.2.3.4"
+	ipv6 := "2001:db8::1"
+
+	err = machine.SetProviderAddresses(network.NewSpaceAddress(host))
+	c.Assert(err, jc.ErrorIsNil)
+
+	lookup := func(addr string) ([]string, error) {
+		if addr == host {
+			return []string{ipv6, ipv4}, nil
+		}
+		return nil, errors.New("bad horsey")
+	}
+
+	netInfo := s.newNetworkInfo(c, prr.pu0.UnitTag(), nil, lookup)
+
+	rID := prr.rel.Id()
+	result, err := netInfo.ProcessAPIRequest(params.NetworkInfoParams{
+		Unit:       names.NewUnitTag(prr.pru0.UnitName()).String(),
+		Endpoints:  []string{"server"},
+		RelationId: &rID,
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
+	binding, ok := result.Results["server"]
+	c.Assert(ok, jc.IsTrue)
+
+	c.Assert(binding.IngressAddresses, gc.DeepEquals, []string{ipv4})
+	c.Assert(binding.Info, gc.HasLen, 1)
+	c.Assert(binding.Info[0].Addresses, gc.HasLen, 1)
+	c.Check(binding.Info[0].Addresses[0].Hostname, gc.Equals, host)
+	c.Check(binding.Info[0].Addresses[0].Address, gc.Equals, ipv4)
+}
+
 func (s *networkInfoSuite) TestAPIRequestForRelationCAASHostNameNoIngress(c *gc.C) {
 	s.PatchValue(&provider.NewK8sClients, k8stesting.NoopFakeK8sClients)
 	st := s.Factory.MakeCAASModel(c, nil)

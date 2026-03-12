@@ -269,14 +269,8 @@ func (n *NetworkInfoBase) resolveHostAddress(hostName string) string {
 		return ""
 	}
 
-	// This preserves prior behaviour from when resolution was done client-side
-	// within the network-get tool.
-	// This check is probably no longer necessary, but is preserved here
-	// conservatively.
-	for _, addr := range resolved {
-		if ip := net.ParseIP(addr); ip != nil && !ip.IsLoopback() {
-			return addr
-		}
+	if addr := preferredResolvedHostAddress(resolved); addr != "" {
+		return addr
 	}
 
 	if len(resolved) == 0 {
@@ -294,6 +288,28 @@ func (n *NetworkInfoBase) resolveHostAddress(hostName string) string {
 	}
 
 	return ""
+}
+
+func preferredResolvedHostAddress(resolved []string) string {
+	var ipv6 string
+
+	// This preserves prior behaviour from when resolution was done client-side
+	// within the network-get tool.
+	// This check is probably no longer necessary, but is preserved here
+	// conservatively.
+	for _, addr := range resolved {
+		ip := net.ParseIP(addr)
+		if ip == nil || ip.IsLoopback() {
+			continue
+		}
+		if ip.To4() != nil {
+			return addr
+		}
+		if ipv6 == "" {
+			ipv6 = addr
+		}
+	}
+	return ipv6
 }
 
 // subnetsForAddresses wraps the core/network method of the same name,
