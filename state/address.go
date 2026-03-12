@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"slices"
 	"strconv"
 
 	"github.com/juju/errors"
@@ -303,7 +304,7 @@ func (st *State) apiHostPortsForCAAS(public bool) (addresses []network.SpaceHost
 	// Return all publicly available addresses for clients.
 	// Scope matching falls back through a hierarchy,
 	// so these may actually be local-cloud addresses.
-	publicAddrs := addrs.AllMatchingScope(network.ScopeMatchPublic)
+	publicAddrs := bestScopedAddresses(addrs.PrioritizedForScope(network.ScopeMatchPublic))
 	if public {
 		return addrsToHostPorts(publicAddrs...), nil
 	}
@@ -327,7 +328,7 @@ func (st *State) apiHostPortsForCAAS(public bool) (addresses []network.SpaceHost
 		return addrsToHostPorts(append(hostAddresses, publicAddrs...)...), nil
 	}
 
-	localAddrs := addrs.AllMatchingScope(network.ScopeMatchCloudLocal)
+	localAddrs := bestScopedAddresses(addrs.PrioritizedForScope(network.ScopeMatchCloudLocal))
 
 	// If there were no local-cloud addresses, return the public ones.
 	if len(localAddrs) == 0 || localAddrs[0].Scope == network.ScopePublic {
@@ -336,8 +337,31 @@ func (st *State) apiHostPortsForCAAS(public bool) (addresses []network.SpaceHost
 
 	// Otherwise return everything, local-cloud first.
 	hostAddresses = append(hostAddresses, localAddrs...)
-	hostAddresses = append(hostAddresses, publicAddrs...)
+	hostAddresses = appendUniqueSpaceAddresses(hostAddresses, publicAddrs...)
 	return addrsToHostPorts(hostAddresses...), nil
+}
+
+func appendUniqueSpaceAddresses(existing network.SpaceAddresses, candidates ...network.SpaceAddress) network.SpaceAddresses {
+	return append(existing, slices.DeleteFunc(candidates, func(candidate network.SpaceAddress) bool {
+		return slices.ContainsFunc(existing, func(addr network.SpaceAddress) bool {
+			return addr.String() == candidate.String()
+		})
+	})...)
+}
+
+func bestScopedAddresses(candidates network.SpaceAddresses) network.SpaceAddresses {
+	if len(candidates) == 0 {
+		return nil
+	}
+	bestScope := candidates[0].Scope
+	var best network.SpaceAddresses
+	for _, addr := range candidates {
+		if addr.Scope != bestScope {
+			break
+		}
+		best = append(best, addr)
+	}
+	return best
 }
 
 // apiHostPortsForKey returns API addresses extracted from the document

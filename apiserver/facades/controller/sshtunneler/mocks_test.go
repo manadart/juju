@@ -12,6 +12,7 @@ package sshtunneler
 import (
 	reflect "reflect"
 
+	network "github.com/juju/juju/core/network"
 	state "github.com/juju/juju/state"
 	names "github.com/juju/names/v5"
 	gomock "go.uber.org/mock/gomock"
@@ -40,19 +41,19 @@ func (m *MockBackend) EXPECT() *MockBackendMockRecorder {
 	return m.recorder
 }
 
-// ControllerMachine mocks base method.
-func (m *MockBackend) ControllerMachine(arg0 string) (*state.Machine, error) {
+// ControllerMachineAddresses mocks base method.
+func (m *MockBackend) ControllerMachineAddresses(arg0 string) (network.SpaceAddresses, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ControllerMachine", arg0)
-	ret0, _ := ret[0].(*state.Machine)
+	ret := m.ctrl.Call(m, "ControllerMachineAddresses", arg0)
+	ret0, _ := ret[0].(network.SpaceAddresses)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ControllerMachine indicates an expected call of ControllerMachine.
-func (mr *MockBackendMockRecorder) ControllerMachine(arg0 any) *gomock.Call {
+// ControllerMachineAddresses indicates an expected call of ControllerMachineAddresses.
+func (mr *MockBackendMockRecorder) ControllerMachineAddresses(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ControllerMachine", reflect.TypeOf((*MockBackend)(nil).ControllerMachine), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ControllerMachineAddresses", reflect.TypeOf((*MockBackend)(nil).ControllerMachineAddresses), arg0)
 }
 
 // InsertSSHConnRequest mocks base method.

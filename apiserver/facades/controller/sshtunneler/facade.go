@@ -18,7 +18,7 @@ import (
 type Backend interface {
 	InsertSSHConnRequest(arg state.SSHConnRequestArg) error
 	RemoveSSHConnRequest(arg state.SSHConnRequestRemoveArg) error
-	ControllerMachine(machineID string) (*state.Machine, error)
+	ControllerMachineAddresses(machineID string) (network.SpaceAddresses, error)
 	SSHHostKeys(modelUUID string, machineTag names.MachineTag) (state.SSHHostKeys, error)
 }
 
@@ -67,14 +67,30 @@ func (f *Facade) ControllerAddresses(et params.Entity) params.StringsResult {
 		// TODO (JUJU-7887): Support SSH from machines to K8s controller.
 		result.Error = apiservererrors.ServerError(errors.NotSupportedf("SSH proxy from machine to k8s controller"))
 	case names.MachineTagKind:
-		m, err := f.backend.ControllerMachine(tag.Id())
+		addresses, err := f.backend.ControllerMachineAddresses(tag.Id())
 		if err != nil {
 			return params.StringsResult{Error: apiservererrors.ServerError(err)}
 		}
-		result.Result = append(result.Result, m.Addresses().AllMatchingScope(network.ScopeMatchPublic).Values()...)
+		result.Result = append(result.Result, bestScopedControllerAddresses(addresses).Values()...)
 	}
 
 	return result
+}
+
+func bestScopedControllerAddresses(addresses network.SpaceAddresses) network.SpaceAddresses {
+	candidates := addresses.PrioritizedForScope(network.ScopeMatchPublic)
+	if len(candidates) == 0 {
+		return nil
+	}
+	bestScope := candidates[0].Scope
+	var best network.SpaceAddresses
+	for _, addr := range candidates {
+		if addr.Scope != bestScope {
+			break
+		}
+		best = append(best, addr)
+	}
+	return best
 }
 
 // MachineHostKeys returns the host keys for a specified machine.

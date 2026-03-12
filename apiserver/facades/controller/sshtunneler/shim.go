@@ -7,6 +7,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/juju/names/v5"
 
+	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/state"
 )
 
@@ -32,13 +33,17 @@ func (b backend) RemoveSSHConnRequest(arg state.SSHConnRequestRemoveArg) error {
 	return systemState.RemoveSSHConnRequest(arg)
 }
 
-// ControllerMachine returns the specified controller machine.
-func (b backend) ControllerMachine(id string) (*state.Machine, error) {
+// ControllerMachineAddresses returns the specified controller machine addresses.
+func (b backend) ControllerMachineAddresses(id string) (network.SpaceAddresses, error) {
 	systemState, err := b.StatePool.SystemState()
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return systemState.Machine(id)
+	machine, err := systemState.Machine(id)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	return machine.Addresses(), nil
 }
 
 // SSHHostKeys returns the SSH host keys for a machine.

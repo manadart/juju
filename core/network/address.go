@@ -357,6 +357,12 @@ func (as MachineAddresses) AllMatchingScope(getMatcher ScopeMatchFunc) MachineAd
 	return allMatchingScope(as, getMatcher)
 }
 
+// PrioritizedForScope returns all suitable addresses ordered by best match for
+// the input scope matching function.
+func (as MachineAddresses) PrioritizedForScope(getMatcher ScopeMatchFunc) MachineAddresses {
+	return prioritizedForScope(as, getMatcher)
+}
+
 // Values transforms the MachineAddresses to a string slice
 // containing their raw IP values.
 func (as MachineAddresses) Values() []string {
@@ -566,6 +572,12 @@ func (pas ProviderAddresses) OneMatchingScope(getMatcher ScopeMatchFunc) (Provid
 	return addr, true
 }
 
+// PrioritizedForScope returns all suitable addresses ordered by best match for
+// the input scope matching function.
+func (pas ProviderAddresses) PrioritizedForScope(getMatcher ScopeMatchFunc) ProviderAddresses {
+	return prioritizedForScope(pas, getMatcher)
+}
+
 // SpaceAddress represents the location of a machine, including metadata
 // about what kind of location the address describes.
 // This is a server-side type that may include a space reference.
@@ -692,6 +704,12 @@ func (sas SpaceAddresses) OneMatchingScope(getMatcher ScopeMatchFunc) (SpaceAddr
 // the input scope matching function.
 func (sas SpaceAddresses) AllMatchingScope(getMatcher ScopeMatchFunc) SpaceAddresses {
 	return allMatchingScope(sas, getMatcher)
+}
+
+// PrioritizedForScope returns all suitable addresses ordered by best match for
+// the input scope matching function.
+func (sas SpaceAddresses) PrioritizedForScope(getMatcher ScopeMatchFunc) SpaceAddresses {
+	return prioritizedForScope(sas, getMatcher)
 }
 
 // EqualTo returns true if this set of SpaceAddresses is equal to other.
@@ -938,7 +956,14 @@ func toStrings[T Address](addrs []T) []string {
 }
 
 func allMatchingScope[T Address](addrs []T, getMatcher ScopeMatchFunc) []T {
-	indexes := indexesForScope(addrs, getMatcher)
+	return addressesForIndexes(addrs, indexesForScope(addrs, getMatcher))
+}
+
+func prioritizedForScope[T Address](addrs []T, getMatcher ScopeMatchFunc) []T {
+	return addressesForIndexes(addrs, indexesByScopeMatch(addrs, getMatcher))
+}
+
+func addressesForIndexes[T Address](addrs []T, indexes []int) []T {
 	if len(indexes) == 0 {
 		return nil
 	}

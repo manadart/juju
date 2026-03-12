@@ -11,8 +11,8 @@ import (
 	"go.uber.org/mock/gomock"
 	gc "gopkg.in/check.v1"
 
+	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/rpc/params"
-	state "github.com/juju/juju/state"
 )
 
 var _ = gc.Suite(&sshtunnelerSuite{})
@@ -107,8 +107,8 @@ func (s *sshtunnelerSuite) TestRemoveSSHConnRequestError(c *gc.C) {
 func (s *sshtunnelerSuite) TestControllerAddress(c *gc.C) {
 	defer s.setupMocks(c).Finish()
 
-	s.backend.EXPECT().ControllerMachine("1").Return(
-		&state.Machine{}, nil,
+	s.backend.EXPECT().ControllerMachineAddresses("1").Return(
+		nil, nil,
 	)
 
 	f := newFacade(s.ctx, s.backend)
@@ -116,6 +116,24 @@ func (s *sshtunnelerSuite) TestControllerAddress(c *gc.C) {
 	entity := params.Entity{Tag: names.NewMachineTag("1").String()}
 	addresses := f.ControllerAddresses(entity)
 	c.Assert(addresses, gc.DeepEquals, params.StringsResult{})
+}
+
+func (s *sshtunnelerSuite) TestControllerAddressPrefersIPv4(c *gc.C) {
+	defer s.setupMocks(c).Finish()
+
+	s.backend.EXPECT().ControllerMachineAddresses("1").Return(network.SpaceAddresses{
+		network.NewSpaceAddress("2001:db8::1", network.WithScope(network.ScopePublic)),
+		network.NewSpaceAddress("198.51.100.10", network.WithScope(network.ScopePublic)),
+		network.NewSpaceAddress("10.0.0.10", network.WithScope(network.ScopeCloudLocal)),
+	}, nil)
+
+	f := newFacade(s.ctx, s.backend)
+
+	entity := params.Entity{Tag: names.NewMachineTag("1").String()}
+	addresses := f.ControllerAddresses(entity)
+	c.Assert(addresses, gc.DeepEquals, params.StringsResult{
+		Result: []string{"198.51.100.10", "2001:db8::1"},
+	})
 }
 
 func (s *sshtunnelerSuite) TestControllerAddressWithControllerTag(c *gc.C) {

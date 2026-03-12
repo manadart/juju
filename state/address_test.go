@@ -557,3 +557,83 @@ func (s *CAASAddressesSuite) TestAPIHostPortsMultiple(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(addrs, gc.DeepEquals, []network.SpaceHostPorts{exp})
 }
+
+func (s *CAASAddressesSuite) TestAPIHostPortsDualStack(c *gc.C) {
+	publicIPv6 := network.MachineAddress{
+		Value: "2001:db8::10",
+		Type:  network.IPv6Address,
+		Scope: network.ScopePublic,
+	}
+	publicIPv4 := network.MachineAddress{
+		Value: "10.10.10.10",
+		Type:  network.IPv4Address,
+		Scope: network.ScopePublic,
+	}
+	localIPv6 := network.MachineAddress{
+		Value: "fd00::10",
+		Type:  network.IPv6Address,
+		Scope: network.ScopeCloudLocal,
+	}
+	localIPv4 := network.MachineAddress{
+		Value: "100.10.10.10",
+		Type:  network.IPv4Address,
+		Scope: network.ScopeCloudLocal,
+	}
+	localDNSAddr := network.MachineAddress{
+		Value: "controller-service.controller-trump.svc.cluster.local",
+		Type:  network.HostName,
+		Scope: network.ScopeCloudLocal,
+	}
+
+	ctrlSt, err := s.StatePool.SystemState()
+	c.Assert(err, jc.ErrorIsNil)
+	_, err = ctrlSt.SaveCloudService(state.SaveCloudServiceArgs{
+		Id:         s.Model.ControllerUUID(),
+		ProviderId: "whatever",
+		Addresses: network.SpaceAddresses{
+			{MachineAddress: publicIPv6},
+			{MachineAddress: localIPv6},
+			{MachineAddress: publicIPv4},
+			{MachineAddress: localIPv4},
+		},
+	})
+	c.Assert(err, jc.ErrorIsNil)
+
+	addrs, err := ctrlSt.APIHostPortsForAgents()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addrs, gc.DeepEquals, []network.SpaceHostPorts{{
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: localDNSAddr},
+			NetPort:      17777,
+		},
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: localIPv4},
+			NetPort:      17777,
+		},
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: localIPv6},
+			NetPort:      17777,
+		},
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: publicIPv4},
+			NetPort:      17777,
+		},
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: publicIPv6},
+			NetPort:      17777,
+		},
+	}})
+
+	addrs, err = ctrlSt.APIHostPortsForClients()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addrs, gc.DeepEquals, []network.SpaceHostPorts{{
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: publicIPv4},
+			NetPort:      17777,
+		},
+		{
+			SpaceAddress: network.SpaceAddress{MachineAddress: publicIPv6},
+			NetPort:      17777,
+		},
+	}})
+}

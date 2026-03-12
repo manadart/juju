@@ -671,6 +671,22 @@ func (s *AddressSuite) TestSelectInternalAddresses(c *gc.C) {
 	}
 }
 
+func (s *AddressSuite) TestPrioritizeInternalAddressesKeepsBothFamiliesInStableOrder(c *gc.C) {
+	addresses := network.SpaceAddresses{
+		network.NewSpaceAddress("2001:db8::1", network.WithScope(network.ScopePublic)),
+		network.NewSpaceAddress("10.0.0.10", network.WithScope(network.ScopeCloudLocal)),
+		network.NewSpaceAddress("198.51.100.10", network.WithScope(network.ScopePublic)),
+		network.NewSpaceAddress("fd00::10", network.WithScope(network.ScopeCloudLocal)),
+	}
+
+	c.Assert(addresses.PrioritizedForScope(network.ScopeMatchCloudLocal), gc.DeepEquals, network.SpaceAddresses{
+		network.NewSpaceAddress("10.0.0.10", network.WithScope(network.ScopeCloudLocal)),
+		network.NewSpaceAddress("fd00::10", network.WithScope(network.ScopeCloudLocal)),
+		network.NewSpaceAddress("198.51.100.10", network.WithScope(network.ScopePublic)),
+		network.NewSpaceAddress("2001:db8::1", network.WithScope(network.ScopePublic)),
+	})
+}
+
 // stringer wraps Stringer and GoStringer for convenience.
 type stringer interface {
 	fmt.Stringer
