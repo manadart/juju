@@ -2287,6 +2287,28 @@ func (s *MachineSuite) TestStablePrivateAddress(c *gc.C) {
 	c.Assert(addr.Value, gc.Equals, "10.0.0.2")
 }
 
+func (s *MachineSuite) TestPrivateAddressSwitchesToPreferredIPv4(c *gc.C) {
+	machine, err := s.State.AddMachine(state.UbuntuBase("12.10"), state.JobHostUnits)
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = machine.SetMachineAddresses(network.NewSpaceAddress("fc00::2"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	addr, err := machine.PrivateAddress()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addr.Value, gc.Equals, "fc00::2")
+
+	err = machine.SetMachineAddresses(
+		network.NewSpaceAddress("fc00::2"),
+		network.NewSpaceAddress("10.0.0.2"),
+	)
+	c.Assert(err, jc.ErrorIsNil)
+
+	addr, err = machine.PrivateAddress()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addr.Value, gc.Equals, "10.0.0.2")
+}
+
 func (s *MachineSuite) TestStablePublicAddress(c *gc.C) {
 	machine, err := s.State.AddMachine(state.UbuntuBase("12.10"), state.JobHostUnits)
 	c.Assert(err, jc.ErrorIsNil)
@@ -2304,6 +2326,28 @@ func (s *MachineSuite) TestStablePublicAddress(c *gc.C) {
 	c.Assert(err, jc.ErrorIsNil)
 
 	// Assert the address is unchanged.
+	addr, err = machine.PublicAddress()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addr.Value, gc.Equals, "8.8.8.8")
+}
+
+func (s *MachineSuite) TestPublicAddressSwitchesToPreferredIPv4(c *gc.C) {
+	machine, err := s.State.AddMachine(state.UbuntuBase("12.10"), state.JobHostUnits)
+	c.Assert(err, jc.ErrorIsNil)
+
+	err = machine.SetProviderAddresses(network.NewSpaceAddress("2001:db8::2"))
+	c.Assert(err, jc.ErrorIsNil)
+
+	addr, err := machine.PublicAddress()
+	c.Assert(err, jc.ErrorIsNil)
+	c.Assert(addr.Value, gc.Equals, "2001:db8::2")
+
+	err = machine.SetProviderAddresses(
+		network.NewSpaceAddress("2001:db8::2"),
+		network.NewSpaceAddress("8.8.8.8"),
+	)
+	c.Assert(err, jc.ErrorIsNil)
+
 	addr, err = machine.PublicAddress()
 	c.Assert(err, jc.ErrorIsNil)
 	c.Assert(addr.Value, gc.Equals, "8.8.8.8")

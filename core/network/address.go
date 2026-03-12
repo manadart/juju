@@ -979,6 +979,12 @@ func indexesByScopeMatch[T Address](addrs []T, matchFunc ScopeMatchFunc) []int {
 	return prioritized
 }
 
+// BetterScopeMatch reports whether candidate is preferred over current
+// according to the supplied scope matcher. Ties are not considered better.
+func BetterScopeMatch(candidate, current Address, matchFunc ScopeMatchFunc) bool {
+	return scopeMatchPriority(matchFunc(candidate)) < scopeMatchPriority(matchFunc(current))
+}
+
 // filterAndCollateAddressIndexes filters address indexes using the input scope
 // matching function, then returns the results grouped by scope match quality.
 // Invalid results are omitted.
@@ -999,4 +1005,16 @@ func scopeMatchHierarchy() []ScopeMatch {
 		firstFallbackScopeIPv4, firstFallbackScope,
 		secondFallbackScopeIPv4, secondFallbackScope,
 	}
+}
+
+func scopeMatchPriority(match ScopeMatch) int {
+	if match == invalidScope {
+		return len(scopeMatchHierarchy())
+	}
+	for i, candidate := range scopeMatchHierarchy() {
+		if candidate == match {
+			return i
+		}
+	}
+	return len(scopeMatchHierarchy())
 }

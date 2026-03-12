@@ -1499,7 +1499,7 @@ func maybeGetNewAddress(
 	providerAddresses,
 	machineAddresses []address,
 	getAddr func([]address) network.SpaceAddress,
-	checkScope func(address) bool,
+	matchFunc network.ScopeMatchFunc,
 ) (address, bool) {
 	// For picking the best address, try provider addresses first.
 	var newAddr address
@@ -1527,13 +1527,12 @@ func maybeGetNewAddress(
 		network.Origin(newAddr.Origin) == network.OriginProvider {
 		return newAddr, true
 	}
-	if !checkScope(addr) {
-		// If addr.Origin is machine and newAddr.Origin is provider we will
-		// have already caught that, and for the inverse we don't want to
-		// replace the address.
-		if addr.Origin == newAddr.Origin {
-			return newAddr, checkScope(newAddr)
-		}
+	if addr.Origin == newAddr.Origin && network.BetterScopeMatch(
+		newAddr.networkAddress(),
+		addr.networkAddress(),
+		matchFunc,
+	) {
+		return newAddr, true
 	}
 	return addr, false
 }
@@ -1598,16 +1597,12 @@ func (m *Machine) setPublicAddressOps(providerAddresses []address, machineAddres
 		m.Id(), publicAddress, providerAddresses, machineAddresses)
 
 	// Always prefer an exact match if available.
-	checkScope := func(addr address) bool {
-		return network.ExactScopeMatch(addr.networkAddress(), network.ScopePublic)
-	}
-	// Without an exact match, prefer a fallback match.
 	getAddr := func(addresses []address) network.SpaceAddress {
 		addr, _ := networkAddresses(addresses).OneMatchingScope(network.ScopeMatchPublic)
 		return addr
 	}
 
-	newAddr, changed := maybeGetNewAddress(publicAddress, providerAddresses, machineAddresses, getAddr, checkScope)
+	newAddr, changed := maybeGetNewAddress(publicAddress, providerAddresses, machineAddresses, getAddr, network.ScopeMatchPublic)
 	if !changed {
 		// No change, so no ops.
 		return []txn.Op{}, nil
@@ -1619,18 +1614,12 @@ func (m *Machine) setPublicAddressOps(providerAddresses []address, machineAddres
 
 func (m *Machine) setPrivateAddressOps(providerAddresses []address, machineAddresses []address) ([]txn.Op, *address) {
 	privateAddress := m.doc.PreferredPrivateAddress
-	// Always prefer an exact match if available.
-	checkScope := func(addr address) bool {
-		return network.ExactScopeMatch(
-			addr.networkAddress(), network.ScopeMachineLocal, network.ScopeCloudLocal, network.ScopeFanLocal)
-	}
-	// Without an exact match, prefer a fallback match.
 	getAddr := func(addresses []address) network.SpaceAddress {
 		addr, _ := networkAddresses(addresses).OneMatchingScope(network.ScopeMatchCloudLocal)
 		return addr
 	}
 
-	newAddr, changed := maybeGetNewAddress(privateAddress, providerAddresses, machineAddresses, getAddr, checkScope)
+	newAddr, changed := maybeGetNewAddress(privateAddress, providerAddresses, machineAddresses, getAddr, network.ScopeMatchCloudLocal)
 	if !changed {
 		// No change, so no ops.
 		return []txn.Op{}, nil
