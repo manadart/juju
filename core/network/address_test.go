@@ -487,6 +487,28 @@ func (s *AddressSuite) TestSelectInternalAddress(c *gc.C) {
 	}
 }
 
+func (s *AddressSuite) TestSelectInternalAddressPrefersIPv4RegardlessOfOrder(c *gc.C) {
+	addresses := network.SpaceAddresses{
+		network.NewSpaceAddress("fc00::1", network.WithScope(network.ScopeCloudLocal)),
+		network.NewSpaceAddress("10.0.0.1", network.WithScope(network.ScopeCloudLocal)),
+	}
+
+	addr, ok := addresses.OneMatchingScope(network.ScopeMatchCloudLocal)
+	c.Assert(ok, jc.IsTrue)
+	c.Assert(addr.Value, gc.Equals, "10.0.0.1")
+}
+
+func (s *AddressSuite) TestSelectPublicAddressPrefersIPv4RegardlessOfOrder(c *gc.C) {
+	addresses := network.SpaceAddresses{
+		network.NewSpaceAddress("2001:db8::1", network.WithScope(network.ScopePublic)),
+		network.NewSpaceAddress("8.8.8.8", network.WithScope(network.ScopePublic)),
+	}
+
+	addr, ok := addresses.OneMatchingScope(network.ScopeMatchPublic)
+	c.Assert(ok, jc.IsTrue)
+	c.Assert(addr.Value, gc.Equals, "8.8.8.8")
+}
+
 var selectInternalMachineTests = []selectTest{{
 	"first cloud local IPv4 address is selected",
 	[]network.SpaceAddress{

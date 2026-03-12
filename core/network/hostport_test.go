@@ -767,6 +767,16 @@ func (s *HostPortSuite) TestSelectInternalHostPorts(c *gc.C) {
 	}
 }
 
+func (s *HostPortSuite) TestPrioritizeInternalHostPortsKeepsBothFamiliesInStableOrder(c *gc.C) {
+	addresses := network.SpaceHostPorts{
+		{SpaceAddress: network.NewSpaceAddress("fc00::1", network.WithScope(network.ScopeCloudLocal)), NetPort: 1234},
+		{SpaceAddress: network.NewSpaceAddress("10.0.0.1", network.WithScope(network.ScopeCloudLocal)), NetPort: 1234},
+	}
+
+	prioritized := addresses.HostPorts().PrioritizedForScope(network.ScopeMatchCloudLocal)
+	c.Assert(prioritized, gc.DeepEquals, []string{"10.0.0.1:1234", "[fc00::1]:1234"})
+}
+
 func (s *HostPortSuite) TestSpaceHostPortsToProviderHostPorts(c *gc.C) {
 	// Check success.
 	hps := network.NewSpaceHostPorts(1234, "1.2.3.4", "2.3.4.5", "3.4.5.6")
