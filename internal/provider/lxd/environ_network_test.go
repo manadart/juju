@@ -496,6 +496,77 @@ func (s *environNetSuite) TestNetworkInterfaces(c *gc.C) {
 	c.Assert(infos, gc.DeepEquals, expInfos)
 }
 
+func (s *environNetSuite) TestNetworkInterfacesPreferIPv4PrimaryAddress(c *gc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	srv := lxd.NewMockServer(ctrl)
+	srv.EXPECT().GetInstance("woot").Return(&lxdapi.Instance{
+		ExpandedDevices: map[string]map[string]string{
+			"eth0": {
+				"name":    "eth0",
+				"network": "lxdbr0",
+				"type":    "nic",
+			},
+		},
+	}, "etag", nil)
+	srv.EXPECT().GetInstanceState("woot").Return(&lxdapi.InstanceState{
+		Network: map[string]lxdapi.InstanceStateNetwork{
+			"eth0": {
+				Type:   "broadcast",
+				State:  "up",
+				Mtu:    1500,
+				Hwaddr: "00:16:3e:19:29:cb",
+				Addresses: []lxdapi.InstanceStateNetworkAddress{
+					{
+						Family:  "inet6",
+						Address: "fd00:55:158::99",
+						Netmask: "64",
+						Scope:   "global",
+					},
+					{
+						Family:  "inet",
+						Address: "10.55.158.99",
+						Netmask: "24",
+						Scope:   "global",
+					},
+				},
+			},
+		},
+	}, "etag", nil)
+
+	env := s.NewEnviron(c, srv, nil, environscloudspec.CloudSpec{}).(environs.Networking)
+
+	ctx := context.NewEmptyCloudCallContext()
+	infos, err := env.NetworkInterfaces(ctx, []instance.Id{"woot"})
+	c.Assert(err, jc.ErrorIsNil)
+	expInfos := []network.InterfaceInfos{
+		{
+			{
+				DeviceIndex:         0,
+				MACAddress:          "00:16:3e:19:29:cb",
+				MTU:                 1500,
+				InterfaceName:       "eth0",
+				ParentInterfaceName: "lxdbr0",
+				InterfaceType:       network.EthernetDevice,
+				Origin:              network.OriginProvider,
+				ProviderId:          "nic-00:16:3e:19:29:cb",
+				ProviderSubnetId:    "subnet-lxdbr0-10.55.158.0/24",
+				ProviderNetworkId:   "net-lxdbr0",
+				Addresses: network.ProviderAddresses{
+					network.NewMachineAddress(
+						"10.55.158.99", network.WithCIDR("10.55.158.0/24"), network.WithConfigType(network.ConfigStatic),
+					).AsProviderAddress(),
+					network.NewMachineAddress(
+						"fd00:55:158::99", network.WithCIDR("fd00:55:158::/64"), network.WithConfigType(network.ConfigStatic),
+					).AsProviderAddress(),
+				},
+			},
+		},
+	}
+	c.Assert(infos, gc.DeepEquals, expInfos)
+}
+
 func (s *environNetSuite) TestNetworkInterfacesPartialResults(c *gc.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()

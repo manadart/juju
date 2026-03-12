@@ -257,6 +257,67 @@ func (s *containerSuite) TestContainerAddresses(c *gc.C) {
 	c.Check(addrs, gc.DeepEquals, expected)
 }
 
+func (s *containerSuite) TestContainerAddressesPreferIPv4AndStableOrdering(c *gc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+	cSvr := s.NewMockServer(ctrl)
+
+	state := api.InstanceState{
+		Network: map[string]api.InstanceStateNetwork{
+			"eth1": {
+				Addresses: []api.InstanceStateNetworkAddress{
+					{
+						Family:  "inet",
+						Address: "10.0.9.173",
+						Netmask: "24",
+						Scope:   "global",
+					},
+				},
+			},
+			"eth0": {
+				Addresses: []api.InstanceStateNetworkAddress{
+					{
+						Family:  "inet6",
+						Address: "fd00::173",
+						Netmask: "64",
+						Scope:   "global",
+					},
+					{
+						Family:  "inet",
+						Address: "10.0.8.173",
+						Netmask: "24",
+						Scope:   "global",
+					},
+				},
+			},
+			"lxdbr0": {
+				Addresses: []api.InstanceStateNetworkAddress{
+					{
+						Family:  "inet",
+						Address: "10.0.6.17",
+						Netmask: "24",
+						Scope:   "global",
+					},
+				},
+			},
+		},
+	}
+	cSvr.EXPECT().GetInstanceState("c1").Return(&state, lxdtesting.ETag, nil)
+
+	jujuSvr, err := lxd.NewServer(cSvr)
+	c.Assert(err, jc.ErrorIsNil)
+
+	addrs, err := jujuSvr.ContainerAddresses("c1")
+	c.Assert(err, jc.ErrorIsNil)
+
+	expected := []corenetwork.ProviderAddress{
+		corenetwork.NewMachineAddress("10.0.8.173", corenetwork.WithScope(corenetwork.ScopeCloudLocal)).AsProviderAddress(),
+		corenetwork.NewMachineAddress("fd00::173", corenetwork.WithScope(corenetwork.ScopeCloudLocal)).AsProviderAddress(),
+		corenetwork.NewMachineAddress("10.0.9.173", corenetwork.WithScope(corenetwork.ScopeCloudLocal)).AsProviderAddress(),
+	}
+	c.Check(addrs, gc.DeepEquals, expected)
+}
+
 func (s *containerSuite) TestCreateContainerFromSpecSuccess(c *gc.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()

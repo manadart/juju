@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -234,12 +235,30 @@ func (s *Server) ContainerAddresses(name string) ([]corenetwork.ProviderAddress,
 		return []corenetwork.ProviderAddress{}, nil
 	}
 
+	networkNames := make([]string, 0, len(networks))
+	for netName := range networks {
+		networkNames = append(networkNames, netName)
+	}
+	sort.Strings(networkNames)
+
 	var results []corenetwork.ProviderAddress
-	for netName, net := range networks {
+	for _, netName := range networkNames {
 		if netName == network.DefaultLXDBridge {
 			continue
 		}
-		for _, addr := range net.Addresses {
+		net := networks[netName]
+		addresses := append([]api.InstanceStateNetworkAddress(nil), net.Addresses...)
+		sort.SliceStable(addresses, func(i, j int) bool {
+			left := corenetwork.NewMachineAddress(addresses[i].Address)
+			right := corenetwork.NewMachineAddress(addresses[j].Address)
+			order1 := corenetwork.SortOrderMostPublic(left)
+			order2 := corenetwork.SortOrderMostPublic(right)
+			if order1 == order2 {
+				return addresses[i].Address < addresses[j].Address
+			}
+			return order1 < order2
+		})
+		for _, addr := range addresses {
 			netAddr := corenetwork.NewMachineAddress(addr.Address).AsProviderAddress()
 			if netAddr.Scope == corenetwork.ScopeLinkLocal || netAddr.Scope == corenetwork.ScopeMachineLocal {
 				logger.Tracef("ignoring address %q for container %q", addr, name)

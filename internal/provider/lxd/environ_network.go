@@ -301,11 +301,29 @@ func makeInterfaceInfo(container *lxdapi.Instance, guestNetworkName string, netI
 		ni.ProviderNetworkId = makeNetworkID(ni.ParentInterfaceName)
 	}
 
+	addresses := append([]lxdapi.InstanceStateNetworkAddress(nil), netInfo.Addresses...)
+	sort.SliceStable(addresses, func(i, j int) bool {
+		left := network.NewMachineAddress(addresses[i].Address)
+		right := network.NewMachineAddress(addresses[j].Address)
+		if network.BetterScopeMatch(left, right, network.ScopeMatchCloudLocal) {
+			return true
+		}
+		if network.BetterScopeMatch(right, left, network.ScopeMatchCloudLocal) {
+			return false
+		}
+		order1 := network.SortOrderMostPublic(left)
+		order2 := network.SortOrderMostPublic(right)
+		if order1 == order2 {
+			return addresses[i].Address < addresses[j].Address
+		}
+		return order1 < order2
+	})
+
 	// Iterate the list of addresses assigned to this interface ignoring
 	// any link-local ones. The first non link-local address is treated as
 	// the primary address and is used to populate the interface CIDR and
 	// subnet ID fields.
-	for _, addr := range netInfo.Addresses {
+	for _, addr := range addresses {
 		netAddr := network.NewMachineAddress(addr.Address).AsProviderAddress()
 		if netAddr.Scope == network.ScopeLinkLocal || netAddr.Scope == network.ScopeMachineLocal {
 			continue
