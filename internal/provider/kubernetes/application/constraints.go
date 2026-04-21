@@ -88,6 +88,21 @@ func ApplyWorkloadConstraints(pod *core.PodSpec, appName string, cons constraint
 			return errors.Annotatef(err, "configuring pod affinity for %s", appName)
 		}
 	}
+	if cons.Tolerations != nil {
+		for _, toleration := range *cons.Tolerations {
+			operator := toleration.Operator
+			if operator == "" {
+				operator = "Equal"
+			}
+			pod.Tolerations = append(pod.Tolerations, core.Toleration{
+				Key:               toleration.Key,
+				Operator:          core.TolerationOperator(operator),
+				Value:             toleration.Value,
+				Effect:            core.TaintEffect(toleration.Effect),
+				TolerationSeconds: toleration.TolerationSeconds,
+			})
+		}
+	}
 	if cons.Zones != nil {
 		zones := *cons.Zones
 		affinity := pod.Affinity

@@ -225,6 +225,7 @@ func (c dbConstraint) toValue(
 	tags []dbConstraintTag,
 	spaces []dbConstraintSpace,
 	zones []dbConstraintZone,
+	tolerations []dbConstraintToleration,
 ) (constraints.Constraints, error) {
 	rval := constraints.Constraints{}
 	if c.Arch.Valid {
@@ -298,6 +299,31 @@ func (c dbConstraint) toValue(
 		rval.Zones = &consZones
 	}
 
+	consTolerations := make([]constraints.Toleration, 0, len(tolerations))
+	for _, toleration := range tolerations {
+		item := constraints.Toleration{}
+		if toleration.TolerationKey.Valid {
+			item.Key = toleration.TolerationKey.String
+		}
+		if toleration.Operator.Valid {
+			item.Operator = toleration.Operator.String
+		}
+		if toleration.Value.Valid {
+			item.Value = toleration.Value.String
+		}
+		if toleration.Effect.Valid {
+			item.Effect = toleration.Effect.String
+		}
+		if toleration.TolerationSeconds.Valid {
+			item.TolerationSeconds = new(int64)
+			*item.TolerationSeconds = toleration.TolerationSeconds.Int64
+		}
+		consTolerations = append(consTolerations, item)
+	}
+	if len(consTolerations) != 0 {
+		rval.Tolerations = &consTolerations
+	}
+
 	return rval, nil
 }
 
@@ -339,6 +365,18 @@ type dbConstraintSpace struct {
 type dbConstraintZone struct {
 	ConstraintUUID string `db:"constraint_uuid"`
 	Zone           string `db:"zone"`
+}
+
+// dbConstraintToleration represents a row from the v_model_constraint_toleration
+// view.
+type dbConstraintToleration struct {
+	ConstraintUUID    string         `db:"constraint_uuid"`
+	Position          int64          `db:"position"`
+	TolerationKey     sql.NullString `db:"toleration_key"`
+	Operator          sql.NullString `db:"operator"`
+	Value             sql.NullString `db:"value"`
+	Effect            sql.NullString `db:"effect"`
+	TolerationSeconds sql.NullInt64  `db:"toleration_seconds"`
 }
 
 // dbConstraintUUID represents a constraint uuid within the database.

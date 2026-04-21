@@ -363,6 +363,35 @@ var parseConstraintsTests = []struct {
 		args:    []string{"zones="},
 	},
 
+	// Tolerations.
+	{
+		summary: "set tolerations empty",
+		args:    []string{"tolerations="},
+	}, {
+		summary: "set tolerations",
+		args: []string{
+			`tolerations=[{"key":"dedicated","operator":"Equal","value":"gpu","effect":"NoSchedule"}]`,
+		},
+		result: &constraints.Value{
+			Tolerations: tolerationsp(constraints.Toleration{
+				Key:      "dedicated",
+				Operator: "Equal",
+				Value:    "gpu",
+				Effect:   "NoSchedule",
+			}),
+		},
+	}, {
+		summary: "set nonsense tolerations",
+		args:    []string{`tolerations=not-json`},
+		err:     `bad "tolerations" constraint: must be a JSON array of tolerations`,
+	}, {
+		summary: "invalid tolerations",
+		args: []string{
+			`tolerations=[{"operator":"Equal"}]`,
+		},
+		err: `bad "tolerations" constraint: toleration 0: empty key requires operator "Exists"`,
+	},
+
 	// AllocatePublicIP
 	{
 		summary: "set allocate-public-ip",
@@ -399,21 +428,29 @@ var parseConstraintsTests = []struct {
 			"root-disk=8G mem=2T  arch=arm64  cores=4096 cpu-power=9001 container=lxd " +
 				"tags=foo,bar spaces=space1,^space2 instance-type=foo " +
 				"instance-role=foo1",
-			"virt-type=kvm zones=az1,az2 allocate-public-ip=true root-disk-source=sourcename image-id=ubuntu-bf2"},
+			"virt-type=kvm zones=az1,az2 allocate-public-ip=true root-disk-source=sourcename image-id=ubuntu-bf2",
+			`tolerations=[{"key":"dedicated","operator":"Equal","value":"gpu","effect":"NoSchedule"}]`,
+		},
 		result: &constraints.Value{
-			Arch:             new("arm64"),
-			Container:        (*instance.ContainerType)(new("lxd")),
-			CpuCores:         new(uint64(4096)),
-			CpuPower:         new(uint64(9001)),
-			Mem:              new(uint64(2 * 1024 * 1024)),
-			RootDisk:         new(uint64(8192)),
-			RootDiskSource:   new("sourcename"),
-			Tags:             &[]string{"foo", "bar"},
-			Spaces:           &[]string{"space1", "^space2"},
-			InstanceRole:     new("foo1"),
-			InstanceType:     new("foo"),
-			VirtType:         new("kvm"),
-			Zones:            &[]string{"az1", "az2"},
+			Arch:           new("arm64"),
+			Container:      (*instance.ContainerType)(new("lxd")),
+			CpuCores:       new(uint64(4096)),
+			CpuPower:       new(uint64(9001)),
+			Mem:            new(uint64(2 * 1024 * 1024)),
+			RootDisk:       new(uint64(8192)),
+			RootDiskSource: new("sourcename"),
+			Tags:           &[]string{"foo", "bar"},
+			Spaces:         &[]string{"space1", "^space2"},
+			InstanceRole:   new("foo1"),
+			InstanceType:   new("foo"),
+			VirtType:       new("kvm"),
+			Zones:          &[]string{"az1", "az2"},
+			Tolerations: tolerationsp(constraints.Toleration{
+				Key:      "dedicated",
+				Operator: "Equal",
+				Value:    "gpu",
+				Effect:   "NoSchedule",
+			}),
 			AllocatePublicIP: new(true),
 			ImageID:          new("ubuntu-bf2"),
 		},
@@ -599,6 +636,21 @@ func (s *ConstraintsSuite) TestHasZones(c *tc.C) {
 	c.Check(con.HasZones(), tc.IsFalse)
 }
 
+func (s *ConstraintsSuite) TestHasTolerations(c *tc.C) {
+	con := constraints.MustParse(
+		`tolerations=[{"key":"dedicated","operator":"Equal","value":"gpu","effect":"NoSchedule"}]`,
+	)
+	c.Assert(con.Tolerations, tc.Not(tc.IsNil))
+	c.Check(*con.Tolerations, tc.HasLen, 1)
+	c.Check(con.HasTolerations(), tc.IsTrue)
+
+	con = constraints.MustParse("tolerations=")
+	c.Check(con.HasTolerations(), tc.IsFalse)
+
+	con = constraints.MustParse("spaces=space1,^space2")
+	c.Check(con.HasTolerations(), tc.IsFalse)
+}
+
 func (s *ConstraintsSuite) TestHasAllocatePublicIP(c *tc.C) {
 	con := constraints.MustParse("allocate-public-ip=true")
 	c.Assert(con.AllocatePublicIP, tc.Not(tc.IsNil))
@@ -667,6 +719,8 @@ func (s *ConstraintsSuite) TestIsEmpty(c *tc.C) {
 	c.Check(&con, tc.Not(tc.Satisfies), constraints.IsEmpty)
 	con = constraints.MustParse("zones=")
 	c.Check(&con, tc.Not(tc.Satisfies), constraints.IsEmpty)
+	con = constraints.MustParse("tolerations=")
+	c.Check(&con, tc.Not(tc.Satisfies), constraints.IsEmpty)
 	con = constraints.MustParse("allocate-public-ip=")
 	c.Check(&con, tc.Satisfies, constraints.IsEmpty)
 	con = constraints.MustParse("image-id=")
@@ -676,6 +730,10 @@ func (s *ConstraintsSuite) TestIsEmpty(c *tc.C) {
 func ctypep(ctype string) *instance.ContainerType {
 	res := instance.ContainerType(ctype)
 	return &res
+}
+
+func tolerationsp(items ...constraints.Toleration) *[]constraints.Toleration {
+	return &items
 }
 
 type roundTrip struct {
@@ -717,23 +775,39 @@ var constraintsRoundtripTests = []roundTrip{
 	{"Zones1", constraints.Value{Zones: nil}},
 	{"Zones2", constraints.Value{Zones: &[]string{}}},
 	{"Zones3", constraints.Value{Zones: &[]string{"az1", "az2"}}},
+	{"Tolerations1", constraints.Value{Tolerations: nil}},
+	{"Tolerations2", constraints.Value{Tolerations: &[]constraints.Toleration{}}},
+	{"Tolerations3", constraints.Value{
+		Tolerations: tolerationsp(constraints.Toleration{
+			Key:      "dedicated",
+			Operator: "Equal",
+			Value:    "gpu",
+			Effect:   "NoSchedule",
+		}),
+	}},
 	{"AllocatePublicIP1", constraints.Value{AllocatePublicIP: nil}},
 	{"AllocatePublicIP2", constraints.Value{AllocatePublicIP: new(true)}},
 	{"ImageID1", constraints.Value{ImageID: nil}},
 	{"ImageID1", constraints.Value{ImageID: new("")}},
 	{"ImageID1", constraints.Value{ImageID: new("ubuntu-bf2")}},
 	{"All", constraints.Value{
-		Arch:             new("arm64"),
-		Container:        ctypep("lxd"),
-		CpuCores:         new(uint64(4096)),
-		CpuPower:         new(uint64(9001)),
-		Mem:              new(uint64(18000000000)),
-		RootDisk:         new(uint64(24000000000)),
-		RootDiskSource:   new("cave"),
-		Tags:             &[]string{"foo", "bar"},
-		Spaces:           &[]string{"space1", "^space2"},
-		InstanceType:     new("foo"),
-		Zones:            &[]string{"az1", "az2"},
+		Arch:           new("arm64"),
+		Container:      ctypep("lxd"),
+		CpuCores:       new(uint64(4096)),
+		CpuPower:       new(uint64(9001)),
+		Mem:            new(uint64(18000000000)),
+		RootDisk:       new(uint64(24000000000)),
+		RootDiskSource: new("cave"),
+		Tags:           &[]string{"foo", "bar"},
+		Spaces:         &[]string{"space1", "^space2"},
+		InstanceType:   new("foo"),
+		Zones:          &[]string{"az1", "az2"},
+		Tolerations: tolerationsp(constraints.Toleration{
+			Key:      "dedicated",
+			Operator: "Equal",
+			Value:    "gpu",
+			Effect:   "NoSchedule",
+		}),
 		AllocatePublicIP: new(true),
 		ImageID:          new("ubuntu-bf2"),
 	}},

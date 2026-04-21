@@ -19,6 +19,7 @@ var unsupportedConstraints = []string{
 	constraints.CpuPower,
 	constraints.InstanceType,
 	constraints.VirtType,
+	constraints.Tolerations,
 	constraints.AllocatePublicIP,
 }
 

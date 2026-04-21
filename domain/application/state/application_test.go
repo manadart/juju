@@ -3153,6 +3153,7 @@ func (s *applicationStateSuite) TestHashConfigAndSettings(c *tc.C) {
 
 func (s *applicationStateSuite) TestConstraintFull(c *tc.C) {
 	id := s.createIAASApplication(c, "foo", life.Alive)
+	tolerationSeconds := int64(30)
 
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
 		addConstraintStmt := `INSERT INTO "constraint" (uuid, arch, cpu_cores, cpu_power, mem, root_disk, root_disk_source, instance_role, instance_type, container_type_id, virt_type, allocate_public_ip, image_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
@@ -3194,6 +3195,39 @@ func (s *applicationStateSuite) TestConstraintFull(c *tc.C) {
 			return err
 		}
 		_, err = tx.ExecContext(ctx, addZoneConsStmt, "constraint-uuid", "zone1")
+		if err != nil {
+			return err
+		}
+		addTolerationConsStmt := `
+INSERT INTO constraint_toleration
+	(constraint_uuid, position, toleration_key, operator, value, effect, toleration_seconds)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+		_, err = tx.ExecContext(
+			ctx,
+			addTolerationConsStmt,
+			"constraint-uuid",
+			0,
+			"dedicated",
+			"Equal",
+			"gpu",
+			"NoExecute",
+			tolerationSeconds,
+		)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(
+			ctx,
+			addTolerationConsStmt,
+			"constraint-uuid",
+			1,
+			nil,
+			"Exists",
+			nil,
+			"NoSchedule",
+			nil,
+		)
 		return err
 	})
 	c.Assert(err, tc.ErrorIsNil)
@@ -3210,7 +3244,17 @@ func (s *applicationStateSuite) TestConstraintFull(c *tc.C) {
 			{SpaceName: "space0", Exclude: false},
 			{SpaceName: "space1", Exclude: true},
 		}),
-		Zones:          new([]string{"zone0", "zone1"}),
+		Zones: new([]string{"zone0", "zone1"}),
+		Tolerations: &[]constraints.Toleration{{
+			Key:               "dedicated",
+			Operator:          "Equal",
+			Value:             "gpu",
+			Effect:            "NoExecute",
+			TolerationSeconds: &tolerationSeconds,
+		}, {
+			Operator: "Exists",
+			Effect:   "NoSchedule",
+		}},
 		RootDisk:       new(uint64(256)),
 		RootDiskSource: new("root-disk-source"),
 		InstanceRole:   new("instance-role"),
@@ -3228,6 +3272,16 @@ func (s *applicationStateSuite) TestConstraintFull(c *tc.C) {
 		{SpaceName: "space1", Exclude: true},
 	})
 	c.Check(*cons.Zones, tc.SameContents, []string{"zone0", "zone1"})
+	c.Check(*cons.Tolerations, tc.DeepEquals, []constraints.Toleration{{
+		Key:               "dedicated",
+		Operator:          "Equal",
+		Value:             "gpu",
+		Effect:            "NoExecute",
+		TolerationSeconds: &tolerationSeconds,
+	}, {
+		Operator: "Exists",
+		Effect:   "NoSchedule",
+	}})
 	c.Check(cons.Arch, tc.DeepEquals, new("amd64"))
 	c.Check(cons.CpuCores, tc.DeepEquals, new(uint64(2)))
 	c.Check(cons.CpuPower, tc.DeepEquals, new(uint64(42)))
@@ -3293,6 +3347,7 @@ func (s *applicationStateSuite) TestConstraintsApplicationNotFound(c *tc.C) {
 
 func (s *applicationStateSuite) TestSetConstraintFull(c *tc.C) {
 	id := s.createIAASApplication(c, "foo", life.Alive)
+	tolerationSeconds := int64(30)
 
 	cons := constraints.Constraints{
 		Arch:             new("amd64"),
@@ -3313,6 +3368,16 @@ func (s *applicationStateSuite) TestSetConstraintFull(c *tc.C) {
 		}),
 		Tags:  new([]string{"tag0", "tag1"}),
 		Zones: new([]string{"zone0", "zone1"}),
+		Tolerations: &[]constraints.Toleration{{
+			Key:               "dedicated",
+			Operator:          "Equal",
+			Value:             "gpu",
+			Effect:            "NoExecute",
+			TolerationSeconds: &tolerationSeconds,
+		}, {
+			Operator: "Exists",
+			Effect:   "NoSchedule",
+		}},
 	}
 
 	err := s.TxnRunner().StdTxn(c.Context(), func(ctx context.Context, tx *sql.Tx) error {
@@ -3334,12 +3399,21 @@ func (s *applicationStateSuite) TestSetConstraintFull(c *tc.C) {
 		SpaceName    string `db:"space"`
 		SpaceExclude bool   `db:"exclude"`
 	}
+	type applicationToleration struct {
+		Position          int
+		Key               sql.NullString
+		Operator          sql.NullString
+		Value             sql.NullString
+		Effect            sql.NullString
+		TolerationSeconds sql.NullInt64
+	}
 	var (
 		applicationUUID                                                     string
 		constraintUUID                                                      string
 		constraintSpaces                                                    []applicationSpace
 		constraintTags                                                      []string
 		constraintZones                                                     []string
+		constraintTolerations                                               []applicationToleration
 		arch, rootDiskSource, instanceRole, instanceType, virtType, imageID string
 		cpuCores, cpuPower, mem, rootDisk, containerTypeID                  int
 		allocatePublicIP                                                    bool
@@ -3394,6 +3468,37 @@ func (s *applicationStateSuite) TestSetConstraintFull(c *tc.C) {
 			}
 			constraintZones = append(constraintZones, zone)
 		}
+		if rows.Err() != nil {
+			return rows.Err()
+		}
+
+		rows, err = tx.QueryContext(
+			ctx,
+			`SELECT position, toleration_key, operator, value, effect, toleration_seconds
+FROM constraint_toleration WHERE constraint_uuid=? ORDER BY position`,
+			constraintUUID,
+		)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var toleration applicationToleration
+			if err := rows.Scan(
+				&toleration.Position,
+				&toleration.Key,
+				&toleration.Operator,
+				&toleration.Value,
+				&toleration.Effect,
+				&toleration.TolerationSeconds,
+			); err != nil {
+				return err
+			}
+			constraintTolerations = append(constraintTolerations, toleration)
+		}
+		if rows.Err() != nil {
+			return rows.Err()
+		}
 
 		row := tx.QueryRowContext(ctx, "SELECT arch, cpu_cores, cpu_power, mem, root_disk, root_disk_source, instance_role, instance_type, container_type_id, virt_type, allocate_public_ip, image_id FROM \"constraint\" WHERE uuid=?", constraintUUID)
 		err = row.Err()
@@ -3430,6 +3535,39 @@ func (s *applicationStateSuite) TestSetConstraintFull(c *tc.C) {
 	})
 	c.Check(constraintTags, tc.DeepEquals, []string{"tag0", "tag1"})
 	c.Check(constraintZones, tc.DeepEquals, []string{"zone0", "zone1"})
+	c.Check(constraintTolerations, tc.DeepEquals, []applicationToleration{{
+		Position: 0,
+		Key: sql.NullString{
+			String: "dedicated",
+			Valid:  true,
+		},
+		Operator: sql.NullString{
+			String: "Equal",
+			Valid:  true,
+		},
+		Value: sql.NullString{
+			String: "gpu",
+			Valid:  true,
+		},
+		Effect: sql.NullString{
+			String: "NoExecute",
+			Valid:  true,
+		},
+		TolerationSeconds: sql.NullInt64{
+			Int64: tolerationSeconds,
+			Valid: true,
+		},
+	}, {
+		Position: 1,
+		Operator: sql.NullString{
+			String: "Exists",
+			Valid:  true,
+		},
+		Effect: sql.NullString{
+			String: "NoSchedule",
+			Valid:  true,
+		},
+	}})
 
 }
 
@@ -3525,6 +3663,42 @@ func (s *applicationStateSuite) TestSetConstraintsReplacesPreviousSameZone(c *tc
 	cons, err = s.state.GetApplicationConstraints(c.Context(), id)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(*cons.Zones, tc.SameContents, []string{"zone3"})
+}
+
+func (s *applicationStateSuite) TestSetConstraintsReplacesPreviousTolerations(c *tc.C) {
+	id := s.createIAASApplication(c, "foo", life.Alive)
+	tolerationSeconds := int64(30)
+
+	err := s.state.SetApplicationConstraints(c.Context(), id, constraints.Constraints{
+		Tolerations: &[]constraints.Toleration{{
+			Key:               "dedicated",
+			Operator:          "Equal",
+			Value:             "gpu",
+			Effect:            "NoExecute",
+			TolerationSeconds: &tolerationSeconds,
+		}},
+	})
+	c.Assert(err, tc.ErrorIsNil)
+
+	cons, err := s.state.GetApplicationConstraints(c.Context(), id)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(*cons.Tolerations, tc.DeepEquals, []constraints.Toleration{{
+		Key:               "dedicated",
+		Operator:          "Equal",
+		Value:             "gpu",
+		Effect:            "NoExecute",
+		TolerationSeconds: &tolerationSeconds,
+	}})
+
+	err = s.state.SetApplicationConstraints(c.Context(), id, constraints.Constraints{
+		Tags: new([]string{"tag0", "tag1"}),
+	})
+	c.Assert(err, tc.ErrorIsNil)
+
+	cons, err = s.state.GetApplicationConstraints(c.Context(), id)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(*cons.Tags, tc.SameContents, []string{"tag0", "tag1"})
+	c.Check(cons.Tolerations, tc.IsNil)
 }
 
 func (s *applicationStateSuite) TestGetConstraintsPreservesInsertionOrder(c *tc.C) {

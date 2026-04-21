@@ -315,6 +315,7 @@ var unsupportedConstraints = []string{
 	constraints.Container,
 	constraints.VirtType,
 	constraints.Tags,
+	constraints.Tolerations,
 	constraints.ImageID,
 }
 

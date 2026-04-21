@@ -2844,7 +2844,7 @@ func (st *State) GetApplicationConstraints(ctx context.Context, appID coreapplic
 SELECT &applicationConstraint.*
 FROM   v_application_constraint
 WHERE  application_uuid = $entityUUID.uuid
-ORDER BY tag_order, space_order, zone_order;
+ORDER BY tag_order, space_order, zone_order, toleration_order;
 `
 
 	stmt, err := st.Prepare(query, applicationConstraint{}, ident)
@@ -2924,7 +2924,8 @@ WHERE  application_uuid = $applicationUUID.application_uuid
 		return errors.Errorf("preparing select space query: %w", err)
 	}
 
-	// Cleanup all previous tags, spaces and zones from their join tables.
+	// Cleanup all previous tags, spaces, zones and tolerations from their join
+	// tables.
 	deleteConstraintTagsQuery := `DELETE FROM constraint_tag WHERE constraint_uuid = $constraintUUID.constraint_uuid`
 	deleteConstraintTagsStmt, err := st.Prepare(deleteConstraintTagsQuery, constraintUUID{})
 	if err != nil {
@@ -2939,6 +2940,11 @@ WHERE  application_uuid = $applicationUUID.application_uuid
 	deleteConstraintZonesStmt, err := st.Prepare(deleteConstraintZonesQuery, constraintUUID{})
 	if err != nil {
 		return errors.Errorf("preparing delete constraint zones query: %w", err)
+	}
+	deleteConstraintTolerationsQuery := `DELETE FROM constraint_toleration WHERE constraint_uuid = $constraintUUID.constraint_uuid`
+	deleteConstraintTolerationsStmt, err := st.Prepare(deleteConstraintTolerationsQuery, constraintUUID{})
+	if err != nil {
+		return errors.Errorf("preparing delete constraint tolerations query: %w", err)
 	}
 
 	selectContainerTypeIDQuery := `SELECT &containerTypeID.id FROM container_type WHERE value = $containerTypeVal.value`
@@ -2987,6 +2993,12 @@ ON CONFLICT (uuid) DO UPDATE SET
 		return errors.Capture(err)
 	}
 
+	insertConstraintTolerationsQuery := `INSERT INTO constraint_toleration(*) VALUES ($setConstraintToleration.*)`
+	insertConstraintTolerationsStmt, err := st.Prepare(insertConstraintTolerationsQuery, setConstraintToleration{})
+	if err != nil {
+		return errors.Capture(err)
+	}
+
 	insertAppConstraintsQuery := `
 INSERT INTO application_constraint(*)
 VALUES ($setApplicationConstraint.*)
@@ -3019,7 +3031,7 @@ ON CONFLICT (application_uuid) DO NOTHING
 		cUUIDStr = retrievedConstraintUUID.ConstraintUUID
 	}
 
-	// Cleanup tags, spaces and zones from their join tables.
+	// Cleanup tags, spaces, zones and tolerations from their join tables.
 	if err := tx.Query(ctx, deleteConstraintTagsStmt, constraintUUID{ConstraintUUID: cUUIDStr}).Run(); err != nil {
 		return errors.Capture(err)
 	}
@@ -3027,6 +3039,9 @@ ON CONFLICT (application_uuid) DO NOTHING
 		return errors.Capture(err)
 	}
 	if err := tx.Query(ctx, deleteConstraintZonesStmt, constraintUUID{ConstraintUUID: cUUIDStr}).Run(); err != nil {
+		return errors.Capture(err)
+	}
+	if err := tx.Query(ctx, deleteConstraintTolerationsStmt, constraintUUID{ConstraintUUID: cUUIDStr}).Run(); err != nil {
 		return errors.Capture(err)
 	}
 
@@ -3069,6 +3084,35 @@ ON CONFLICT (application_uuid) DO NOTHING
 		for _, zone := range *cons.Zones {
 			constraintZone := setConstraintZone{ConstraintUUID: cUUIDStr, Zone: zone}
 			if err := tx.Query(ctx, insertConstraintZonesStmt, constraintZone).Run(); err != nil {
+				return errors.Capture(err)
+			}
+		}
+	}
+
+	if cons.Tolerations != nil {
+		for i, toleration := range *cons.Tolerations {
+			constraintToleration := setConstraintToleration{
+				ConstraintUUID:    cUUIDStr,
+				Position:          i,
+				TolerationSeconds: toleration.TolerationSeconds,
+			}
+			if toleration.Key != "" {
+				key := toleration.Key
+				constraintToleration.TolerationKey = &key
+			}
+			if toleration.Operator != "" {
+				operator := toleration.Operator
+				constraintToleration.Operator = &operator
+			}
+			if toleration.Value != "" {
+				value := toleration.Value
+				constraintToleration.Value = &value
+			}
+			if toleration.Effect != "" {
+				effect := toleration.Effect
+				constraintToleration.Effect = &effect
+			}
+			if err := tx.Query(ctx, insertConstraintTolerationsStmt, constraintToleration).Run(); err != nil {
 				return errors.Capture(err)
 			}
 		}
@@ -3250,12 +3294,13 @@ func (*State) NamespaceForWatchNetNodeAddress() string {
 	return "ip_address"
 }
 
-// decodeConstraints flattens and maps the list of rows of applicatioConstraint
+// decodeConstraints flattens and maps the list of rows of applicationConstraint
 // to get a single constraints.Constraints. The flattening is needed because of the
-// spaces, tags and zones constraints which are slices. We can safely assume
-// that the non-slice values are repeated on every row so we can safely
-// overwrite the previous value on each iteration.
-// Spaces, tags and zones are returned in the order they appear in the input.
+// spaces, tags, zones and tolerations constraints which are slices. We can
+// safely assume that the non-slice values are repeated on every row so we can
+// safely overwrite the previous value on each iteration.
+// Spaces, tags, zones and tolerations are returned in the order they appear in
+// the input.
 func decodeConstraints(cons applicationConstraints) constraints.Constraints {
 	var res constraints.Constraints
 
@@ -3265,13 +3310,15 @@ func decodeConstraints(cons applicationConstraints) constraints.Constraints {
 		return res
 	}
 
-	// Unique spaces, tags and zones, preserving insertion order:
+	// Unique spaces, tags, zones and tolerations, preserving insertion order:
 	var spaces []constraints.SpaceConstraint
 	seenSpaces := make(map[string]struct{})
 	var tagsList []string
 	seenTags := make(map[string]struct{})
 	var zonesList []string
 	seenZones := make(map[string]struct{})
+	var tolerations []constraints.Toleration
+	seenTolerations := make(map[int64]struct{})
 
 	for _, row := range cons {
 		if row.Arch.Valid {
@@ -3336,9 +3383,32 @@ func decodeConstraints(cons applicationConstraints) constraints.Constraints {
 				zonesList = append(zonesList, row.Zone.String)
 			}
 		}
+		if row.TolerationOrder.Valid {
+			if _, ok := seenTolerations[row.TolerationOrder.V]; !ok {
+				seenTolerations[row.TolerationOrder.V] = struct{}{}
+				toleration := constraints.Toleration{}
+				if row.TolerationKey.Valid {
+					toleration.Key = row.TolerationKey.String
+				}
+				if row.TolerationOperator.Valid {
+					toleration.Operator = row.TolerationOperator.String
+				}
+				if row.TolerationValue.Valid {
+					toleration.Value = row.TolerationValue.String
+				}
+				if row.TolerationEffect.Valid {
+					toleration.Effect = row.TolerationEffect.String
+				}
+				if row.TolerationSeconds.Valid {
+					toleration.TolerationSeconds = new(int64)
+					*toleration.TolerationSeconds = row.TolerationSeconds.V
+				}
+				tolerations = append(tolerations, toleration)
+			}
+		}
 	}
 
-	// Add the unique spaces, tags and zones to the result:
+	// Add the unique spaces, tags, zones and tolerations to the result:
 	if len(spaces) > 0 {
 		res.Spaces = &spaces
 	}
@@ -3348,12 +3418,15 @@ func decodeConstraints(cons applicationConstraints) constraints.Constraints {
 	if len(zonesList) > 0 {
 		res.Zones = &zonesList
 	}
+	if len(tolerations) > 0 {
+		res.Tolerations = &tolerations
+	}
 
 	return res
 }
 
 // encodeConstraints maps the constraints.Constraints to a constraint struct, which
-// does not contain the spaces, tags and zones constraints.
+// does not contain the spaces, tags, zones and tolerations constraints.
 func encodeConstraints(constraintUUID string, cons constraints.Constraints, containerTypeID uint64) setConstraint {
 	res := setConstraint{
 		UUID:             constraintUUID,

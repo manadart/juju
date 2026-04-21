@@ -288,11 +288,20 @@ func (s *ModelState) GetModelConstraints(
 		return constraints.Constraints{}, errors.Capture(err)
 	}
 
+	selectTolerationStmt, err := s.Prepare(
+		"SELECT &dbConstraintToleration.* FROM v_model_constraint_toleration ORDER BY position",
+		dbConstraintToleration{},
+	)
+	if err != nil {
+		return constraints.Constraints{}, errors.Capture(err)
+	}
+
 	var (
-		cons   dbConstraint
-		tags   []dbConstraintTag
-		spaces []dbConstraintSpace
-		zones  []dbConstraintZone
+		cons        dbConstraint
+		tags        []dbConstraintTag
+		spaces      []dbConstraintSpace
+		zones       []dbConstraintZone
+		tolerations []dbConstraintToleration
 	)
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		_, err := getModelUUID(ctx, s, tx)
@@ -316,13 +325,17 @@ func (s *ModelState) GetModelConstraints(
 		if err != nil && !errors.Is(err, sqlair.ErrNoRows) {
 			return errors.Errorf("getting constraint zones: %w", err)
 		}
+		err = tx.Query(ctx, selectTolerationStmt).GetAll(&tolerations)
+		if err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return errors.Errorf("getting constraint tolerations: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
 		return constraints.Constraints{}, errors.Capture(err)
 	}
 
-	return cons.toValue(tags, spaces, zones)
+	return cons.toValue(tags, spaces, zones, tolerations)
 }
 
 // getModelConstraintsUUID returns the constraint uuid that is active for the
@@ -443,6 +456,18 @@ func deleteModelConstraints(
 	err = tx.Query(ctx, stmt, dbConstraintUUID).Run()
 	if err != nil {
 		return errors.Errorf("deleting model constraint %q zones: %w", constraintUUID, err)
+	}
+
+	stmt, err = preparer.Prepare(
+		"DELETE FROM constraint_toleration WHERE constraint_uuid = $dbConstraintUUID.uuid",
+		dbConstraintUUID,
+	)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	err = tx.Query(ctx, stmt, dbConstraintUUID).Run()
+	if err != nil {
+		return errors.Errorf("deleting model constraint %q tolerations: %w", constraintUUID, err)
 	}
 
 	stmt, err = preparer.Prepare(
@@ -570,6 +595,12 @@ WHERE value = $dbContainerTypeValue.value
 		err = insertConstraintZones(ctx, preparer, tx, constraintsUUID, *cons.Zones)
 		if err != nil {
 			return errors.Errorf("setting constraint zones for model: %w", err)
+		}
+	}
+	if cons.Tolerations != nil {
+		err = insertConstraintTolerations(ctx, preparer, tx, constraintsUUID, *cons.Tolerations)
+		if err != nil {
+			return errors.Errorf("setting constraint tolerations for model: %w", err)
 		}
 	}
 	return nil
@@ -866,6 +897,85 @@ func insertConstraintZones(
 	err = tx.Query(ctx, insertConstraintZoneStmt, data).Run()
 	if err != nil {
 		return errors.Errorf("inserting constraint zone: %w", err)
+	}
+	return nil
+}
+
+// insertConstraintTolerations is responsible for setting the specified
+// tolerations on the provided constraint uuid. Any previously set tolerations
+// for the constraint UUID will not be removed. Any conflicts that exist
+// between what has been set to be set will result in an error and not be
+// handled.
+func insertConstraintTolerations(
+	ctx context.Context,
+	preparer domain.Preparer,
+	tx *sqlair.TX,
+	constraintUUID uuid.UUID,
+	tolerations []constraints.Toleration,
+) error {
+	if len(tolerations) == 0 {
+		return nil
+	}
+
+	type dbConstraintTolerationInsert struct {
+		ConstraintUUID    string         `db:"constraint_uuid"`
+		Position          int64          `db:"position"`
+		TolerationKey     sql.NullString `db:"toleration_key"`
+		Operator          sql.NullString `db:"operator"`
+		Value             sql.NullString `db:"value"`
+		Effect            sql.NullString `db:"effect"`
+		TolerationSeconds sql.NullInt64  `db:"toleration_seconds"`
+	}
+
+	insertConstraintTolerationStmt, err := preparer.Prepare(
+		"INSERT INTO constraint_toleration (*) VALUES ($dbConstraintTolerationInsert.*)",
+		dbConstraintTolerationInsert{},
+	)
+	if err != nil {
+		return errors.Capture(err)
+	}
+
+	data := make([]dbConstraintTolerationInsert, 0, len(tolerations))
+	for i, toleration := range tolerations {
+		row := dbConstraintTolerationInsert{
+			ConstraintUUID: constraintUUID.String(),
+			Position:       int64(i),
+		}
+		if toleration.Key != "" {
+			row.TolerationKey = sql.NullString{
+				String: toleration.Key,
+				Valid:  true,
+			}
+		}
+		if toleration.Operator != "" {
+			row.Operator = sql.NullString{
+				String: toleration.Operator,
+				Valid:  true,
+			}
+		}
+		if toleration.Value != "" {
+			row.Value = sql.NullString{
+				String: toleration.Value,
+				Valid:  true,
+			}
+		}
+		if toleration.Effect != "" {
+			row.Effect = sql.NullString{
+				String: toleration.Effect,
+				Valid:  true,
+			}
+		}
+		if toleration.TolerationSeconds != nil {
+			row.TolerationSeconds = sql.NullInt64{
+				Int64: *toleration.TolerationSeconds,
+				Valid: true,
+			}
+		}
+		data = append(data, row)
+	}
+	err = tx.Query(ctx, insertConstraintTolerationStmt, data).Run()
+	if err != nil {
+		return errors.Errorf("inserting constraint tolerations: %w", err)
 	}
 	return nil
 }

@@ -48,6 +48,7 @@ func (env *environ) PrecheckInstance(ctx context.Context, args environs.Precheck
 var unsupportedConstraints = []string{
 	constraints.Tags,
 	constraints.VirtType,
+	constraints.Tolerations,
 	constraints.ImageID,
 }
 

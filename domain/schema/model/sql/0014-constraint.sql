@@ -73,3 +73,32 @@ CREATE TABLE constraint_zone (
     REFERENCES "constraint" (uuid),
     PRIMARY KEY (constraint_uuid, zone)
 );
+
+CREATE TABLE constraint_toleration (
+    constraint_uuid TEXT NOT NULL,
+    position INT NOT NULL,
+    toleration_key TEXT,
+    operator TEXT,
+    value TEXT,
+    effect TEXT,
+    toleration_seconds INT,
+    CONSTRAINT fk_constraint_toleration_constraint
+    FOREIGN KEY (constraint_uuid)
+    REFERENCES "constraint" (uuid),
+    PRIMARY KEY (constraint_uuid, position)
+) STRICT;
+
+-- v_model_constraint_toleration is a view of all the constraint tolerations
+-- set for the current model. It is expected that this view can be empty.
+CREATE VIEW v_model_constraint_toleration AS
+SELECT
+    ct.constraint_uuid,
+    ct.position,
+    ct.toleration_key,
+    ct.operator,
+    ct.value,
+    ct.effect,
+    ct.toleration_seconds
+FROM constraint_toleration AS ct
+JOIN "constraint" AS c ON ct.constraint_uuid = c.uuid
+JOIN model_constraint AS mc ON c.uuid = mc.constraint_uuid;

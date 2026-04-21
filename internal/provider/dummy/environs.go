@@ -550,6 +550,7 @@ func (e *environ) DestroyController(ctx context.Context, _ string) error {
 var unsupportedConstraints = []string{
 	constraints.CpuPower,
 	constraints.VirtType,
+	constraints.Tolerations,
 	constraints.ImageID,
 }
 

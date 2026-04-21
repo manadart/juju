@@ -4,9 +4,12 @@
 package constraints
 
 import (
-	"github.com/juju/juju/core/constraints"
+	coreconstraints "github.com/juju/juju/core/constraints"
 	"github.com/juju/juju/core/instance"
 )
+
+// Toleration mirrors coreconstraints.Toleration for domain/state use.
+type Toleration = coreconstraints.Toleration
 
 // Constraints represents the application constraints.
 // All fields of this struct are taken from core/constraints except for the
@@ -72,6 +75,10 @@ type Constraints struct {
 	// the machine can be located.
 	Zones *[]string
 
+	// Tolerations, if not nil, holds Kubernetes tolerations to apply to
+	// workload pods in CAAS models.
+	Tolerations *[]Toleration
+
 	// AllocatePublicIP, if nil or true, signals that machines should be
 	// created with a public IP address instead of a cloud local one.
 	// The default behaviour if the value is not specified is to allocate
@@ -96,7 +103,7 @@ type SpaceConstraint struct {
 
 // DecodeConstraints is responsible for converting a [constraints.Value] to a
 // [Constraints] object.
-func DecodeConstraints(coreCons constraints.Value) Constraints {
+func DecodeConstraints(coreCons coreconstraints.Value) Constraints {
 	rval := Constraints{
 		Arch:             coreCons.Arch,
 		Container:        coreCons.Container,
@@ -110,6 +117,7 @@ func DecodeConstraints(coreCons constraints.Value) Constraints {
 		InstanceType:     coreCons.InstanceType,
 		VirtType:         coreCons.VirtType,
 		Zones:            coreCons.Zones,
+		Tolerations:      coreCons.Tolerations,
 		AllocatePublicIP: coreCons.AllocatePublicIP,
 		ImageID:          coreCons.ImageID,
 	}
@@ -141,8 +149,8 @@ func DecodeConstraints(coreCons constraints.Value) Constraints {
 
 // EncodeConstraints is responsible for converting a [Constraints] value to a
 // [constraints.Value].
-func EncodeConstraints(cons Constraints) constraints.Value {
-	rval := constraints.Value{
+func EncodeConstraints(cons Constraints) coreconstraints.Value {
+	rval := coreconstraints.Value{
 		Arch:             cons.Arch,
 		Container:        cons.Container,
 		CpuCores:         cons.CpuCores,
@@ -155,6 +163,7 @@ func EncodeConstraints(cons Constraints) constraints.Value {
 		InstanceType:     cons.InstanceType,
 		VirtType:         cons.VirtType,
 		Zones:            cons.Zones,
+		Tolerations:      cons.Tolerations,
 		AllocatePublicIP: cons.AllocatePublicIP,
 		ImageID:          cons.ImageID,
 	}

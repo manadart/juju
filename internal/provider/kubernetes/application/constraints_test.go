@@ -167,6 +167,42 @@ func (s *applyConstraintsSuite) TestArch(c *tc.C) {
 	c.Assert(pod.NodeSelector, tc.DeepEquals, map[string]string{"kubernetes.io/arch": "arm64"})
 }
 
+func (s *applyConstraintsSuite) TestTolerations(c *tc.C) {
+	configureConstraint := func(got *corev1.PodSpec, resourceName corev1.ResourceName, value string) (err error) {
+		return errors.New("unexpected")
+	}
+	seconds := int64(30)
+	pod := &corev1.PodSpec{}
+	err := application.ApplyWorkloadConstraints(
+		pod,
+		"foo",
+		constraints.Value{
+			Tolerations: &[]constraints.Toleration{{
+				Key:               "dedicated",
+				Operator:          "Equal",
+				Value:             "gpu",
+				Effect:            "NoExecute",
+				TolerationSeconds: &seconds,
+			}, {
+				Operator: "Exists",
+				Effect:   "NoSchedule",
+			}},
+		},
+		configureConstraint,
+	)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(pod.Tolerations, tc.DeepEquals, []corev1.Toleration{{
+		Key:               "dedicated",
+		Operator:          corev1.TolerationOpEqual,
+		Value:             "gpu",
+		Effect:            corev1.TaintEffectNoExecute,
+		TolerationSeconds: &seconds,
+	}, {
+		Operator: corev1.TolerationOpExists,
+		Effect:   corev1.TaintEffectNoSchedule,
+	}})
+}
+
 func (s *applyConstraintsSuite) TestPodAffinityJustTopologyKey(c *tc.C) {
 	configureConstraint := func(pod *corev1.PodSpec, resourceName corev1.ResourceName, value string) (err error) {
 		return errors.New("unexpected")

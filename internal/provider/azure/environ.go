@@ -442,6 +442,7 @@ var unsupportedConstraints = []string{
 	constraints.CpuPower,
 	constraints.Tags,
 	constraints.VirtType,
+	constraints.Tolerations,
 	constraints.ImageID,
 }
 

@@ -199,6 +199,7 @@ func (s *modelSchemaSuite) TestModelTables(c *tc.C) {
 		"constraint",
 		"constraint_tag",
 		"constraint_space",
+		"constraint_toleration",
 		"constraint_zone",
 
 		// Machine
@@ -435,6 +436,7 @@ func (s *modelSchemaSuite) TestModelViews(c *tc.C) {
 		"v_model_config",
 		"v_model_constraint_space",
 		"v_model_constraint_tag",
+		"v_model_constraint_toleration",
 		"v_model_constraint_zone",
 		"v_model_constraint",
 		"v_model_metrics",

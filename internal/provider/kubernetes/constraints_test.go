@@ -34,6 +34,21 @@ func (s *ConstraintsSuite) TestConstraintsValidatorOkay(c *tc.C) {
 	c.Check(unsupported, tc.HasLen, 0)
 }
 
+func (s *ConstraintsSuite) TestConstraintsValidatorTolerations(c *tc.C) {
+	ctrl := s.setupController(c)
+	defer ctrl.Finish()
+
+	validator, err := s.broker.ConstraintsValidator(c.Context())
+	c.Assert(err, tc.ErrorIsNil)
+
+	cons := constraints.MustParse(
+		`tolerations=[{"key":"dedicated","operator":"Equal","value":"gpu","effect":"NoSchedule"}]`,
+	)
+	unsupported, err := validator.Validate(cons)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(unsupported, tc.HasLen, 0)
+}
+
 func (s *ConstraintsSuite) TestConstraintsValidatorEmpty(c *tc.C) {
 	ctrl := s.setupController(c)
 	defer ctrl.Finish()

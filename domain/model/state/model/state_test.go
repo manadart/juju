@@ -316,6 +316,7 @@ func (s *modelSuite) TestGetModelMetricsNotFound(c *tc.C) {
 // layer.
 func (s *modelSuite) TestSetModelConstraints(c *tc.C) {
 	s.createTestModel(c)
+	tolerationSeconds := int64(30)
 
 	runner := s.TxnRunnerFactory()
 	state := NewState(runner, loggertesting.WrapCheckLog(c))
@@ -342,8 +343,18 @@ INSERT INTO space (uuid, name) VALUES
 		Spaces: new([]constraints.SpaceConstraint{
 			{SpaceName: "space1", Exclude: false},
 		}),
-		VirtType:         new("virt-type"),
-		Zones:            new([]string{"zone1", "zone2"}),
+		VirtType: new("virt-type"),
+		Zones:    new([]string{"zone1", "zone2"}),
+		Tolerations: &[]constraints.Toleration{{
+			Key:               "dedicated",
+			Operator:          "Equal",
+			Value:             "gpu",
+			Effect:            "NoExecute",
+			TolerationSeconds: &tolerationSeconds,
+		}, {
+			Operator: "Exists",
+			Effect:   "NoSchedule",
+		}},
 		AllocatePublicIP: new(true),
 		ImageID:          new("image-id"),
 	}
@@ -405,6 +416,7 @@ func (s *modelSuite) TestSetModelConstraintsNullBools(c *tc.C) {
 // constraints another subsequent call overwrites what has previously been set.
 func (s *modelSuite) TestSetModelConstraintsOverwrites(c *tc.C) {
 	s.createTestModel(c)
+	tolerationSeconds := int64(30)
 
 	runner := s.TxnRunnerFactory()
 	state := NewState(runner, loggertesting.WrapCheckLog(c))
@@ -431,8 +443,15 @@ INSERT INTO space (uuid, name) VALUES
 		Spaces: new([]constraints.SpaceConstraint{
 			{SpaceName: "space1", Exclude: false},
 		}),
-		VirtType:         new("virt-type"),
-		Zones:            new([]string{"zone1", "zone2"}),
+		VirtType: new("virt-type"),
+		Zones:    new([]string{"zone1", "zone2"}),
+		Tolerations: &[]constraints.Toleration{{
+			Key:               "dedicated",
+			Operator:          "Equal",
+			Value:             "gpu",
+			Effect:            "NoExecute",
+			TolerationSeconds: &tolerationSeconds,
+		}},
 		AllocatePublicIP: new(true),
 		ImageID:          new("image-id"),
 	}

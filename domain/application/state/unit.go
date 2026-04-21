@@ -1499,11 +1499,20 @@ func (st *State) GetModelConstraints(
 		return constraints.Constraints{}, errors.Capture(err)
 	}
 
+	selectTolerationStmt, err := st.Prepare(
+		"SELECT &dbConstraintToleration.* FROM v_model_constraint_toleration ORDER BY position",
+		dbConstraintToleration{},
+	)
+	if err != nil {
+		return constraints.Constraints{}, errors.Capture(err)
+	}
+
 	var (
-		cons   dbConstraint
-		tags   []dbConstraintTag
-		spaces []dbConstraintSpace
-		zones  []dbConstraintZone
+		cons        dbConstraint
+		tags        []dbConstraintTag
+		spaces      []dbConstraintSpace
+		zones       []dbConstraintZone
+		tolerations []dbConstraintToleration
 	)
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		if err := modelExists(ctx, st, tx); err != nil {
@@ -1526,13 +1535,17 @@ func (st *State) GetModelConstraints(
 		if err != nil && !errors.Is(err, sqlair.ErrNoRows) {
 			return errors.Errorf("getting constraint zones: %w", err)
 		}
+		err = tx.Query(ctx, selectTolerationStmt).GetAll(&tolerations)
+		if err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return errors.Errorf("getting constraint tolerations: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
 		return constraints.Constraints{}, errors.Capture(err)
 	}
 
-	return cons.toValue(tags, spaces, zones)
+	return cons.toValue(tags, spaces, zones, tolerations)
 }
 
 // GetAllUnitNames returns a slice of all unit names in the model.

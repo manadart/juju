@@ -35,6 +35,7 @@ const (
 	Spaces           = "spaces"
 	VirtType         = "virt-type"
 	Zones            = "zones"
+	Tolerations      = "tolerations"
 	AllocatePublicIP = "allocate-public-ip"
 	ImageID          = "image-id"
 
@@ -42,6 +43,15 @@ const (
 	// it is to be considered excluded as part of constraints.
 	excludedPrefix = "^"
 )
+
+// Toleration describes a Kubernetes toleration.
+type Toleration struct {
+	Key               string `json:"key,omitempty" yaml:"key,omitempty"`
+	Operator          string `json:"operator,omitempty" yaml:"operator,omitempty"`
+	Value             string `json:"value,omitempty" yaml:"value,omitempty"`
+	Effect            string `json:"effect,omitempty" yaml:"effect,omitempty"`
+	TolerationSeconds *int64 `json:"tolerationSeconds,omitempty" yaml:"tolerationSeconds,omitempty"`
+}
 
 // Value describes a user's requirements of the hardware on which units
 // of an application will run. Constraints are used to choose an existing machine
@@ -109,6 +119,10 @@ type Value struct {
 	// Zones, if not nil, holds a list of availability zones limiting where
 	// the machine can be located.
 	Zones *[]string `json:"zones,omitempty" yaml:"zones,omitempty"`
+
+	// Tolerations, if not nil, holds Kubernetes tolerations to apply to
+	// workload pods in CAAS models.
+	Tolerations *[]Toleration `json:"tolerations,omitempty" yaml:"tolerations,omitempty"`
 
 	// AllocatePublicIP, if nil or true, signals that machines should be
 	// created with a public IP address instead of a cloud local one.
@@ -254,6 +268,11 @@ func (v *Value) HasZones() bool {
 	return v.Zones != nil && len(*v.Zones) > 0
 }
 
+// HasTolerations returns whether any tolerations were specified.
+func (v *Value) HasTolerations() bool {
+	return v.Tolerations != nil && len(*v.Tolerations) > 0
+}
+
 // HasAllocatePublicIP returns whether the allocate-public-ip constraint was specified.
 func (v *Value) HasAllocatePublicIP() bool {
 	return v.AllocatePublicIP != nil
@@ -318,6 +337,10 @@ func (v Value) String() string {
 		s := strings.Join(*v.Zones, ",")
 		strs = append(strs, "zones="+s)
 	}
+	if v.Tolerations != nil {
+		data, _ := json.Marshal(*v.Tolerations)
+		strs = append(strs, "tolerations="+string(data))
+	}
 	if v.AllocatePublicIP != nil {
 		strs = append(strs, "allocate-public-ip="+boolStr(*v.AllocatePublicIP))
 	}
@@ -378,6 +401,11 @@ func (v Value) GoString() string {
 		values = append(values, fmt.Sprintf("Zones: %q", *v.Zones))
 	} else if v.Zones != nil {
 		values = append(values, "Zones: (*[]string)(nil)")
+	}
+	if v.Tolerations != nil && *v.Tolerations != nil {
+		values = append(values, fmt.Sprintf("Tolerations: %#v", *v.Tolerations))
+	} else if v.Tolerations != nil {
+		values = append(values, "Tolerations: (*[]Toleration)(nil)")
 	}
 	if v.AllocatePublicIP != nil {
 		values = append(values, fmt.Sprintf("AllocatePublicIP: %v", *v.AllocatePublicIP))
@@ -556,6 +584,8 @@ func (v *Value) setRaw(name, str string) error {
 		err = v.setVirtType(str)
 	case Zones:
 		err = v.setZones(str)
+	case Tolerations:
+		err = v.setTolerations(str)
 	case AllocatePublicIP:
 		err = v.setAllocatePublicIP(str)
 	case ImageID:
@@ -629,6 +659,8 @@ func (v *Value) UnmarshalYAML(unmarshal func(any) error) error {
 			v.VirtType = &vstr
 		case Zones:
 			v.Zones, err = parseYamlStrings("zones", val)
+		case Tolerations:
+			v.Tolerations, err = parseYamlTolerations(val)
 		case AllocatePublicIP:
 			v.AllocatePublicIP, err = parseBool(vstr)
 		case ImageID:
@@ -781,6 +813,26 @@ func (v *Value) setZones(str string) error {
 	return nil
 }
 
+func (v *Value) setTolerations(str string) error {
+	if v.Tolerations != nil {
+		return errors.Errorf("already set")
+	}
+	if str == "" {
+		v.Tolerations = &[]Toleration{}
+		return nil
+	}
+
+	var tolerations []Toleration
+	if err := json.Unmarshal([]byte(str), &tolerations); err != nil {
+		return errors.Errorf("must be a JSON array of tolerations")
+	}
+	if err := validateTolerations(tolerations); err != nil {
+		return err
+	}
+	v.Tolerations = &tolerations
+	return nil
+}
+
 func (v *Value) setAllocatePublicIP(str string) (err error) {
 	if str == "" {
 		return nil
@@ -866,6 +918,110 @@ func parseYamlStrings(entityName string, val any) (*[]string, error) {
 		items[n] = s
 	}
 	return &items, nil
+}
+
+func parseYamlTolerations(val any) (*[]Toleration, error) {
+	if _, ok := val.([]any); !ok {
+		return nil, errors.Errorf("unexpected type passed to tolerations: %T", val)
+	}
+	normalized, err := normalizeYAMLValue(val)
+	if err != nil {
+		return nil, errors.Capture(err)
+	}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return nil, errors.Errorf("marshalling tolerations: %w", err)
+	}
+
+	var tolerations []Toleration
+	if err := json.Unmarshal(data, &tolerations); err != nil {
+		return nil, errors.Errorf("unexpected type passed to tolerations: %T", val)
+	}
+	if err := validateTolerations(tolerations); err != nil {
+		return nil, errors.Capture(err)
+	}
+	return &tolerations, nil
+}
+
+func normalizeYAMLValue(val any) (any, error) {
+	switch typed := val.(type) {
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			normalized, err := normalizeYAMLValue(item)
+			if err != nil {
+				return nil, errors.Capture(err)
+			}
+			out[i] = normalized
+		}
+		return out, nil
+	case map[any]any:
+		out := make(map[string]any, len(typed))
+		for key, value := range typed {
+			name, ok := key.(string)
+			if !ok {
+				return nil, errors.Errorf(
+					"unexpected non-string key in tolerations: %T", key,
+				)
+			}
+			normalized, err := normalizeYAMLValue(value)
+			if err != nil {
+				return nil, errors.Capture(err)
+			}
+			out[name] = normalized
+		}
+		return out, nil
+	default:
+		return val, nil
+	}
+}
+
+func validateTolerations(tolerations []Toleration) error {
+	for i, toleration := range tolerations {
+		if err := toleration.validate(); err != nil {
+			return errors.Errorf("toleration %d: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func (t Toleration) validate() error {
+	operator := t.Operator
+	if operator == "" {
+		operator = "Equal"
+	}
+	switch operator {
+	case "Equal", "Exists":
+	default:
+		return errors.Errorf("operator %q not supported", t.Operator)
+	}
+
+	switch t.Effect {
+	case "", "NoSchedule", "PreferNoSchedule", "NoExecute":
+	default:
+		return errors.Errorf("effect %q not supported", t.Effect)
+	}
+
+	if t.Key == "" && operator != "Exists" {
+		return errors.Errorf(`empty key requires operator "Exists"`)
+	}
+	if t.Key == "" && t.Value != "" {
+		return errors.Errorf("empty key cannot specify a value")
+	}
+	if operator == "Exists" && t.Value != "" {
+		return errors.Errorf(`operator "Exists" cannot specify a value`)
+	}
+	if t.TolerationSeconds != nil {
+		if *t.TolerationSeconds < 0 {
+			return errors.Errorf("tolerationSeconds must be non-negative")
+		}
+		if t.Effect != "" && t.Effect != "NoExecute" {
+			return errors.Errorf(
+				`tolerationSeconds requires effect "NoExecute"`,
+			)
+		}
+	}
+	return nil
 }
 
 var mbSuffixes = map[string]float64{

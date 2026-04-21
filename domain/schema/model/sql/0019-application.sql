@@ -301,13 +301,20 @@ SELECT
     cspace."exclude" AS space_exclude,
     cspace.rowid AS space_order,
     czone.zone,
-    czone.rowid AS zone_order
+    czone.rowid AS zone_order,
+    ctol.position AS toleration_order,
+    ctol.toleration_key,
+    ctol.operator AS toleration_operator,
+    ctol.value AS toleration_value,
+    ctol.effect AS toleration_effect,
+    ctol.toleration_seconds
 FROM application_constraint AS ac
 JOIN "constraint" AS c ON ac.constraint_uuid = c.uuid
 LEFT JOIN container_type AS ctype ON c.container_type_id = ctype.id
 LEFT JOIN constraint_tag AS ctag ON c.uuid = ctag.constraint_uuid
 LEFT JOIN constraint_space AS cspace ON c.uuid = cspace.constraint_uuid
-LEFT JOIN constraint_zone AS czone ON c.uuid = czone.constraint_uuid;
+LEFT JOIN constraint_zone AS czone ON c.uuid = czone.constraint_uuid
+LEFT JOIN constraint_toleration AS ctol ON c.uuid = ctol.constraint_uuid;
 
 CREATE VIEW v_application_platform_channel AS
 SELECT

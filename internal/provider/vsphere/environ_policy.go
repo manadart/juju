@@ -79,6 +79,7 @@ func (senv *sessionEnviron) checkDatastore(ctx context.Context, datastore *strin
 var unsupportedConstraints = []string{
 	constraints.Tags,
 	constraints.VirtType,
+	constraints.Tolerations,
 	constraints.AllocatePublicIP,
 	constraints.ImageID,
 }

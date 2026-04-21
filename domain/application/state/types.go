@@ -784,26 +784,32 @@ type applicationStatus struct {
 }
 
 // applicationConstraint represents a single returned row when joining the
-// constraint table with the constraint_space, constraint_tag and
-// constraint_zone.
+// constraint table with the constraint_space, constraint_tag, constraint_zone
+// and constraint_toleration tables.
 type applicationConstraint struct {
-	ApplicationUUID  string          `db:"application_uuid"`
-	Arch             sql.NullString  `db:"arch"`
-	CPUCores         sql.Null[int64] `db:"cpu_cores"`
-	CPUPower         sql.Null[int64] `db:"cpu_power"`
-	Mem              sql.Null[int64] `db:"mem"`
-	RootDisk         sql.Null[int64] `db:"root_disk"`
-	RootDiskSource   sql.NullString  `db:"root_disk_source"`
-	InstanceRole     sql.NullString  `db:"instance_role"`
-	InstanceType     sql.NullString  `db:"instance_type"`
-	ContainerType    sql.NullString  `db:"container_type"`
-	VirtType         sql.NullString  `db:"virt_type"`
-	AllocatePublicIP sql.NullBool    `db:"allocate_public_ip"`
-	ImageID          sql.NullString  `db:"image_id"`
-	SpaceName        sql.NullString  `db:"space_name"`
-	SpaceExclude     sql.NullBool    `db:"space_exclude"`
-	Tag              sql.NullString  `db:"tag"`
-	Zone             sql.NullString  `db:"zone"`
+	ApplicationUUID    string          `db:"application_uuid"`
+	Arch               sql.NullString  `db:"arch"`
+	CPUCores           sql.Null[int64] `db:"cpu_cores"`
+	CPUPower           sql.Null[int64] `db:"cpu_power"`
+	Mem                sql.Null[int64] `db:"mem"`
+	RootDisk           sql.Null[int64] `db:"root_disk"`
+	RootDiskSource     sql.NullString  `db:"root_disk_source"`
+	InstanceRole       sql.NullString  `db:"instance_role"`
+	InstanceType       sql.NullString  `db:"instance_type"`
+	ContainerType      sql.NullString  `db:"container_type"`
+	VirtType           sql.NullString  `db:"virt_type"`
+	AllocatePublicIP   sql.NullBool    `db:"allocate_public_ip"`
+	ImageID            sql.NullString  `db:"image_id"`
+	SpaceName          sql.NullString  `db:"space_name"`
+	SpaceExclude       sql.NullBool    `db:"space_exclude"`
+	Tag                sql.NullString  `db:"tag"`
+	Zone               sql.NullString  `db:"zone"`
+	TolerationOrder    sql.Null[int64] `db:"toleration_order"`
+	TolerationKey      sql.NullString  `db:"toleration_key"`
+	TolerationOperator sql.NullString  `db:"toleration_operator"`
+	TolerationValue    sql.NullString  `db:"toleration_value"`
+	TolerationEffect   sql.NullString  `db:"toleration_effect"`
+	TolerationSeconds  sql.Null[int64] `db:"toleration_seconds"`
 }
 
 type applicationConstraints []applicationConstraint
@@ -864,6 +870,16 @@ type setConstraintSpace struct {
 type setConstraintZone struct {
 	ConstraintUUID string `db:"constraint_uuid"`
 	Zone           string `db:"zone"`
+}
+
+type setConstraintToleration struct {
+	ConstraintUUID    string  `db:"constraint_uuid"`
+	Position          int     `db:"position"`
+	TolerationKey     *string `db:"toleration_key"`
+	Operator          *string `db:"operator"`
+	Value             *string `db:"value"`
+	Effect            *string `db:"effect"`
+	TolerationSeconds *int64  `db:"toleration_seconds"`
 }
 
 type setDefaultSpace struct {
@@ -944,6 +960,7 @@ func (c dbConstraint) toValue(
 	tags []dbConstraintTag,
 	spaces []dbConstraintSpace,
 	zones []dbConstraintZone,
+	tolerations []dbConstraintToleration,
 ) (constraints.Constraints, error) {
 	rval := constraints.Constraints{}
 	if c.Arch.Valid {
@@ -1017,6 +1034,31 @@ func (c dbConstraint) toValue(
 		rval.Zones = &consZones
 	}
 
+	consTolerations := make([]constraints.Toleration, 0, len(tolerations))
+	for _, toleration := range tolerations {
+		item := constraints.Toleration{}
+		if toleration.TolerationKey.Valid {
+			item.Key = toleration.TolerationKey.String
+		}
+		if toleration.Operator.Valid {
+			item.Operator = toleration.Operator.String
+		}
+		if toleration.Value.Valid {
+			item.Value = toleration.Value.String
+		}
+		if toleration.Effect.Valid {
+			item.Effect = toleration.Effect.String
+		}
+		if toleration.TolerationSeconds.Valid {
+			item.TolerationSeconds = new(int64)
+			*item.TolerationSeconds = toleration.TolerationSeconds.V
+		}
+		consTolerations = append(consTolerations, item)
+	}
+	if len(consTolerations) != 0 {
+		rval.Tolerations = &consTolerations
+	}
+
 	return rval, nil
 }
 
@@ -1040,6 +1082,18 @@ type dbConstraintSpace struct {
 type dbConstraintZone struct {
 	ConstraintUUID string `db:"constraint_uuid"`
 	Zone           string `db:"zone"`
+}
+
+// dbConstraintToleration represents a row from the v_model_constraint_toleration
+// view.
+type dbConstraintToleration struct {
+	ConstraintUUID    string          `db:"constraint_uuid"`
+	Position          int64           `db:"position"`
+	TolerationKey     sql.NullString  `db:"toleration_key"`
+	Operator          sql.NullString  `db:"operator"`
+	Value             sql.NullString  `db:"value"`
+	Effect            sql.NullString  `db:"effect"`
+	TolerationSeconds sql.Null[int64] `db:"toleration_seconds"`
 }
 
 // dbUUID represents a UUID.

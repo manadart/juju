@@ -29,6 +29,7 @@ var unsupportedConstraints = []string{
 	constraints.CpuPower,
 	constraints.Tags,
 	constraints.Container,
+	constraints.Tolerations,
 	constraints.AllocatePublicIP,
 	constraints.ImageID,
 }
