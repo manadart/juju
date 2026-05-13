@@ -174,6 +174,39 @@ WHERE  a.name = $deployRef.name
 	return result.UUID != "", nil
 }
 
+// GetEnvironment returns environment values for scriptlet execution.
+func (st *State) GetEnvironment(ctx context.Context) (map[string]string, error) {
+	db, err := st.DB(ctx)
+	if err != nil {
+		return nil, errors.Capture(err)
+	}
+
+	stmt, err := st.Prepare(`
+SELECT name AS &modelEnvironment.name,
+       controller_uuid AS &modelEnvironment.controller_uuid
+FROM   model
+`, modelEnvironment{})
+	if err != nil {
+		return nil, errors.Errorf("preparing get scriptlet environment: %w", err)
+	}
+
+	var result modelEnvironment
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		return tx.Query(ctx, stmt).Get(&result)
+	})
+	if errors.Is(err, sqlair.ErrNoRows) {
+		return nil, errors.Errorf("scriptlet environment not found").Add(coreerrors.NotFound)
+	}
+	if err != nil {
+		return nil, errors.Capture(err)
+	}
+
+	return map[string]string{
+		"model-name":      result.Name,
+		"controller-uuid": result.ControllerUUID,
+	}, nil
+}
+
 // DeployScriptlet registers a scriptlet charm and creates the application
 // entity in a single atomic transaction.
 func (st *State) DeployScriptlet(ctx context.Context, args scriptletservice.DeployScriptletArgs) error {

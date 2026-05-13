@@ -71,6 +71,9 @@ type State interface {
 	// name already exists.
 	ApplicationExists(ctx context.Context, name string) (bool, error)
 
+	// GetEnvironment returns environment values for scriptlet execution.
+	GetEnvironment(ctx context.Context) (map[string]string, error)
+
 	// DeployScriptlet registers the scriptlet charm and creates the
 	// application entity in a single atomic transaction.
 	DeployScriptlet(ctx context.Context, args DeployScriptletArgs) error
@@ -144,6 +147,15 @@ func (s *Service) GetApplicationScriptlet(ctx context.Context, appUUID coreappli
 		return "", errors.Errorf("getting scriptlet for application %q: %w", appUUID, err)
 	}
 	return scriptlet, nil
+}
+
+// GetEnvironment returns environment values for scriptlet execution.
+func (s *Service) GetEnvironment(ctx context.Context) (map[string]string, error) {
+	environment, err := s.st.GetEnvironment(ctx)
+	if err != nil {
+		return nil, errors.Errorf("getting scriptlet environment: %w", err)
+	}
+	return environment, nil
 }
 
 // DeployScriptlet registers the scriptlet charm and creates the application

@@ -24,6 +24,11 @@ type scriptletContent struct {
 	Scriptlet string `db:"scriptlet"`
 }
 
+type modelEnvironment struct {
+	Name           string `db:"name"`
+	ControllerUUID string `db:"controller_uuid"`
+}
+
 type insertCharm struct {
 	UUID            string         `db:"uuid"`
 	ReferenceName   string         `db:"reference_name"`
