@@ -140,6 +140,7 @@ func (w *Worker) handleApplicationChanges(ctx context.Context, appUUIDs []string
 				AppUUID:            id,
 				ScriptletService:   w.config.ScriptletService,
 				ApplicationService: w.config.ApplicationService,
+				RelationService:    w.config.RelationService,
 				Logger:             w.config.Logger,
 			})
 		})
@@ -180,6 +181,7 @@ type applicationRunnerConfig struct {
 	AppUUID            application.UUID
 	ScriptletService   ScriptletService
 	ApplicationService ApplicationService
+	RelationService    RelationService
 	Logger             logger.Logger
 }
 
@@ -248,6 +250,18 @@ func (r *applicationRunner) loop() error {
 		return internalerrors.Capture(err)
 	}
 
+	// Watch for relation lifecycle changes on this application.
+	relationWatcher, err := r.config.RelationService.WatchRelationsLifeSuspendedStatusForApplication(ctx, appUUID)
+	if err != nil {
+		return internalerrors.Errorf("watching relations for %q: %w", appUUID, err)
+	}
+	if err := r.catacomb.Add(relationWatcher); err != nil {
+		return internalerrors.Capture(err)
+	}
+
+	// Track known relations for detecting created/broken.
+	knownRelations := make(map[string]relationState)
+
 	for {
 		select {
 		case <-r.catacomb.Dying():
@@ -259,6 +273,14 @@ func (r *applicationRunner) loop() error {
 			}
 			if err := r.handleConfigChanged(ctx, appUUID); err != nil {
 				logger.Errorf(ctx, "handling config-changed for %q: %v", appUUID, err)
+			}
+
+		case changes, ok := <-relationWatcher.Changes():
+			if !ok {
+				return internalerrors.New("relation watcher closed")
+			}
+			if err := r.handleRelationChanges(ctx, appUUID, changes, knownRelations); err != nil {
+				logger.Errorf(ctx, "handling relation changes for %q: %v", appUUID, err)
 			}
 		}
 	}
@@ -281,6 +303,85 @@ func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID app
 		Name: "config_changed",
 	}
 	return r.scriptSet.Handle(ctx, &event)
+}
+
+func (r *applicationRunner) handleRelationChanges(
+	ctx context.Context,
+	appUUID application.UUID,
+	relationUUIDs []string,
+	knownRelations map[string]relationState,
+) error {
+	logger := r.config.Logger
+	logger.Debugf(ctx, "relation changes for %q: %v", appUUID, relationUUIDs)
+
+	// For each relation UUID in the change set, determine if it's new
+	// (relation-created) or removed (relation-broken).
+	seen := make(map[string]bool, len(relationUUIDs))
+	for _, relUUID := range relationUUIDs {
+		seen[relUUID] = true
+
+		if _, known := knownRelations[relUUID]; !known {
+			// New relation — dispatch relation-created.
+			knownRelations[relUUID] = relationState{
+				RelationUUID: relUUID,
+				Members:      make(map[string]bool),
+			}
+
+			event := starform.EventObject{
+				Name: "relation_created",
+			}
+			if err := r.scriptSet.Handle(ctx, &event); err != nil {
+				logger.Errorf(ctx, "dispatching relation_created for %q rel %s: %v",
+					appUUID, relUUID, err)
+			}
+
+			// Also fire relation-joined for the application itself
+			// (the scriptlet app "joins" the relation).
+			joinEvent := starform.EventObject{
+				Name: "relation_joined",
+			}
+			if err := r.scriptSet.Handle(ctx, &joinEvent); err != nil {
+				logger.Errorf(ctx, "dispatching relation_joined for %q rel %s: %v",
+					appUUID, relUUID, err)
+			}
+		} else {
+			// Existing relation changed — dispatch relation-changed.
+			event := starform.EventObject{
+				Name: "relation_changed",
+			}
+			if err := r.scriptSet.Handle(ctx, &event); err != nil {
+				logger.Errorf(ctx, "dispatching relation_changed for %q rel %s: %v",
+					appUUID, relUUID, err)
+			}
+		}
+	}
+
+	// Check for relations that have been removed (broken).
+	for relUUID := range knownRelations {
+		if !seen[relUUID] {
+			// Relation is gone — dispatch relation-departed then
+			// relation-broken.
+			departEvent := starform.EventObject{
+				Name: "relation_departed",
+			}
+			if err := r.scriptSet.Handle(ctx, &departEvent); err != nil {
+				logger.Errorf(ctx, "dispatching relation_departed for %q rel %s: %v",
+					appUUID, relUUID, err)
+			}
+
+			brokenEvent := starform.EventObject{
+				Name: "relation_broken",
+			}
+			if err := r.scriptSet.Handle(ctx, &brokenEvent); err != nil {
+				logger.Errorf(ctx, "dispatching relation_broken for %q rel %s: %v",
+					appUUID, relUUID, err)
+			}
+
+			delete(knownRelations, relUUID)
+		}
+	}
+
+	return nil
 }
 
 func (r *applicationRunner) scopedContext() (context.Context, context.CancelFunc) {
@@ -310,6 +411,15 @@ type ApplicationService interface {
 	// GetApplicationConfigWithDefaults returns the application config
 	// with defaults applied.
 	GetApplicationConfigWithDefaults(ctx context.Context, appUUID application.UUID) (charm.Config, error)
+}
+
+// RelationService defines the relation domain service methods needed
+// by the scriptlet worker.
+type RelationService interface {
+	// WatchRelationsLifeSuspendedStatusForApplication watches for relation
+	// lifecycle changes (created, broken) for the given application.
+	// Returns relation UUIDs on change.
+	WatchRelationsLifeSuspendedStatusForApplication(ctx context.Context, appUUID application.UUID) (watcher.StringsWatcher, error)
 }
 
 // dbScriptSource implements starform.ScriptSource by returning the
