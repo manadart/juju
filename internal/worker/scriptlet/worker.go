@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/canonical/starform/starform"
 	"github.com/juju/errors"
 	"github.com/juju/worker/v5"
 	"github.com/juju/worker/v5/catacomb"
@@ -165,6 +166,8 @@ func (w *Worker) reportInternalState(state string) {
 type applicationRunner struct {
 	catacomb catacomb.Catacomb
 	config   applicationRunnerConfig
+
+	scriptSet *starform.ScriptSet
 }
 
 type applicationRunnerConfig struct {
@@ -173,8 +176,23 @@ type applicationRunnerConfig struct {
 }
 
 func newApplicationRunner(config applicationRunnerConfig) (*applicationRunner, error) {
+	scriptSet, err := starform.NewScriptSet(&starform.ScriptSetOptions{
+		App: &starform.AppObject{
+			Name: "juju",
+		},
+	})
+	if err != nil {
+		return nil, internalerrors.Errorf("creating script set: %w", err)
+	}
+	if err := scriptSet.LoadSources(context.Background(), []starform.ScriptSource{
+		hardcodedScriptSource{},
+	}); err != nil {
+		return nil, internalerrors.Errorf("loading script set sources: %w", err)
+	}
+
 	r := &applicationRunner{
-		config: config,
+		config:    config,
+		scriptSet: scriptSet,
 	}
 
 	if err := catacomb.Invoke(catacomb.Plan{
@@ -208,11 +226,21 @@ func (r *applicationRunner) loop() error {
 	// TODO(hackathon): Watch for config changes, relation changes,
 	// and lifecycle events for this application. Dispatch events to
 	// the Starform scriptlet when they occur.
+	if err := r.handleConfigChanged(ctx); err != nil {
+		return internalerrors.Errorf("handling scriptlet event: %w", err)
+	}
 
 	select {
 	case <-r.catacomb.Dying():
 		return r.catacomb.ErrDying()
 	}
+}
+
+func (r *applicationRunner) handleConfigChanged(ctx context.Context) error {
+	event := starform.EventObject{
+		Name: "config_changed",
+	}
+	return r.scriptSet.Handle(ctx, &event)
 }
 
 func (r *applicationRunner) scopedContext() (context.Context, context.CancelFunc) {
@@ -226,4 +254,23 @@ type ScriptletService interface {
 	// application names when scriptlet applications are added,
 	// removed, or changed.
 	WatchScriptletApplications(ctx context.Context) (watcher.StringsWatcher, error)
+}
+
+type hardcodedScriptSource struct{}
+
+var _ starform.ScriptSource = &hardcodedScriptSource{}
+
+func (hardcodedScriptSource) Path() string {
+	return "hooks.star"
+}
+
+func (hardcodedScriptSource) Content(context.Context) ([]byte, error) {
+	ret := []byte(`
+def init():
+    juju.observe("config_changed", on_config_changed)
+
+def on_config_changed(event):
+	print('hello, world')
+`)
+	return ret, nil
 }
