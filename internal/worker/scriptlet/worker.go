@@ -292,8 +292,8 @@ func (r *applicationRunner) loop() error {
 		App: &starform.AppObject{
 			Name: "juju",
 			Methods: []*starlark.Builtin{
-				starlark.NewBuiltinWithSafety("status_set", setStatusSafety, jujuSetStatus),
-				starlark.NewBuiltinWithSafety("state_set", starlark.NotSafe, jujuSetState),
+				starlark.NewBuiltinWithSafety("set_status", setStatusSafety, jujuSetStatus),
+				starlark.NewBuiltinWithSafety("set_state", setStatusSafety, jujuSetState),
 			},
 		},
 	})
