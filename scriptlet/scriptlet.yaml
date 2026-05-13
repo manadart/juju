@@ -1,0 +1,13 @@
+agentless: true
+runtime: starform
+app: juju
+sources:
+  - scriptlets/hooks.star
+events:
+  - config_changed
+  - relation_created
+  - relation_joined
+  - relation_changed
+  - relation_departed
+  - relation_broken
+

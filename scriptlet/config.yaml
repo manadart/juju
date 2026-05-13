@@ -1,0 +1,6 @@
+options:
+  refresh-token:
+    type: string
+    default: ""
+    description: Manual trigger value for config-changed scriptlet runs.
+
