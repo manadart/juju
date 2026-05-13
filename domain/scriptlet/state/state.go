@@ -335,7 +335,7 @@ VALUES ($insertApplication.uuid, $insertApplication.name, $insertApplication.lif
 	platformRow := insertApplicationPlatform{
 		ApplicationUUID: appID.String(),
 		OSID:            0, // ubuntu
-		Channel:         sql.NullString{},
+		Channel:         sql.NullString{String: "24.04", Valid: true},
 		ArchitectureID:  0, // amd64
 	}
 	insPlatformStmt, err := st.Prepare(`

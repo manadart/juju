@@ -7,7 +7,12 @@ def init():
     juju.observe("relation_broken", on_relation_broken)
 
 def on_config_changed(event):
-    juju.set_status("active", message = "config changed")
+    config = event.config
+    parts = []
+    for key in sorted(config.keys()):
+        parts.append("%s=%s" % (key, config[key]))
+    msg = ", ".join(parts) if parts else "no config"
+    juju.set_status("active", message = "config changed :" + msg)
 
 def on_relation_created(event):
     juju.set_status("active", message = "relation created")
