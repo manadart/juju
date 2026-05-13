@@ -6,6 +6,7 @@ package scriptlet
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/canonical/starform/starform"
@@ -25,9 +26,6 @@ import (
 const (
 	// States which report the state of the worker.
 	stateStarted = "started"
-
-	stubModelName      = "TODO-model-name"
-	stubControllerUUID = "TODO-controller-uuid"
 )
 
 const setStatusSafety = starlark.NotSafe
@@ -359,10 +357,15 @@ func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID app
 	if err != nil {
 		return internalerrors.Errorf("serialising config for %q: %w", appUUID, err)
 	}
+	attrs, err := r.environmentAttrs(ctx)
+	if err != nil {
+		return internalerrors.Errorf("getting environment for %q: %w", appUUID, err)
+	}
+	attrs["config"] = configDict
 
 	event := starform.EventObject{
 		Name:  "config_changed",
-		Attrs: starlark.StringDict{"config": configDict},
+		Attrs: attrs,
 		// TODO(kcza): complete this
 		State: &OnConfigChangedState{},
 	}
@@ -425,9 +428,9 @@ func (r *applicationRunner) handleRelationChanges(
 ) error {
 	logger := r.config.Logger
 	logger.Debugf(ctx, "relation changes for %q: %v", appUUID, relationUUIDs)
-	attrs := starlark.StringDict{
-		"model_name":      starlark.String(stubModelName),
-		"controller_uuid": starlark.String(stubControllerUUID),
+	attrs, err := r.environmentAttrs(ctx)
+	if err != nil {
+		return internalerrors.Errorf("getting environment for %q: %w", appUUID, err)
 	}
 
 	// For each relation UUID in the change set, determine if it's new
@@ -509,6 +512,23 @@ func (r *applicationRunner) handleRelationChanges(
 		State: &OnRelationCreatedState{},
 	}
 	return r.scriptSet.Handle(ctx, &event)
+}
+
+func (r *applicationRunner) environmentAttrs(ctx context.Context) (starlark.StringDict, error) {
+	environment, err := r.config.ScriptletService.GetEnvironment(ctx)
+	if err != nil {
+		return nil, internalerrors.Capture(err)
+	}
+
+	attrs := make(starlark.StringDict, len(environment))
+	for key, value := range environment {
+		attrs[starlarkAttrName(key)] = starlark.String(value)
+	}
+	return attrs, nil
+}
+
+func starlarkAttrName(name string) string {
+	return strings.ReplaceAll(name, "-", "_")
 }
 
 func jujuSetStatus(
@@ -603,6 +623,9 @@ type ScriptletService interface {
 	// GetApplicationScriptlet returns the scriptlet source for the
 	// application identified by its UUID.
 	GetApplicationScriptlet(ctx context.Context, appUUID application.UUID) (string, error)
+
+	// GetEnvironment returns environment values for scriptlet execution.
+	GetEnvironment(ctx context.Context) (map[string]string, error)
 }
 
 // ApplicationService defines the application domain service methods
