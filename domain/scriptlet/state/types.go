@@ -3,7 +3,10 @@
 
 package state
 
-import "database/sql"
+import (
+	"database/sql"
+	"time"
+)
 
 type scriptletCharmName struct {
 	ReferenceName string `db:"reference_name"`
@@ -44,4 +47,52 @@ type insertCharmRelation struct {
 	Interface string `db:"interface"`
 	Optional  bool   `db:"optional"`
 	Capacity  int    `db:"capacity"`
+}
+
+// deployRef holds an application name and charm reference_name (both equal to
+// ApplicationName) for use as SQL input parameters in deploy queries.
+type deployRef struct {
+	Name          string `db:"name"`
+	ReferenceName string `db:"reference_name"`
+}
+
+type insertCharmMetadata struct {
+	CharmUUID   string `db:"charm_uuid"`
+	Name        string `db:"name"`
+	Subordinate bool   `db:"subordinate"`
+	RunAsID     int    `db:"run_as_id"`
+}
+
+type insertApplication struct {
+	UUID      string `db:"uuid"`
+	Name      string `db:"name"`
+	LifeID    int    `db:"life_id"`
+	CharmUUID string `db:"charm_uuid"`
+	SpaceUUID string `db:"space_uuid"`
+}
+
+type insertApplicationPlatform struct {
+	ApplicationUUID string         `db:"application_uuid"`
+	OSID            int            `db:"os_id"`
+	Channel         sql.NullString `db:"channel"`
+	ArchitectureID  int            `db:"architecture_id"`
+}
+
+type insertApplicationStatus struct {
+	ApplicationUUID string         `db:"application_uuid"`
+	StatusID        int            `db:"status_id"`
+	Message         sql.NullString `db:"message"`
+	Data            sql.NullString `db:"data"`
+	UpdatedAt       time.Time      `db:"updated_at"`
+}
+
+type insertApplicationEndpoint struct {
+	UUID              string         `db:"uuid"`
+	ApplicationUUID   string         `db:"application_uuid"`
+	SpaceUUID         sql.NullString `db:"space_uuid"`
+	CharmRelationUUID string         `db:"charm_relation_uuid"`
+}
+
+type charmRelationUUID struct {
+	UUID string `db:"uuid"`
 }

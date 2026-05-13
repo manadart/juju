@@ -16,7 +16,7 @@ import (
 
 // ScriptletCharmService defines the domain service methods required by this facade.
 type ScriptletCharmService interface {
-	RegisterScriptlet(context.Context, scriptletservice.RegisterScriptletArgs) error
+	DeployScriptlet(context.Context, scriptletservice.DeployScriptletArgs) error
 }
 
 // BlockChecker defines the block-checking functionality required by the facade.
@@ -41,8 +41,8 @@ func (api *API) checkCanWrite(ctx context.Context) error {
 	return api.authorizer.HasPermission(ctx, permission.WriteAccess, api.modelTag)
 }
 
-// Register records a scriptlet charm into the model.
-func (api *API) Register(ctx context.Context, args params.RegisterScriptletCharmArgs) params.ErrorResult {
+// Deploy registers the scriptlet charm and creates the application in one shot.
+func (api *API) Deploy(ctx context.Context, args params.DeployScriptletCharmArgs) params.ErrorResult {
 	if err := api.checkCanWrite(ctx); err != nil {
 		return params.ErrorResult{Error: apiservererrors.ServerError(err)}
 	}
@@ -62,7 +62,7 @@ func (api *API) Register(ctx context.Context, args params.RegisterScriptletCharm
 		}
 	}
 
-	err := api.service.RegisterScriptlet(ctx, scriptletservice.RegisterScriptletArgs{
+	err := api.service.DeployScriptlet(ctx, scriptletservice.DeployScriptletArgs{
 		ApplicationName: args.ApplicationName,
 		Scriptlet:       args.Scriptlet,
 		Relations:       relations,

@@ -14,8 +14,9 @@ type ScriptletRelation struct {
 	Limit     int    `json:"limit,omitempty"`
 }
 
-// RegisterScriptletCharmArgs contains raw scriptlet charm deployment data.
-type RegisterScriptletCharmArgs struct {
+// DeployScriptletCharmArgs contains all data needed to register a scriptlet
+// charm and create the corresponding application in one shot.
+type DeployScriptletCharmArgs struct {
 	ApplicationName string              `json:"application-name"`
 	Scriptlet       string              `json:"scriptlet"`
 	Relations       []ScriptletRelation `json:"relations,omitempty"`

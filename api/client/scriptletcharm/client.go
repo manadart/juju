@@ -31,10 +31,10 @@ func NewClient(st base.APICallCloser, options ...Option) *Client {
 	return &Client{ClientFacade: frontend, facade: backend}
 }
 
-// Register records the scriptlet charm in the model.
-func (c *Client) Register(ctx context.Context, args params.RegisterScriptletCharmArgs) error {
+// Deploy registers the scriptlet charm and creates the application in one shot.
+func (c *Client) Deploy(ctx context.Context, args params.DeployScriptletCharmArgs) error {
 	var result params.ErrorResult
-	if err := c.facade.FacadeCall(ctx, "Register", args, &result); err != nil {
+	if err := c.facade.FacadeCall(ctx, "Deploy", args, &result); err != nil {
 		return errors.Trace(err)
 	}
 	if result.Error != nil {

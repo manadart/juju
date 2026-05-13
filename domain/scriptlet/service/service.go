@@ -26,8 +26,9 @@ type ScriptletRelation struct {
 	Limit     int
 }
 
-// RegisterScriptletArgs contains everything needed to record a scriptlet charm.
-type RegisterScriptletArgs struct {
+// DeployScriptletArgs contains everything needed to register a scriptlet charm
+// and create the corresponding application in one shot.
+type DeployScriptletArgs struct {
 	ApplicationName string
 	Scriptlet       string
 	Relations       []ScriptletRelation
@@ -49,9 +50,9 @@ type State interface {
 	// given UUID has a charm in the scriptlet_charm table.
 	IsScriptletApplication(ctx context.Context, appUUID string) (bool, error)
 
-	// RegisterScriptlet records the scriptlet charm into the charm table
-	// and its relations into charm_relation.
-	RegisterScriptlet(ctx context.Context, args RegisterScriptletArgs) error
+	// DeployScriptlet registers the scriptlet charm and creates the
+	// application entity in a single atomic transaction.
+	DeployScriptlet(ctx context.Context, args DeployScriptletArgs) error
 }
 
 // ApplicationService provides access to the application domain service
@@ -111,8 +112,9 @@ func (s *Service) GetScriptletApplicationNames(ctx context.Context) ([]string, e
 	return names, nil
 }
 
-// RegisterScriptlet records the scriptlet charm in the model database.
-func (s *Service) RegisterScriptlet(ctx context.Context, args RegisterScriptletArgs) error {
+// DeployScriptlet registers the scriptlet charm and creates the application
+// entity in one atomic operation.
+func (s *Service) DeployScriptlet(ctx context.Context, args DeployScriptletArgs) error {
 	if !application.IsValidApplicationName(args.ApplicationName) {
 		return errors.Errorf("application name %q is not valid", args.ApplicationName).
 			Add(coreerrors.NotValid)
@@ -133,7 +135,7 @@ func (s *Service) RegisterScriptlet(ctx context.Context, args RegisterScriptletA
 			return errors.Errorf("unknown relation scope %q for %q", r.Scope, r.Name).Add(coreerrors.NotValid)
 		}
 	}
-	return s.st.RegisterScriptlet(ctx, args)
+	return s.st.DeployScriptlet(ctx, args)
 }
 
 // WatchableService provides the API for managing scriptlet applications

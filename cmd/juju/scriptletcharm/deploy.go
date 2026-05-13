@@ -24,19 +24,19 @@ import (
 )
 
 const deployDoc = `
-Registers a scriptlet charm with the current model.
+Deploys a scriptlet charm from a source directory.
 
-The command records the supplied Starform scriptlet source as raw text for the
-application name. It does not yet create a normal Juju application, provision
-units, or run the scriptlet.
+The directory must contain metadata.yaml, scriptlet.yaml, and the Starform
+.star file(s) referenced by scriptlet.yaml. The command registers the charm
+source with the model and creates a unitless application bound to it.
 `
 
 const deployExamples = `
     juju deploy-scriptlet-charm ./scriptlet
-    juju deploy-scriptlet-charm ./scriptlet/scriptlets/hooks.star model-info
+    juju deploy-scriptlet-charm ./scriptlet myapp
 `
 
-// NewDeployCommand returns a command to register scriptlet charms.
+// NewDeployCommand returns a command to deploy scriptlet charms from source.
 func NewDeployCommand() cmd.Command {
 	command := &deployCommand{}
 	command.newClient = func(caller base.APICallCloser) ScriptletCharmAPI {
@@ -47,7 +47,7 @@ func NewDeployCommand() cmd.Command {
 
 // ScriptletCharmAPI defines the client methods required by the command.
 type ScriptletCharmAPI interface {
-	Register(ctx context.Context, args params.RegisterScriptletCharmArgs) error
+	Deploy(ctx context.Context, args params.DeployScriptletCharmArgs) error
 	Close() error
 }
 
@@ -63,8 +63,8 @@ type deployCommand struct {
 func (c *deployCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
 		Name:     "deploy-scriptlet-charm",
-		Args:     "<scriptlet charm or .star file> [<application name>]",
-		Purpose:  "Registers a scriptlet charm.",
+		Args:     "<scriptlet charm directory> [<application name>]",
+		Purpose:  "Deploys a scriptlet charm from a source directory.",
 		Doc:      deployDoc,
 		Examples: deployExamples,
 		SeeAlso: []string{
@@ -76,7 +76,7 @@ func (c *deployCommand) Info() *cmd.Info {
 // Init implements Command.Init.
 func (c *deployCommand) Init(args []string) error {
 	if len(args) < 1 {
-		return errors.New("deploy-scriptlet-charm requires a scriptlet charm or .star file")
+		return errors.New("deploy-scriptlet-charm requires a scriptlet charm directory")
 	}
 	c.scriptletPath = args[0]
 	if len(args) > 1 {
@@ -95,11 +95,11 @@ func (c *deployCommand) Init(args []string) error {
 func (c *deployCommand) Run(ctx *cmd.Context) error {
 	playClintEastwood(ctx, ctx.Stdout)
 
-	registerArgs, defaultApplicationName, err := readScriptlet(ctx.AbsPath(c.scriptletPath))
+	deployArgs, defaultApplicationName, err := readScriptletCharmDir(ctx.AbsPath(c.scriptletPath))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if strings.TrimSpace(registerArgs.Scriptlet) == "" {
+	if strings.TrimSpace(deployArgs.Scriptlet) == "" {
 		return errors.New("scriptlet file is empty")
 	}
 
@@ -113,7 +113,7 @@ func (c *deployCommand) Run(ctx *cmd.Context) error {
 	if err := names.ValidateApplicationName(applicationName); err != nil {
 		return errors.Trace(err)
 	}
-	registerArgs.ApplicationName = applicationName
+	deployArgs.ApplicationName = applicationName
 
 	apiRoot, err := c.NewAPIRoot(ctx)
 	if err != nil {
@@ -122,8 +122,7 @@ func (c *deployCommand) Run(ctx *cmd.Context) error {
 	client := c.newClient(apiRoot)
 	defer client.Close()
 
-	err = client.Register(ctx, registerArgs)
-	return block.ProcessBlockedError(err, block.BlockChange)
+	return block.ProcessBlockedError(client.Deploy(ctx, deployArgs), block.BlockChange)
 }
 
 type scriptletConfig struct {
@@ -144,53 +143,43 @@ type charmMetadata struct {
 	Peers    map[string]charmMetadataRelation `yaml:"peers"`
 }
 
-func readScriptlet(path string) (params.RegisterScriptletCharmArgs, string, error) {
+func readScriptletCharmDir(path string) (params.DeployScriptletCharmArgs, string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Annotatef(err, "checking scriptlet path %q", path)
+		return params.DeployScriptletCharmArgs{}, "", errors.Annotatef(err, "checking scriptlet path %q", path)
 	}
-	if info.IsDir() {
-		return readScriptletCharmDir(path)
+	if !info.IsDir() {
+		return params.DeployScriptletCharmArgs{}, "", errors.Errorf("%q is not a directory; deploy-scriptlet-charm requires a charm source directory", path)
 	}
-	if filepath.Ext(path) != ".star" {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("scriptlet file %q must have .star extension", path)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Annotatef(err, "reading scriptlet file %q", path)
-	}
-	return params.RegisterScriptletCharmArgs{Scriptlet: string(data)}, "", nil
-}
 
-func readScriptletCharmDir(path string) (params.RegisterScriptletCharmArgs, string, error) {
 	metadata, err := readCharmMetadata(path)
 	if err != nil {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Trace(err)
+		return params.DeployScriptletCharmArgs{}, "", errors.Trace(err)
 	}
 
 	config, err := readScriptletConfig(path)
 	if err != nil {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Trace(err)
+		return params.DeployScriptletCharmArgs{}, "", errors.Trace(err)
 	}
 	if len(config.Sources) != 1 {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("expected exactly one scriptlet source, got %d", len(config.Sources))
+		return params.DeployScriptletCharmArgs{}, "", errors.Errorf("expected exactly one scriptlet source, got %d", len(config.Sources))
 	}
 
 	source := filepath.Clean(config.Sources[0])
 	if filepath.IsAbs(source) || source == ".." || strings.HasPrefix(source, ".."+string(os.PathSeparator)) {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("scriptlet source %q escapes charm directory", config.Sources[0])
+		return params.DeployScriptletCharmArgs{}, "", errors.Errorf("scriptlet source %q escapes charm directory", config.Sources[0])
 	}
 	if filepath.Ext(source) != ".star" {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("scriptlet source %q must have .star extension", config.Sources[0])
+		return params.DeployScriptletCharmArgs{}, "", errors.Errorf("scriptlet source %q must have .star extension", config.Sources[0])
 	}
 
 	scriptletPath := filepath.Join(path, source)
 	data, err := os.ReadFile(scriptletPath)
 	if err != nil {
-		return params.RegisterScriptletCharmArgs{}, "", errors.Annotatef(err, "reading scriptlet file %q", scriptletPath)
+		return params.DeployScriptletCharmArgs{}, "", errors.Annotatef(err, "reading scriptlet file %q", scriptletPath)
 	}
 
-	args := params.RegisterScriptletCharmArgs{
+	args := params.DeployScriptletCharmArgs{
 		Scriptlet: string(data),
 		Relations: encodeMetadataRelations(metadata),
 	}
