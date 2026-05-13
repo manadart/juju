@@ -874,6 +874,9 @@ func (st *State) deleteCharm(ctx context.Context, tx *sqlair.TX, cUUID string) e
 		"DELETE FROM charm_hash WHERE charm_uuid = $entityUUID.uuid",
 		"DELETE FROM charm_metadata WHERE charm_uuid = $entityUUID.uuid",
 		"DELETE FROM charm_download_info WHERE charm_uuid = $entityUUID.uuid",
+		"DELETE FROM scriptlet_charm WHERE charm_uuid = $entityUUID.uuid",
+		"DELETE FROM scriptlet_config WHERE charm_uuid = $entityUUID.uuid",
+		"DELETE FROM scriptlet_event WHERE charm_uuid = $entityUUID.uuid",
 	} {
 		deleteApplicationReferenceStmt, err := st.Prepare(table, charmUUID)
 		if err != nil {
