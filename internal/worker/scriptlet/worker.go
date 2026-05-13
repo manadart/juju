@@ -5,6 +5,7 @@ package scriptlet
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/canonical/starform/starform"
@@ -351,15 +352,66 @@ func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID app
 		return internalerrors.Errorf("getting config for %q: %w", appUUID, err)
 	}
 
-	// TODO(hackathon): Serialise config and pass to starform scriptlet.
-	_ = config
+	configDict, err := configToStarlarkDict(config)
+	if err != nil {
+		return internalerrors.Errorf("serialising config for %q: %w", appUUID, err)
+	}
 
 	event := starform.EventObject{
 		Name:  "config_changed",
+		Attrs: starlark.StringDict{"config": configDict},
 		// TODO(kcza): complete this
 		State: &OnConfigChangedState{},
 	}
 	return r.scriptSet.Handle(ctx, &event)
+}
+
+func configToStarlarkDict(config charm.Config) (*starlark.Dict, error) {
+	keys := make([]string, 0, len(config))
+	for key := range config {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	result := starlark.NewDict(len(config))
+	for _, key := range keys {
+		value, err := configValueToStarlark(config[key])
+		if err != nil {
+			return nil, internalerrors.Errorf("config %q: %w", key, err)
+		}
+		if err := result.SetKey(starlark.String(key), value); err != nil {
+			return nil, internalerrors.Capture(err)
+		}
+	}
+
+	return result, nil
+}
+
+func configValueToStarlark(value any) (starlark.Value, error) {
+	switch v := value.(type) {
+	case string:
+		return starlark.String(v), nil
+	case bool:
+		return starlark.Bool(v), nil
+	case int:
+		return starlark.MakeInt(v), nil
+	case int8:
+		return starlark.MakeInt64(int64(v)), nil
+	case int16:
+		return starlark.MakeInt64(int64(v)), nil
+	case int32:
+		return starlark.MakeInt64(int64(v)), nil
+	case int64:
+		return starlark.MakeInt64(v), nil
+	case float32:
+		return starlark.Float(v), nil
+	case float64:
+		return starlark.Float(v), nil
+	case nil:
+		return nil, internalerrors.Errorf("unsupported config value type %T", value)
+	default:
+		return nil, internalerrors.Errorf("unsupported config value type %T", value)
+	}
 }
 
 func (r *applicationRunner) handleRelationChanges(
@@ -439,7 +491,7 @@ func (r *applicationRunner) handleRelationChanges(
 	}
 
 	event := starform.EventObject{
-		Name:  "relation_created",
+		Name: "relation_created",
 		// TODO(kcza): complete this
 		State: &OnRelationCreatedState{},
 	}
