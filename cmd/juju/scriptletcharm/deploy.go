@@ -143,6 +143,16 @@ type charmMetadata struct {
 	Peers    map[string]charmMetadataRelation `yaml:"peers"`
 }
 
+type charmConfigOption struct {
+	Type        string `yaml:"type"`
+	Description string `yaml:"description"`
+	Default     string `yaml:"default"`
+}
+
+type charmConfig struct {
+	Options map[string]charmConfigOption `yaml:"options"`
+}
+
 func readScriptletCharmDir(path string) (params.DeployScriptletCharmArgs, string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -179,9 +189,15 @@ func readScriptletCharmDir(path string) (params.DeployScriptletCharmArgs, string
 		return params.DeployScriptletCharmArgs{}, "", errors.Annotatef(err, "reading scriptlet file %q", scriptletPath)
 	}
 
+	charmCfg, err := readCharmConfig(path)
+	if err != nil {
+		return params.DeployScriptletCharmArgs{}, "", errors.Trace(err)
+	}
+
 	args := params.DeployScriptletCharmArgs{
 		Scriptlet: string(data),
 		Relations: encodeMetadataRelations(metadata),
+		Config:    encodeCharmConfig(charmCfg),
 	}
 	return args, metadata.Name, nil
 }
@@ -220,6 +236,38 @@ func readCharmMetadata(path string) (charmMetadata, error) {
 		return charmMetadata{}, errors.Annotate(err, "parsing metadata.yaml")
 	}
 	return metadata, nil
+}
+
+func readCharmConfig(path string) (charmConfig, error) {
+	data, err := os.ReadFile(filepath.Join(path, "config.yaml"))
+	if os.IsNotExist(err) {
+		return charmConfig{}, nil
+	}
+	if err != nil {
+		return charmConfig{}, errors.Annotate(err, "reading config.yaml")
+	}
+	var cfg charmConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return charmConfig{}, errors.Annotate(err, "parsing config.yaml")
+	}
+	return cfg, nil
+}
+
+func encodeCharmConfig(cfg charmConfig) []params.ScriptletConfigOption {
+	if len(cfg.Options) == 0 {
+		return nil
+	}
+	opts := make([]params.ScriptletConfigOption, 0, len(cfg.Options))
+	for key, opt := range cfg.Options {
+		opts = append(opts, params.ScriptletConfigOption{
+			Key:          key,
+			Type:         opt.Type,
+			Description:  opt.Description,
+			DefaultValue: opt.Default,
+		})
+	}
+	sort.Slice(opts, func(i, j int) bool { return opts[i].Key < opts[j].Key })
+	return opts
 }
 
 func readScriptletConfig(path string) (scriptletConfig, error) {
