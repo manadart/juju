@@ -1625,7 +1625,7 @@ SELECT
 	) AS &applicationStatusDetails.exposed,
 	EXISTS(
 		SELECT 1 FROM scriptlet_charm AS sc
-		WHERE sc.application_name = a.name
+		WHERE sc.charm_uuid = a.charm_uuid
 	) AS &applicationStatusDetails.unitless,
 	awv.version AS &applicationStatusDetails.workload_version
 FROM application AS a
