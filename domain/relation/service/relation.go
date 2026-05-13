@@ -239,6 +239,15 @@ type State interface {
 		settings map[string]string,
 		unset []string,
 	) error
+
+	// SetRelationApplicationSettings records settings for a specific
+	// application relation combination.
+	SetRelationApplicationSettings(
+		ctx context.Context,
+		relationUUID corerelation.UUID,
+		applicationID application.UUID,
+		settings map[string]string,
+	) error
 }
 
 // LeadershipService provides the API for working with the statuses of
@@ -1063,6 +1072,29 @@ func (s *Service) GetRelationApplicationSettings(
 	}
 
 	return settings, nil
+}
+
+// SetRelationApplicationSettings sets the application settings for the given
+// relation and application. This replaces all existing settings.
+func (s *Service) SetRelationApplicationSettings(
+	ctx context.Context,
+	relationUUID corerelation.UUID,
+	applicationID application.UUID,
+	settings map[string]string,
+) error {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	if err := relationUUID.Validate(); err != nil {
+		return errors.Errorf(
+			"%w:%w", relationerrors.RelationUUIDNotValid, err)
+	}
+	if err := applicationID.Validate(); err != nil {
+		return errors.Errorf(
+			"%w:%w", applicationerrors.ApplicationUUIDNotValid, err)
+	}
+
+	return s.st.SetRelationApplicationSettings(ctx, relationUUID, applicationID, settings)
 }
 
 // RelationUnitInScopeByID returns a boolean to indicate whether the given

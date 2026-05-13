@@ -5,6 +5,7 @@ package scriptlet
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/juju/juju/core/application"
 	"github.com/juju/juju/core/logger"
+	corerelation "github.com/juju/juju/core/relation"
 	corestatus "github.com/juju/juju/core/status"
 	"github.com/juju/juju/core/watcher"
 	"github.com/juju/juju/domain/deployment/charm"
@@ -405,6 +407,62 @@ func (r *applicationRunner) applyStatusUpdate(ctx context.Context, appUUID appli
 	return r.config.StatusService.SetApplicationStatusByUUID(ctx, appUUID, statusInfo)
 }
 
+// applyRelationStateUpdates converts StateUpdates from a relation event
+// into a map[string]string and persists them as relation application settings.
+// Starlark values are converted to their Go string representation.
+func (r *applicationRunner) applyRelationStateUpdates(
+	ctx context.Context,
+	appUUID application.UUID,
+	relationUUID string,
+	updates *StateUpdates,
+) error {
+	if updates == nil || len(updates.Updates) == 0 {
+		return nil
+	}
+
+	relUUID := corerelation.UUID(relationUUID)
+
+	settings := make(map[string]string, len(updates.Updates))
+	for _, u := range updates.Updates {
+		val, err := starlarkValueToString(u.Value)
+		if err != nil {
+			return internalerrors.Errorf("converting state %q: %w", u.Name, err)
+		}
+		settings[u.Name] = val
+	}
+
+	r.config.Logger.Debugf(ctx, "applying relation settings for %q rel %s: %v",
+		appUUID, relationUUID, settings)
+
+	return r.config.RelationService.SetRelationApplicationSettings(ctx, relUUID, appUUID, settings)
+}
+
+// starlarkValueToString converts a starlark.Value to its Go string
+// representation for storage as relation application settings.
+func starlarkValueToString(v starlark.Value) (string, error) {
+	switch val := v.(type) {
+	case starlark.String:
+		return string(val), nil
+	case starlark.Int:
+		i, ok := val.Int64()
+		if !ok {
+			return val.String(), nil
+		}
+		return fmt.Sprintf("%d", i), nil
+	case starlark.Float:
+		return fmt.Sprintf("%g", float64(val)), nil
+	case starlark.Bool:
+		if val {
+			return "true", nil
+		}
+		return "false", nil
+	case starlark.NoneType:
+		return "", nil
+	default:
+		return v.String(), nil
+	}
+}
+
 func configToStarlarkDict(config charm.Config) (*starlark.Dict, error) {
 	keys := make([]string, 0, len(config))
 	for key := range config {
@@ -483,17 +541,18 @@ func (r *applicationRunner) handleRelationChanges(
 			event := starform.EventObject{
 				Name:  "relation_created",
 				Attrs: attrs,
-<<<<<<< HEAD
-				State: &OnRelationCreatedState{},
-=======
 				State: createdState,
->>>>>>> 8cab9be120 (feat: config changed intent)
 			}
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_created for %q rel %s: %v",
 					appUUID, relUUID, err)
-			} else if err := r.applyStatusUpdate(ctx, appUUID, &createdState.StatusUpdate); err != nil {
-				logger.Errorf(ctx, "applying status from relation_created for %q: %v", appUUID, err)
+			} else {
+				if err := r.applyStatusUpdate(ctx, appUUID, &createdState.StatusUpdate); err != nil {
+					logger.Errorf(ctx, "applying status from relation_created for %q: %v", appUUID, err)
+				}
+				if err := r.applyRelationStateUpdates(ctx, appUUID, relUUID, &createdState.StateUpdates); err != nil {
+					logger.Errorf(ctx, "applying state from relation_created for %q rel %s: %v", appUUID, relUUID, err)
+				}
 			}
 
 			// Also fire relation-joined for the application itself
@@ -502,17 +561,18 @@ func (r *applicationRunner) handleRelationChanges(
 			joinEvent := starform.EventObject{
 				Name:  "relation_joined",
 				Attrs: attrs,
-<<<<<<< HEAD
-				State: &OnRelationJoinedState{},
-=======
 				State: joinedState,
->>>>>>> 8cab9be120 (feat: config changed intent)
 			}
 			if err := r.scriptSet.Handle(ctx, &joinEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_joined for %q rel %s: %v",
 					appUUID, relUUID, err)
-			} else if err := r.applyStatusUpdate(ctx, appUUID, &joinedState.StatusUpdate); err != nil {
-				logger.Errorf(ctx, "applying status from relation_joined for %q: %v", appUUID, err)
+			} else {
+				if err := r.applyStatusUpdate(ctx, appUUID, &joinedState.StatusUpdate); err != nil {
+					logger.Errorf(ctx, "applying status from relation_joined for %q: %v", appUUID, err)
+				}
+				if err := r.applyRelationStateUpdates(ctx, appUUID, relUUID, &joinedState.StateUpdates); err != nil {
+					logger.Errorf(ctx, "applying state from relation_joined for %q rel %s: %v", appUUID, relUUID, err)
+				}
 			}
 		} else {
 			// Existing relation changed — dispatch relation-changed.
@@ -525,8 +585,13 @@ func (r *applicationRunner) handleRelationChanges(
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_changed for %q rel %s: %v",
 					appUUID, relUUID, err)
-			} else if err := r.applyStatusUpdate(ctx, appUUID, &changedState.StatusUpdate); err != nil {
-				logger.Errorf(ctx, "applying status from relation_changed for %q: %v", appUUID, err)
+			} else {
+				if err := r.applyStatusUpdate(ctx, appUUID, &changedState.StatusUpdate); err != nil {
+					logger.Errorf(ctx, "applying status from relation_changed for %q: %v", appUUID, err)
+				}
+				if err := r.applyRelationStateUpdates(ctx, appUUID, relUUID, &changedState.StateUpdates); err != nil {
+					logger.Errorf(ctx, "applying state from relation_changed for %q rel %s: %v", appUUID, relUUID, err)
+				}
 			}
 		}
 	}
@@ -545,8 +610,13 @@ func (r *applicationRunner) handleRelationChanges(
 			if err := r.scriptSet.Handle(ctx, &departEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_departed for %q rel %s: %v",
 					appUUID, relUUID, err)
-			} else if err := r.applyStatusUpdate(ctx, appUUID, &departedState.StatusUpdate); err != nil {
-				logger.Errorf(ctx, "applying status from relation_departed for %q: %v", appUUID, err)
+			} else {
+				if err := r.applyStatusUpdate(ctx, appUUID, &departedState.StatusUpdate); err != nil {
+					logger.Errorf(ctx, "applying status from relation_departed for %q: %v", appUUID, err)
+				}
+				if err := r.applyRelationStateUpdates(ctx, appUUID, relUUID, &departedState.StateUpdates); err != nil {
+					logger.Errorf(ctx, "applying state from relation_departed for %q rel %s: %v", appUUID, relUUID, err)
+				}
 			}
 
 			brokenState := &OnRelationBrokenState{}
@@ -558,8 +628,11 @@ func (r *applicationRunner) handleRelationChanges(
 			if err := r.scriptSet.Handle(ctx, &brokenEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_broken for %q rel %s: %v",
 					appUUID, relUUID, err)
-			} else if err := r.applyStatusUpdate(ctx, appUUID, &brokenState.StatusUpdate); err != nil {
-				logger.Errorf(ctx, "applying status from relation_broken for %q: %v", appUUID, err)
+			} else {
+				if err := r.applyStatusUpdate(ctx, appUUID, &brokenState.StatusUpdate); err != nil {
+					logger.Errorf(ctx, "applying status from relation_broken for %q: %v", appUUID, err)
+				}
+				// No state updates on broken — relation is being removed.
 			}
 
 			delete(knownRelations, relUUID)
@@ -702,6 +775,10 @@ type RelationService interface {
 	// lifecycle changes (created, broken) for the given application.
 	// Returns relation UUIDs on change.
 	WatchRelationsLifeSuspendedStatusForApplication(ctx context.Context, appUUID application.UUID) (watcher.StringsWatcher, error)
+
+	// SetRelationApplicationSettings sets the application settings for the
+	// given relation and application.
+	SetRelationApplicationSettings(ctx context.Context, relationUUID corerelation.UUID, appUUID application.UUID, settings map[string]string) error
 }
 
 // StatusService defines the status domain service methods needed
