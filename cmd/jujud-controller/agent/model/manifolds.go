@@ -55,6 +55,7 @@ import (
 	"github.com/juju/juju/internal/worker/remoterelationconsumer/offererrelations"
 	"github.com/juju/juju/internal/worker/remoterelationconsumer/offererunitrelations"
 	"github.com/juju/juju/internal/worker/removal"
+	"github.com/juju/juju/internal/worker/scriptlet"
 	"github.com/juju/juju/internal/worker/secretsdrainworker"
 	"github.com/juju/juju/internal/worker/secretspruner"
 	"github.com/juju/juju/internal/worker/singular"
@@ -309,6 +310,14 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 			ModelTag:           modelTag,
 			Clock:              config.Clock,
 			Logger:             config.LoggingContext.GetLogger("juju.worker.charmrevisioner"),
+		})),
+
+		scriptletWorkerName: ifNotMigrating(scriptlet.Manifold(scriptlet.ManifoldConfig{
+			DomainServicesName:  domainServicesName,
+			ClockName:           clockName,
+			NewWorker:           scriptlet.NewWorker,
+			GetScriptletService: scriptlet.GetScriptletService,
+			Logger:              config.LoggingContext.GetLogger("juju.worker.scriptlet"),
 		})),
 
 		remoteRelationConsumerName: ifNotMigrating(remoterelationconsumer.Manifold(remoterelationconsumer.ManifoldConfig{
@@ -629,6 +638,7 @@ const (
 	remoteRelationConsumerName   = "remote-relation-consumer"
 	remoteRelationOffererName    = "remote-relation-offerer"
 	removalName                  = "removal"
+	scriptletWorkerName          = "scriptlet"
 	storageProvisionerName       = "storage-provisioner"
 	undertakerName               = "undertaker"
 	logSinkName                  = "log-sink"

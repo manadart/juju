@@ -88,6 +88,8 @@ import (
 	resolveState "github.com/juju/juju/domain/resolve/state"
 	resourceservice "github.com/juju/juju/domain/resource/service"
 	resourcestate "github.com/juju/juju/domain/resource/state"
+	scriptletservice "github.com/juju/juju/domain/scriptlet/service"
+	scriptletstate "github.com/juju/juju/domain/scriptlet/state"
 	secretservice "github.com/juju/juju/domain/secret/service"
 	secretstate "github.com/juju/juju/domain/secret/state"
 	secretbackendservice "github.com/juju/juju/domain/secretbackend/service"
@@ -324,6 +326,15 @@ func (s *ModelServices) Resolve() *resolveservice.WatchableService {
 	return resolveservice.NewWatchableService(
 		resolveState.NewState(changestream.NewTxnRunnerFactory(s.modelDB)),
 		s.modelWatcherFactory("resolve"),
+	)
+}
+
+// Scriptlet returns the scriptlet service for managing agentless
+// scriptlet charms.
+func (s *ModelServices) Scriptlet() *scriptletservice.WatchableService {
+	return scriptletservice.NewWatchableService(
+		scriptletstate.NewState(changestream.NewTxnRunnerFactory(s.modelDB)),
+		s.modelWatcherFactory("scriptlet"),
 	)
 }
 

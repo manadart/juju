@@ -49,6 +49,7 @@ import (
 	removalservice "github.com/juju/juju/domain/removal/service"
 	resolveservice "github.com/juju/juju/domain/resolve/service"
 	resourceservice "github.com/juju/juju/domain/resource/service"
+	scriptletservice "github.com/juju/juju/domain/scriptlet/service"
 	secretservice "github.com/juju/juju/domain/secret/service"
 	secretbackendservice "github.com/juju/juju/domain/secretbackend/service"
 	statusservice "github.com/juju/juju/domain/status/service"
@@ -173,6 +174,8 @@ type ModelDomainServices interface {
 	Relation() *relationservice.WatchableService
 	// Resource returns the service for managing resources.
 	Resource() *resourceservice.Service
+	// Scriptlet returns the service for managing scriptlet applications.
+	Scriptlet() *scriptletservice.WatchableService
 	// Removal returns the service for managing entity removal.
 	Removal() *removalservice.WatchableService
 	// AgentPassword returns the service for managing agent passwords.
