@@ -55,6 +55,10 @@ type State interface {
 	// application identified by its UUID.
 	GetApplicationScriptlet(ctx context.Context, appUUID string) (string, error)
 
+	// ApplicationExists returns true if an application with the given
+	// name already exists.
+	ApplicationExists(ctx context.Context, name string) (bool, error)
+
 	// DeployScriptlet registers the scriptlet charm and creates the
 	// application entity in a single atomic transaction.
 	DeployScriptlet(ctx context.Context, args DeployScriptletArgs) error
@@ -131,7 +135,8 @@ func (s *Service) GetApplicationScriptlet(ctx context.Context, appUUID coreappli
 }
 
 // DeployScriptlet registers the scriptlet charm and creates the application
-// entity in one atomic operation.
+// entity in one atomic operation. Returns AlreadyExists if the application
+// name is already taken.
 func (s *Service) DeployScriptlet(ctx context.Context, args DeployScriptletArgs) error {
 	if !application.IsValidApplicationName(args.ApplicationName) {
 		return errors.Errorf("application name %q is not valid", args.ApplicationName).
@@ -153,6 +158,16 @@ func (s *Service) DeployScriptlet(ctx context.Context, args DeployScriptletArgs)
 			return errors.Errorf("unknown relation scope %q for %q", r.Scope, r.Name).Add(coreerrors.NotValid)
 		}
 	}
+
+	exists, err := s.st.ApplicationExists(ctx, args.ApplicationName)
+	if err != nil {
+		return errors.Errorf("checking application existence: %w", err)
+	}
+	if exists {
+		return errors.Errorf("application %q already exists", args.ApplicationName).
+			Add(coreerrors.AlreadyExists)
+	}
+
 	return s.st.DeployScriptlet(ctx, args)
 }
 

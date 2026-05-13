@@ -139,9 +139,39 @@ WHERE  a.uuid = $applicationUUID.uuid
 	return true, nil
 }
 
+// ApplicationExists returns true if an application with the given name
+// already exists.
+func (st *State) ApplicationExists(ctx context.Context, name string) (bool, error) {
+	db, err := st.DB(ctx)
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+
+	ref := deployRef{Name: name}
+	stmt, err := st.Prepare(`
+SELECT a.uuid AS &applicationUUID.uuid
+FROM   application AS a
+WHERE  a.name = $deployRef.name
+`, ref, applicationUUID{})
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+
+	var result applicationUUID
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		return tx.Query(ctx, stmt, ref).Get(&result)
+	})
+	if errors.Is(err, sqlair.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+	return true, nil
+}
+
 // DeployScriptlet registers a scriptlet charm and creates the application
-// entity in a single atomic transaction. Re-deploying an existing
-// application name replaces all prior rows idempotently.
+// entity in a single atomic transaction.
 func (st *State) DeployScriptlet(ctx context.Context, args scriptletservice.DeployScriptletArgs) error {
 	db, err := st.DB(ctx)
 	if err != nil {
@@ -160,89 +190,6 @@ func (st *State) DeployScriptlet(ctx context.Context, args scriptletservice.Depl
 	relations, err := encodeRelations(charmID.String(), args.Relations)
 	if err != nil {
 		return errors.Errorf("encoding charm relations: %w", err)
-	}
-
-	ref := deployRef{Name: args.ApplicationName, ReferenceName: args.ApplicationName}
-
-	// ── Idempotent deletes (FK-safe order) ────────────────────────────────
-	// application_endpoint → application_status → application_platform →
-	// application → charm_metadata → charm_relation → scriptlet_charm → charm
-
-	delEndpointsStmt, err := st.Prepare(`
-DELETE FROM application_endpoint
-WHERE application_uuid IN (SELECT uuid FROM application WHERE name = $deployRef.name)
-`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete application_endpoint: %w", err)
-	}
-
-	delStatusStmt, err := st.Prepare(`
-DELETE FROM application_status
-WHERE application_uuid IN (SELECT uuid FROM application WHERE name = $deployRef.name)
-`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete application_status: %w", err)
-	}
-
-	delPlatformStmt, err := st.Prepare(`
-DELETE FROM application_platform
-WHERE application_uuid IN (SELECT uuid FROM application WHERE name = $deployRef.name)
-`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete application_platform: %w", err)
-	}
-
-	delAppStmt, err := st.Prepare(`
-DELETE FROM application
-WHERE name = $deployRef.name
-  AND charm_uuid IN (
-    SELECT c.uuid FROM charm c
-    JOIN scriptlet_charm sc ON sc.charm_uuid = c.uuid
-    WHERE c.reference_name = $deployRef.reference_name
-  )
-`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete application: %w", err)
-	}
-
-	delCharmMetaStmt, err := st.Prepare(`
-DELETE FROM charm_metadata
-WHERE charm_uuid IN (
-    SELECT c.uuid FROM charm c
-    JOIN scriptlet_charm sc ON sc.charm_uuid = c.uuid
-    WHERE c.reference_name = $deployRef.reference_name
-)`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete charm_metadata: %w", err)
-	}
-
-	delCharmRelStmt, err := st.Prepare(`
-DELETE FROM charm_relation
-WHERE charm_uuid IN (
-    SELECT c.uuid FROM charm c
-    JOIN scriptlet_charm sc ON sc.charm_uuid = c.uuid
-    WHERE c.reference_name = $deployRef.reference_name
-)`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete charm_relation: %w", err)
-	}
-
-	delScriptletStmt, err := st.Prepare(`
-DELETE FROM scriptlet_charm
-WHERE charm_uuid IN (
-    SELECT uuid FROM charm WHERE reference_name = $deployRef.reference_name
-)`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete scriptlet_charm: %w", err)
-	}
-
-	delCharmStmt, err := st.Prepare(`
-DELETE FROM charm
-WHERE reference_name = $deployRef.reference_name
-  AND uuid IN (SELECT charm_uuid FROM scriptlet_charm)
-`, deployRef{})
-	if err != nil {
-		return errors.Errorf("preparing delete charm: %w", err)
 	}
 
 	// ── Insert statements ──────────────────────────────────────────────────
@@ -350,33 +297,21 @@ VALUES ($insertApplicationEndpoint.uuid, $insertApplicationEndpoint.application_
 		return errors.Errorf("preparing insert application_endpoint: %w", err)
 	}
 
-	return db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		// Delete existing rows in FK-safe order.
-		if err := tx.Query(ctx, delEndpointsStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old application_endpoint: %w", err)
-		}
-		if err := tx.Query(ctx, delStatusStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old application_status: %w", err)
-		}
-		if err := tx.Query(ctx, delPlatformStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old application_platform: %w", err)
-		}
-		if err := tx.Query(ctx, delAppStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old application: %w", err)
-		}
-		if err := tx.Query(ctx, delCharmMetaStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old charm_metadata: %w", err)
-		}
-		if err := tx.Query(ctx, delCharmRelStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old charm_relation: %w", err)
-		}
-		if err := tx.Query(ctx, delScriptletStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old scriptlet_charm: %w", err)
-		}
-		if err := tx.Query(ctx, delCharmStmt, ref).Run(); err != nil {
-			return errors.Errorf("deleting old charm: %w", err)
-		}
+	channelRow := insertApplicationChannel{
+		ApplicationUUID: appID.String(),
+		Track:           "",
+		Risk:            "stable",
+		Branch:          "",
+	}
+	insChannelStmt, err := st.Prepare(`
+INSERT INTO application_channel (application_uuid, track, risk, branch)
+VALUES ($insertApplicationChannel.application_uuid, $insertApplicationChannel.track, $insertApplicationChannel.risk, $insertApplicationChannel.branch)
+`, channelRow)
+	if err != nil {
+		return errors.Errorf("preparing insert application_channel: %w", err)
+	}
 
+	return db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		// Insert charm rows.
 		if err := tx.Query(ctx, insCharmStmt, charmRow).Run(); err != nil {
 			return errors.Errorf("inserting charm: %w", err)
@@ -402,6 +337,9 @@ VALUES ($insertApplicationEndpoint.uuid, $insertApplicationEndpoint.application_
 		}
 		if err := tx.Query(ctx, insStatusStmt, statusRow).Run(); err != nil {
 			return errors.Errorf("inserting application_status: %w", err)
+		}
+		if err := tx.Query(ctx, insChannelStmt, channelRow).Run(); err != nil {
+			return errors.Errorf("inserting application_channel: %w", err)
 		}
 		for _, rel := range relations {
 			epID, err := uuid.NewUUID()

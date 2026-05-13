@@ -96,6 +96,13 @@ type insertApplicationEndpoint struct {
 	CharmRelationUUID string         `db:"charm_relation_uuid"`
 }
 
+type insertApplicationChannel struct {
+	ApplicationUUID string `db:"application_uuid"`
+	Track           string `db:"track"`
+	Risk            string `db:"risk"`
+	Branch          string `db:"branch"`
+}
+
 type charmRelationUUID struct {
 	UUID string `db:"uuid"`
 }
