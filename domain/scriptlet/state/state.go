@@ -129,17 +129,23 @@ WHERE  a.uuid = $applicationUUID.uuid
 		return false, errors.Capture(err)
 	}
 
-	var result applicationUUID
+	found := false
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		return tx.Query(ctx, stmt, entity).Get(&result)
+		var result applicationUUID
+		err := tx.Query(ctx, stmt, entity).Get(&result)
+		if errors.Is(err, sqlair.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		found = true
+		return nil
 	})
-	if errors.Is(err, sqlair.ErrNoRows) {
-		return false, nil
-	}
 	if err != nil {
 		return false, errors.Capture(err)
 	}
-	return true, nil
+	return found, nil
 }
 
 // ApplicationExists returns true if an application with the given name
