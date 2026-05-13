@@ -10,21 +10,18 @@ def on_config_changed(event):
     _stub_intent(event, "config changed")
 
 def on_relation_created(event):
-    _stub_intent(event, "relation created")
+    juju.status_set("active", message = "relation created")
 
 def on_relation_joined(event):
-    _stub_intent(event, "relation joined")
+    juju.status_set("active", message = "related")
+    juju.state_set("controller-uuid", event.controller_uuid)
+    juju.state_set("model-name", event.model_name)
 
 def on_relation_changed(event):
-    _stub_intent(event, "relation changed")
+    juju.status_set("active", message = "relation changed")
 
 def on_relation_departed(event):
-    _stub_intent(event, "relation departed")
+    juju.status_set("waiting", message = "relation departed")
 
 def on_relation_broken(event):
-    _stub_intent(event, "relation broken")
-
-def _stub_intent(event, message):
-    juju.status_set("active", message = message)
-    juju.state_set("last_event", event.name)
-    juju.state_set("last_message", message)
+    juju.status_set("waiting", message = "relation broken")
