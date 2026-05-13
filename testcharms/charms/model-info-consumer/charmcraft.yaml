@@ -1,19 +1,15 @@
 type: charm
-bases:
-  - build-on:
-      - name: ubuntu
-        channel: "22.04"
-        architectures:
-          - amd64
-    run-on:
-      - name: ubuntu
-        channel: "22.04"
-        architectures:
-          - amd64
-      - name: ubuntu
-        channel: "24.04"
-        architectures:
-          - amd64
+name: model-info-consumer
+summary: Test charm that consumes scriptlet model information
+description: |
+  This test charm consumes the scriptlet-model-info relation interface and
+  records the remote controller UUID and model name for an action to report.
+requires:
+  model-info:
+    interface: scriptlet-model-info
+platforms:
+  "ubuntu@22.04:amd64":
+  "ubuntu@24.04:amd64":
 parts:
   include:
     plugin: dump
@@ -23,5 +19,3 @@ parts:
       - actions.yaml
       - hooks
       - manifest.yaml
-      - metadata.yaml
-
