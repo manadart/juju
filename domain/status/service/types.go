@@ -27,6 +27,7 @@ type Application struct {
 	Status          status.StatusInfo
 	Relations       []relation.UUID
 	Subordinate     bool
+	Unitless        bool
 	CharmLocator    charm.CharmLocator
 	CharmVersion    string
 	Platform        deployment.Platform

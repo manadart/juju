@@ -200,13 +200,21 @@ func printApplications(tw *ansiterm.TabWriter, fs formattedStatus) {
 		if len(version) > maxVersionWidth {
 			version = version[:truncatedWidth] + ellipsis
 		}
-		w.Print(appName, version)
+		displayName := appName
+		if app.Unitless {
+			displayName = "⚡" + appName
+		}
+		w.Print(displayName, version)
 		w.PrintStatus(app.StatusInfo.Current)
-		scale, warn := fs.applicationScale(appName)
-		if warn {
-			w.PrintColor(output.WarningHighlight, scale)
+		if app.Unitless {
+			w.PrintColor(output.GoodHighlight, "⚡")
 		} else {
-			w.Print(scale)
+			scale, warn := fs.applicationScale(appName)
+			if warn {
+				w.PrintColor(output.WarningHighlight, scale)
+			} else {
+				w.Print(scale)
+			}
 		}
 
 		w.Print(app.CharmName, app.CharmChannel)

@@ -178,6 +178,7 @@ type applicationStatusDetails struct {
 	ChannelBranch          string               `db:"channel_branch"`
 	LifeID                 domainlife.Life      `db:"life_id"`
 	Subordinate            bool                 `db:"subordinate"`
+	Unitless               bool                 `db:"unitless"`
 	StatusID               int                  `db:"status_id"`
 	Message                string               `db:"message"`
 	Data                   []byte               `db:"data"`

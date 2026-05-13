@@ -1051,6 +1051,7 @@ func (c *statusContext) processApplication(ctx context.Context, name string, app
 		Exposed:          application.Exposed,
 		ExposedEndpoints: exposedEndpoints,
 		Life:             application.Life,
+		Unitless:         application.Unitless,
 		Status: params.DetailedStatus{
 			Status: appStatus.Status.String(),
 			Info:   appStatus.Message,

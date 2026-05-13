@@ -1159,7 +1159,7 @@ func (s *Service) decodeApplicationStatusDetails(app status.Application) (Applic
 	}
 
 	var decodedStatus corestatus.StatusInfo
-	if app.Status.Status != status.WorkloadStatusUnset {
+	if app.Unitless || app.Status.Status != status.WorkloadStatusUnset {
 		decodedStatus, err = decodeApplicationStatus(app.Status)
 		if err != nil {
 			return Application{}, errors.Errorf("decoding application status: %w", err)
@@ -1194,6 +1194,7 @@ func (s *Service) decodeApplicationStatusDetails(app status.Application) (Applic
 		Status:          decodedStatus,
 		Relations:       app.Relations,
 		Subordinate:     app.Subordinate,
+		Unitless:        app.Unitless,
 		CharmLocator:    app.CharmLocator,
 		CharmVersion:    app.CharmVersion,
 		Platform:        app.Platform,

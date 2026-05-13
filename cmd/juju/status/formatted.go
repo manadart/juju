@@ -133,6 +133,7 @@ type applicationStatus struct {
 	Address          string                                 `json:"address,omitempty" yaml:"address,omitempty"`
 	Exposed          bool                                   `json:"exposed" yaml:"exposed"`
 	Life             string                                 `json:"life,omitempty" yaml:"life,omitempty"`
+	Unitless         bool                                   `json:"unitless,omitempty" yaml:"unitless,omitempty"`
 	StatusInfo       statusInfoContents                     `json:"application-status,omitempty" yaml:"application-status"`
 	Relations        map[string][]applicationStatusRelation `json:"relations,omitempty" yaml:"relations,omitempty"`
 	SubordinateTo    []string                               `json:"subordinate-to,omitempty" yaml:"subordinate-to,omitempty"`

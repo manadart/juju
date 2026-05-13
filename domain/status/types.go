@@ -25,6 +25,7 @@ type Application struct {
 	Units           map[unit.Name]Unit
 	Relations       []relation.UUID
 	Subordinate     bool
+	Unitless        bool
 	CharmLocator    charm.CharmLocator
 	CharmVersion    string
 	LXDProfile      []byte

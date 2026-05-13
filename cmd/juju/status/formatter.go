@@ -243,6 +243,7 @@ func (sf *statusFormatter) formatApplication(name string, application params.App
 		Scale:            application.Scale,
 		ProviderId:       application.ProviderId,
 		Address:          application.PublicAddress,
+		Unitless:         application.Unitless,
 		Relations:        sf.processApplicationRelations(name, application.Relations),
 		CanUpgradeTo:     application.CanUpgradeTo,
 		SubordinateTo:    application.SubordinateTo,

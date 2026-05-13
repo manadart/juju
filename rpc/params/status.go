@@ -160,10 +160,13 @@ type ApplicationStatus struct {
 	WorkloadVersion  string                     `json:"workload-version"`
 	EndpointBindings map[string]string          `json:"endpoint-bindings"`
 
-	// The following are for CAAS models.
+// The following are for CAAS models.
 	Scale         int    `json:"int,omitempty"`
 	ProviderId    string `json:"provider-id,omitempty"`
 	PublicAddress string `json:"public-address"`
+
+	// Unitless is true when the application is a unitless charm.
+	Unitless bool `json:"unitless,omitempty"`
 }
 
 // RemoteApplicationStatus holds status info about a remote application.

@@ -1623,6 +1623,10 @@ SELECT
 		SELECT 1 FROM v_application_exposed_endpoint AS ae
 		WHERE ae.application_uuid = a.uuid
 	) AS &applicationStatusDetails.exposed,
+	EXISTS(
+		SELECT 1 FROM scriptlet_charm AS sc
+		WHERE sc.application_name = a.name
+	) AS &applicationStatusDetails.unitless,
 	awv.version AS &applicationStatusDetails.workload_version
 FROM application AS a
 JOIN application_platform AS ap ON ap.application_uuid = a.uuid
@@ -1721,6 +1725,7 @@ ORDER BY a.name, re.relation_uuid;
 			ID:          s.UUID,
 			Life:        s.LifeID,
 			Subordinate: s.Subordinate,
+			Unitless:    s.Unitless,
 			Status: status.StatusInfo[status.WorkloadStatusType]{
 				Status:  statusID,
 				Message: s.Message,
