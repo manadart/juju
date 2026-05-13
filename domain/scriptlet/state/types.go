@@ -103,6 +103,19 @@ type insertApplicationChannel struct {
 	Branch          string `db:"branch"`
 }
 
+type insertCharmConfig struct {
+	CharmUUID    string  `db:"charm_uuid"`
+	Key          string  `db:"key"`
+	TypeID       int     `db:"type_id"`
+	DefaultValue *string `db:"default_value"`
+	Description  string  `db:"description"`
+}
+
+type insertApplicationConfigHash struct {
+	ApplicationUUID string `db:"application_uuid"`
+	SHA256          string `db:"sha256"`
+}
+
 type charmRelationUUID struct {
 	UUID string `db:"uuid"`
 }

@@ -5,7 +5,10 @@ package state
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
+	"sort"
 	"time"
 
 	"github.com/canonical/sqlair"
@@ -159,15 +162,16 @@ WHERE  a.name = $deployRef.name
 
 	var result applicationUUID
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		return tx.Query(ctx, stmt, ref).Get(&result)
+		err := tx.Query(ctx, stmt, ref).Get(&result)
+		if errors.Is(err, sqlair.ErrNoRows) {
+			return nil
+		}
+		return err
 	})
-	if errors.Is(err, sqlair.ErrNoRows) {
-		return false, nil
-	}
 	if err != nil {
 		return false, errors.Capture(err)
 	}
-	return true, nil
+	return result.UUID != "", nil
 }
 
 // DeployScriptlet registers a scriptlet charm and creates the application
@@ -229,6 +233,14 @@ INSERT INTO charm_relation (*) VALUES ($insertCharmRelation.*)
 `, insertCharmRelation{})
 	if err != nil {
 		return errors.Errorf("preparing insert charm_relation: %w", err)
+	}
+
+	configRows := encodeCharmConfig(charmID.String(), args.Config)
+	insConfigStmt, err := st.Prepare(`
+INSERT INTO charm_config (*) VALUES ($insertCharmConfig.*)
+`, insertCharmConfig{})
+	if err != nil {
+		return errors.Errorf("preparing insert charm_config: %w", err)
 	}
 
 	charmMetaRow := insertCharmMetadata{
@@ -311,6 +323,18 @@ VALUES ($insertApplicationChannel.application_uuid, $insertApplicationChannel.tr
 		return errors.Errorf("preparing insert application_channel: %w", err)
 	}
 
+	configHashRow := insertApplicationConfigHash{
+		ApplicationUUID: appID.String(),
+		SHA256:          hashCharmConfigDefaults(configRows),
+	}
+	insConfigHashStmt, err := st.Prepare(`
+INSERT INTO application_config_hash (application_uuid, sha256)
+VALUES ($insertApplicationConfigHash.application_uuid, $insertApplicationConfigHash.sha256)
+`, configHashRow)
+	if err != nil {
+		return errors.Errorf("preparing insert application_config_hash: %w", err)
+	}
+
 	return db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		// Insert charm rows.
 		if err := tx.Query(ctx, insCharmStmt, charmRow).Run(); err != nil {
@@ -322,6 +346,11 @@ VALUES ($insertApplicationChannel.application_uuid, $insertApplicationChannel.tr
 		if len(relations) > 0 {
 			if err := tx.Query(ctx, insRelStmt, relations).Run(); err != nil {
 				return errors.Errorf("inserting charm_relation: %w", err)
+			}
+		}
+		if len(configRows) > 0 {
+			if err := tx.Query(ctx, insConfigStmt, configRows).Run(); err != nil {
+				return errors.Errorf("inserting charm_config: %w", err)
 			}
 		}
 		if err := tx.Query(ctx, insCharmMetaStmt, charmMetaRow).Run(); err != nil {
@@ -340,6 +369,9 @@ VALUES ($insertApplicationChannel.application_uuid, $insertApplicationChannel.tr
 		}
 		if err := tx.Query(ctx, insChannelStmt, channelRow).Run(); err != nil {
 			return errors.Errorf("inserting application_channel: %w", err)
+		}
+		if err := tx.Query(ctx, insConfigHashStmt, configHashRow).Run(); err != nil {
+			return errors.Errorf("inserting application_config_hash: %w", err)
 		}
 		for _, rel := range relations {
 			epID, err := uuid.NewUUID()
@@ -403,6 +435,59 @@ func encodeRole(role string) (int, error) {
 	}
 }
 
+func encodeCharmConfig(charmUUID string, opts []scriptletservice.ScriptletConfigOption) []insertCharmConfig {
+	rows := make([]insertCharmConfig, 0, len(opts))
+	for _, opt := range opts {
+		var defaultValue *string
+		if opt.DefaultValue != "" {
+			v := opt.DefaultValue
+			defaultValue = &v
+		}
+		rows = append(rows, insertCharmConfig{
+			CharmUUID:    charmUUID,
+			Key:          opt.Key,
+			TypeID:       encodeConfigType(opt.Type),
+			DefaultValue: defaultValue,
+			Description:  opt.Description,
+		})
+	}
+	return rows
+}
+
+func encodeConfigType(t string) int {
+	switch t {
+	case "string":
+		return 0
+	case "int":
+		return 1
+	case "float":
+		return 2
+	case "boolean":
+		return 3
+	case "secret":
+		return 4
+	default:
+		return 0 // default to string
+	}
+}
+
+// hashCharmConfigDefaults produces a SHA-256 hash of the config defaults
+// keyed by option name. This seeds the application_config_hash row so the
+// change stream watcher can detect subsequent config mutations.
+func hashCharmConfigDefaults(rows []insertCharmConfig) string {
+	h := sha256.New()
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].Key < rows[j].Key
+	})
+	for _, r := range rows {
+		_, _ = h.Write([]byte(r.Key))
+		if r.DefaultValue != nil {
+			_, _ = h.Write([]byte(*r.DefaultValue))
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
 // coreerrors is used above for NotFound — keep the import used.
 var _ = coreerrors.NotFound
 
@@ -419,7 +504,8 @@ func (st *State) GetApplicationScriptlet(ctx context.Context, appUUID string) (s
 	stmt, err := st.Prepare(`
 SELECT sc.scriptlet AS &scriptletContent.scriptlet
 FROM   application AS a
-JOIN   scriptlet_charm AS sc ON sc.charm_uuid = a.uuid
+JOIN   charm AS c ON c.uuid = a.charm_uuid
+JOIN   scriptlet_charm AS sc ON sc.charm_uuid = c.uuid
 WHERE  a.uuid = $applicationUUID.uuid
 `, entity, scriptletContent{})
 	if err != nil {

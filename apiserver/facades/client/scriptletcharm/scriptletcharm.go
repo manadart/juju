@@ -62,10 +62,21 @@ func (api *API) Deploy(ctx context.Context, args params.DeployScriptletCharmArgs
 		}
 	}
 
+	config := make([]scriptletservice.ScriptletConfigOption, len(args.Config))
+	for i, c := range args.Config {
+		config[i] = scriptletservice.ScriptletConfigOption{
+			Key:          c.Key,
+			Type:         c.Type,
+			Description:  c.Description,
+			DefaultValue: c.DefaultValue,
+		}
+	}
+
 	err := api.service.DeployScriptlet(ctx, scriptletservice.DeployScriptletArgs{
 		ApplicationName: args.ApplicationName,
 		Scriptlet:       args.Scriptlet,
 		Relations:       relations,
+		Config:          config,
 	})
 	return params.ErrorResult{Error: apiservererrors.ServerError(err)}
 }

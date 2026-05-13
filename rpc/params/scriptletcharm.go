@@ -14,10 +14,19 @@ type ScriptletRelation struct {
 	Limit     int    `json:"limit,omitempty"`
 }
 
+// ScriptletConfigOption describes a single config option for a scriptlet charm.
+type ScriptletConfigOption struct {
+	Key          string `json:"key"`
+	Type         string `json:"type"`
+	Description  string `json:"description,omitempty"`
+	DefaultValue string `json:"default-value,omitempty"`
+}
+
 // DeployScriptletCharmArgs contains all data needed to register a scriptlet
 // charm and create the corresponding application in one shot.
 type DeployScriptletCharmArgs struct {
-	ApplicationName string              `json:"application-name"`
-	Scriptlet       string              `json:"scriptlet"`
-	Relations       []ScriptletRelation `json:"relations,omitempty"`
+	ApplicationName string                  `json:"application-name"`
+	Scriptlet       string                  `json:"scriptlet"`
+	Relations       []ScriptletRelation     `json:"relations,omitempty"`
+	Config          []ScriptletConfigOption `json:"config,omitempty"`
 }

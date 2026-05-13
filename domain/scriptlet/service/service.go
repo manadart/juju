@@ -27,12 +27,21 @@ type ScriptletRelation struct {
 	Limit     int
 }
 
+// ScriptletConfigOption describes a single config option for the charm.
+type ScriptletConfigOption struct {
+	Key          string
+	Type         string // "string" | "int" | "float" | "boolean" | "secret"
+	Description  string
+	DefaultValue string
+}
+
 // DeployScriptletArgs contains everything needed to register a scriptlet charm
 // and create the corresponding application in one shot.
 type DeployScriptletArgs struct {
 	ApplicationName string
 	Scriptlet       string
 	Relations       []ScriptletRelation
+	Config          []ScriptletConfigOption
 }
 
 // State describes retrieval and persistence methods for scriptlet
