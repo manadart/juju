@@ -302,7 +302,7 @@ Workstreams:
      field.
 
 7. Wire the manual demo.
-   - Deploy the normal charm and scriptlet charm.
+   - Deploy the normal charm and unitless charm with `juju deploy-unitless`.
    - Relate them.
    - Change config or relation data.
    - Show the scriptlet worker running, applying intents, and updating

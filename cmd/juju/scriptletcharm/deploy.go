@@ -24,7 +24,7 @@ import (
 )
 
 const deployDoc = `
-Deploys a scriptlet charm from a source directory.
+Deploys a unitless charm from a source directory.
 
 The directory must contain metadata.yaml, scriptlet.yaml, and the Starform
 .star file(s) referenced by scriptlet.yaml. The command registers the charm
@@ -32,11 +32,11 @@ source with the model and creates a unitless application bound to it.
 `
 
 const deployExamples = `
-    juju deploy-scriptlet-charm ./scriptlet
-    juju deploy-scriptlet-charm ./scriptlet myapp
+    juju deploy-unitless ./scriptlet
+    juju deploy-unitless ./scriptlet myapp
 `
 
-// NewDeployCommand returns a command to deploy scriptlet charms from source.
+// NewDeployCommand returns a command to deploy unitless charms from source.
 func NewDeployCommand() cmd.Command {
 	command := &deployCommand{}
 	command.newClient = func(caller base.APICallCloser) ScriptletCharmAPI {
@@ -62,9 +62,9 @@ type deployCommand struct {
 // Info implements Command.Info.
 func (c *deployCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
-		Name:     "deploy-scriptlet-charm",
-		Args:     "<scriptlet charm directory> [<application name>]",
-		Purpose:  "Deploys a scriptlet charm from a source directory.",
+		Name:     "deploy-unitless",
+		Args:     "<unitless charm directory> [<application name>]",
+		Purpose:  "Deploys a unitless charm from a source directory.",
 		Doc:      deployDoc,
 		Examples: deployExamples,
 		SeeAlso: []string{
@@ -76,7 +76,7 @@ func (c *deployCommand) Info() *cmd.Info {
 // Init implements Command.Init.
 func (c *deployCommand) Init(args []string) error {
 	if len(args) < 1 {
-		return errors.New("deploy-scriptlet-charm requires a scriptlet charm directory")
+		return errors.New("deploy-unitless requires a unitless charm directory")
 	}
 	c.scriptletPath = args[0]
 	if len(args) > 1 {
@@ -149,7 +149,7 @@ func readScriptletCharmDir(path string) (params.DeployScriptletCharmArgs, string
 		return params.DeployScriptletCharmArgs{}, "", errors.Annotatef(err, "checking scriptlet path %q", path)
 	}
 	if !info.IsDir() {
-		return params.DeployScriptletCharmArgs{}, "", errors.Errorf("%q is not a directory; deploy-scriptlet-charm requires a charm source directory", path)
+		return params.DeployScriptletCharmArgs{}, "", errors.Errorf("%q is not a directory; deploy-unitless requires a charm source directory", path)
 	}
 
 	metadata, err := readCharmMetadata(path)
