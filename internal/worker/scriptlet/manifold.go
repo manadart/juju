@@ -24,6 +24,7 @@ type ManifoldConfig struct {
 	GetScriptletService   func(dependency.Getter, string) (ScriptletService, error)
 	GetApplicationService func(dependency.Getter, string) (ApplicationService, error)
 	GetRelationService    func(dependency.Getter, string) (RelationService, error)
+	GetStatusService      func(dependency.Getter, string) (StatusService, error)
 	Logger                logger.Logger
 }
 
@@ -46,6 +47,9 @@ func (cfg ManifoldConfig) Validate() error {
 	}
 	if cfg.GetRelationService == nil {
 		return jujuerrors.NotValidf("nil GetRelationService")
+	}
+	if cfg.GetStatusService == nil {
+		return jujuerrors.NotValidf("nil GetStatusService")
 	}
 	if cfg.Logger == nil {
 		return jujuerrors.NotValidf("nil Logger")
@@ -80,6 +84,11 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 				return nil, errors.Capture(err)
 			}
 
+			statusService, err := cfg.GetStatusService(getter, cfg.DomainServicesName)
+			if err != nil {
+				return nil, errors.Capture(err)
+			}
+
 			var clk clock.Clock
 			if err := getter.Get(cfg.ClockName, &clk); err != nil {
 				return nil, errors.Capture(err)
@@ -89,6 +98,7 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 				ScriptletService:   scriptletService,
 				ApplicationService: applicationService,
 				RelationService:    relationService,
+				StatusService:      statusService,
 				Clock:              clk,
 				Logger:             cfg.Logger,
 			})
@@ -130,11 +140,22 @@ func GetRelationService(getter dependency.Getter, name string) (RelationService,
 	return domainServices.Relation(), nil
 }
 
+// GetStatusService extracts the StatusService from the
+// dependency engine via the DomainServices.
+func GetStatusService(getter dependency.Getter, name string) (StatusService, error) {
+	var domainServices services.DomainServices
+	if err := getter.Get(name, &domainServices); err != nil {
+		return nil, errors.Capture(err)
+	}
+	return domainServices.Status(), nil
+}
+
 // Config holds the dependencies needed by the scriptlet worker.
 type Config struct {
 	ScriptletService   ScriptletService
 	ApplicationService ApplicationService
 	RelationService    RelationService
+	StatusService      StatusService
 	Clock              clock.Clock
 	Logger             logger.Logger
 }
@@ -149,6 +170,9 @@ func (c Config) Validate() error {
 	}
 	if c.RelationService == nil {
 		return jujuerrors.NotValidf("nil RelationService")
+	}
+	if c.StatusService == nil {
+		return jujuerrors.NotValidf("nil StatusService")
 	}
 	if c.Clock == nil {
 		return jujuerrors.NotValidf("nil Clock")

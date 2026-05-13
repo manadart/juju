@@ -319,6 +319,7 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 			GetScriptletService:   scriptlet.GetScriptletService,
 			GetApplicationService: scriptlet.GetApplicationService,
 			GetRelationService:    scriptlet.GetRelationService,
+			GetStatusService:      scriptlet.GetStatusService,
 			Logger:                config.LoggingContext.GetLogger("juju.worker.scriptlet"),
 		})),
 

@@ -17,6 +17,7 @@ import (
 
 	"github.com/juju/juju/core/application"
 	"github.com/juju/juju/core/logger"
+	corestatus "github.com/juju/juju/core/status"
 	"github.com/juju/juju/core/watcher"
 	"github.com/juju/juju/domain/deployment/charm"
 	internalerrors "github.com/juju/juju/internal/errors"
@@ -198,6 +199,7 @@ func (w *Worker) handleApplicationChanges(ctx context.Context, appUUIDs []string
 				ScriptletService:   w.config.ScriptletService,
 				ApplicationService: w.config.ApplicationService,
 				RelationService:    w.config.RelationService,
+				StatusService:      w.config.StatusService,
 				Logger:             w.config.Logger,
 			})
 		})
@@ -239,6 +241,7 @@ type applicationRunnerConfig struct {
 	ScriptletService   ScriptletService
 	ApplicationService ApplicationService
 	RelationService    RelationService
+	StatusService      StatusService
 	Logger             logger.Logger
 }
 
@@ -366,13 +369,40 @@ func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID app
 	}
 	attrs["config"] = configDict
 
+	state := &OnConfigChangedState{}
 	event := starform.EventObject{
 		Name:  "config_changed",
-		Attrs: attrs,
-		// TODO(kcza): complete this
-		State: &OnConfigChangedState{},
+		Attrs: starlark.StringDict{"config": configDict},
+		State: state,
 	}
-	return r.scriptSet.Handle(ctx, &event)
+	if err := r.scriptSet.Handle(ctx, &event); err != nil {
+		return internalerrors.Errorf("handling config_changed scriptlet: %w", err)
+	}
+
+	// Apply intents from the scriptlet execution.
+	if err := r.applyStatusUpdate(ctx, appUUID, &state.StatusUpdate); err != nil {
+		return internalerrors.Errorf("applying status from config_changed: %w", err)
+	}
+
+	return nil
+}
+
+// applyStatusUpdate applies a status update intent from the scriptlet to the
+// application via the status domain service. If the scriptlet did not set a
+// status (empty Status field), this is a no-op.
+func (r *applicationRunner) applyStatusUpdate(ctx context.Context, appUUID application.UUID, update *StatusUpdate) error {
+	if update == nil || update.Status == "" {
+		return nil
+	}
+
+	r.config.Logger.Debugf(ctx, "applying status %q message %q for %q",
+		update.Status, update.Message, appUUID)
+
+	statusInfo := corestatus.StatusInfo{
+		Status:  corestatus.Status(update.Status),
+		Message: update.Message,
+	}
+	return r.config.StatusService.SetApplicationStatusByUUID(ctx, appUUID, statusInfo)
 }
 
 func configToStarlarkDict(config charm.Config) (*starlark.Dict, error) {
@@ -449,36 +479,54 @@ func (r *applicationRunner) handleRelationChanges(
 				Members:      make(map[string]bool),
 			}
 
+			createdState := &OnRelationCreatedState{}
 			event := starform.EventObject{
 				Name:  "relation_created",
 				Attrs: attrs,
+<<<<<<< HEAD
 				State: &OnRelationCreatedState{},
+=======
+				State: createdState,
+>>>>>>> 8cab9be120 (feat: config changed intent)
 			}
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_created for %q rel %s: %v",
 					appUUID, relUUID, err)
+			} else if err := r.applyStatusUpdate(ctx, appUUID, &createdState.StatusUpdate); err != nil {
+				logger.Errorf(ctx, "applying status from relation_created for %q: %v", appUUID, err)
 			}
 
 			// Also fire relation-joined for the application itself
 			// (the scriptlet app "joins" the relation).
+			joinedState := &OnRelationJoinedState{}
 			joinEvent := starform.EventObject{
 				Name:  "relation_joined",
 				Attrs: attrs,
+<<<<<<< HEAD
 				State: &OnRelationJoinedState{},
+=======
+				State: joinedState,
+>>>>>>> 8cab9be120 (feat: config changed intent)
 			}
 			if err := r.scriptSet.Handle(ctx, &joinEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_joined for %q rel %s: %v",
 					appUUID, relUUID, err)
+			} else if err := r.applyStatusUpdate(ctx, appUUID, &joinedState.StatusUpdate); err != nil {
+				logger.Errorf(ctx, "applying status from relation_joined for %q: %v", appUUID, err)
 			}
 		} else {
 			// Existing relation changed — dispatch relation-changed.
+			changedState := &OnRelationChangedState{}
 			event := starform.EventObject{
 				Name:  "relation_changed",
 				Attrs: attrs,
+				State: changedState,
 			}
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_changed for %q rel %s: %v",
 					appUUID, relUUID, err)
+			} else if err := r.applyStatusUpdate(ctx, appUUID, &changedState.StatusUpdate); err != nil {
+				logger.Errorf(ctx, "applying status from relation_changed for %q: %v", appUUID, err)
 			}
 		}
 	}
@@ -488,35 +536,37 @@ func (r *applicationRunner) handleRelationChanges(
 		if !seen[relUUID] {
 			// Relation is gone — dispatch relation-departed then
 			// relation-broken.
+			departedState := &OnRelationDepartedState{}
 			departEvent := starform.EventObject{
 				Name:  "relation_departed",
 				Attrs: attrs,
+				State: departedState,
 			}
 			if err := r.scriptSet.Handle(ctx, &departEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_departed for %q rel %s: %v",
 					appUUID, relUUID, err)
+			} else if err := r.applyStatusUpdate(ctx, appUUID, &departedState.StatusUpdate); err != nil {
+				logger.Errorf(ctx, "applying status from relation_departed for %q: %v", appUUID, err)
 			}
 
+			brokenState := &OnRelationBrokenState{}
 			brokenEvent := starform.EventObject{
 				Name:  "relation_broken",
 				Attrs: attrs,
+				State: brokenState,
 			}
 			if err := r.scriptSet.Handle(ctx, &brokenEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_broken for %q rel %s: %v",
 					appUUID, relUUID, err)
+			} else if err := r.applyStatusUpdate(ctx, appUUID, &brokenState.StatusUpdate); err != nil {
+				logger.Errorf(ctx, "applying status from relation_broken for %q: %v", appUUID, err)
 			}
 
 			delete(knownRelations, relUUID)
 		}
 	}
 
-	event := starform.EventObject{
-		Name:  "relation_created",
-		Attrs: attrs,
-		// TODO(kcza): complete this
-		State: &OnRelationCreatedState{},
-	}
-	return r.scriptSet.Handle(ctx, &event)
+	return nil
 }
 
 func (r *applicationRunner) environmentAttrs(ctx context.Context) (starlark.StringDict, error) {
@@ -652,6 +702,14 @@ type RelationService interface {
 	// lifecycle changes (created, broken) for the given application.
 	// Returns relation UUIDs on change.
 	WatchRelationsLifeSuspendedStatusForApplication(ctx context.Context, appUUID application.UUID) (watcher.StringsWatcher, error)
+}
+
+// StatusService defines the status domain service methods needed
+// by the scriptlet worker to set application status.
+type StatusService interface {
+	// SetApplicationStatusByUUID sets the workload status for the
+	// application identified by UUID.
+	SetApplicationStatusByUUID(ctx context.Context, appUUID application.UUID, statusInfo corestatus.StatusInfo) error
 }
 
 // dbScriptSource implements starform.ScriptSource by returning the

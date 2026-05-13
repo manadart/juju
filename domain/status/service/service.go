@@ -302,6 +302,33 @@ func (s *Service) SetApplicationStatus(
 	return nil
 }
 
+// SetApplicationStatusByUUID validates and sets the given application status
+// using the application UUID directly, without requiring a name lookup.
+// This is used by the scriptlet worker which already holds the application UUID.
+func (s *Service) SetApplicationStatusByUUID(
+	ctx context.Context,
+	applicationID coreapplication.UUID,
+	statusInfo corestatus.StatusInfo,
+) error {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	if err := applicationID.Validate(); err != nil {
+		return errors.Errorf("application UUID: %w", err)
+	}
+
+	encodedStatus, err := encodeWorkloadStatus(statusInfo)
+	if err != nil {
+		return errors.Errorf("encoding workload status: %w", err)
+	}
+
+	if err := s.modelState.SetApplicationStatus(ctx, applicationID, encodedStatus); err != nil {
+		return errors.Capture(err)
+	}
+
+	return nil
+}
+
 // SetOperatorStatus validates and sets the given operator status for a given
 // application, overwriting any current status data. If returns an error
 // satisfying [statuserrors.ApplicationNotFound] if the application doesn't
