@@ -25,6 +25,9 @@ import (
 const (
 	// States which report the state of the worker.
 	stateStarted = "started"
+
+	stubModelName      = "TODO-model-name"
+	stubControllerUUID = "TODO-controller-uuid"
 )
 
 const setStatusSafety = starlark.NotSafe
@@ -422,6 +425,10 @@ func (r *applicationRunner) handleRelationChanges(
 ) error {
 	logger := r.config.Logger
 	logger.Debugf(ctx, "relation changes for %q: %v", appUUID, relationUUIDs)
+	attrs := starlark.StringDict{
+		"model_name":      starlark.String(stubModelName),
+		"controller_uuid": starlark.String(stubControllerUUID),
+	}
 
 	// For each relation UUID in the change set, determine if it's new
 	// (relation-created) or removed (relation-broken).
@@ -437,7 +444,8 @@ func (r *applicationRunner) handleRelationChanges(
 			}
 
 			event := starform.EventObject{
-				Name: "relation_created",
+				Name:  "relation_created",
+				Attrs: attrs,
 			}
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_created for %q rel %s: %v",
@@ -447,7 +455,8 @@ func (r *applicationRunner) handleRelationChanges(
 			// Also fire relation-joined for the application itself
 			// (the scriptlet app "joins" the relation).
 			joinEvent := starform.EventObject{
-				Name: "relation_joined",
+				Name:  "relation_joined",
+				Attrs: attrs,
 			}
 			if err := r.scriptSet.Handle(ctx, &joinEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_joined for %q rel %s: %v",
@@ -456,7 +465,8 @@ func (r *applicationRunner) handleRelationChanges(
 		} else {
 			// Existing relation changed — dispatch relation-changed.
 			event := starform.EventObject{
-				Name: "relation_changed",
+				Name:  "relation_changed",
+				Attrs: attrs,
 			}
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_changed for %q rel %s: %v",
@@ -471,7 +481,8 @@ func (r *applicationRunner) handleRelationChanges(
 			// Relation is gone — dispatch relation-departed then
 			// relation-broken.
 			departEvent := starform.EventObject{
-				Name: "relation_departed",
+				Name:  "relation_departed",
+				Attrs: attrs,
 			}
 			if err := r.scriptSet.Handle(ctx, &departEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_departed for %q rel %s: %v",
@@ -479,7 +490,8 @@ func (r *applicationRunner) handleRelationChanges(
 			}
 
 			brokenEvent := starform.EventObject{
-				Name: "relation_broken",
+				Name:  "relation_broken",
+				Attrs: attrs,
 			}
 			if err := r.scriptSet.Handle(ctx, &brokenEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_broken for %q rel %s: %v",
@@ -491,7 +503,8 @@ func (r *applicationRunner) handleRelationChanges(
 	}
 
 	event := starform.EventObject{
-		Name: "relation_created",
+		Name:  "relation_created",
+		Attrs: attrs,
 		// TODO(kcza): complete this
 		State: &OnRelationCreatedState{},
 	}
