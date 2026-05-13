@@ -31,12 +31,8 @@ func NewClient(st base.APICallCloser, options ...Option) *Client {
 	return &Client{ClientFacade: frontend, facade: backend}
 }
 
-// Register records the raw scriptlet text for a scriptlet charm.
-func (c *Client) Register(ctx context.Context, applicationName, scriptlet string) error {
-	args := params.RegisterScriptletCharmArgs{
-		ApplicationName: applicationName,
-		Scriptlet:       scriptlet,
-	}
+// Register records the scriptlet charm in the model.
+func (c *Client) Register(ctx context.Context, args params.RegisterScriptletCharmArgs) error {
 	var result params.ErrorResult
 	if err := c.facade.FacadeCall(ctx, "Register", args, &result); err != nil {
 		return errors.Trace(err)

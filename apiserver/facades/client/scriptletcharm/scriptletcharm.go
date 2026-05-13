@@ -41,7 +41,7 @@ func (api *API) checkCanWrite(ctx context.Context) error {
 	return api.authorizer.HasPermission(ctx, permission.WriteAccess, api.modelTag)
 }
 
-// Register records a scriptlet charm's raw scriptlet text.
+// Register records a scriptlet charm into the model.
 func (api *API) Register(ctx context.Context, args params.RegisterScriptletCharmArgs) params.ErrorResult {
 	if err := api.checkCanWrite(ctx); err != nil {
 		return params.ErrorResult{Error: apiservererrors.ServerError(err)}
@@ -50,9 +50,22 @@ func (api *API) Register(ctx context.Context, args params.RegisterScriptletCharm
 		return params.ErrorResult{Error: apiservererrors.ServerError(err)}
 	}
 
+	relations := make([]scriptletservice.ScriptletRelation, len(args.Relations))
+	for i, r := range args.Relations {
+		relations[i] = scriptletservice.ScriptletRelation{
+			Name:      r.Name,
+			Role:      r.Role,
+			Interface: r.Interface,
+			Scope:     r.Scope,
+			Optional:  r.Optional,
+			Limit:     r.Limit,
+		}
+	}
+
 	err := api.service.RegisterScriptlet(ctx, scriptletservice.RegisterScriptletArgs{
 		ApplicationName: args.ApplicationName,
 		Scriptlet:       args.Scriptlet,
+		Relations:       relations,
 	})
 	return params.ErrorResult{Error: apiservererrors.ServerError(err)}
 }

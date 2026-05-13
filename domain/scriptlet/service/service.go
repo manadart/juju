@@ -15,6 +15,24 @@ import (
 	"github.com/juju/juju/internal/errors"
 )
 
+// ScriptletRelation describes one relation endpoint from a scriptlet charm's
+// metadata.
+type ScriptletRelation struct {
+	Name      string
+	Role      string // "provider" | "requirer" | "peer"
+	Interface string
+	Scope     string // "global" | "container"; defaults to "global" if empty
+	Optional  bool
+	Limit     int
+}
+
+// RegisterScriptletArgs contains everything needed to record a scriptlet charm.
+type RegisterScriptletArgs struct {
+	ApplicationName string
+	Scriptlet       string
+	Relations       []ScriptletRelation
+}
+
 // State describes retrieval and persistence methods for scriptlet
 // applications.
 type State interface {
@@ -26,8 +44,9 @@ type State interface {
 	// initial query for watching scriptlet application changes.
 	NamespaceForWatchScriptletApplications() (string, eventsource.NamespaceQuery)
 
-	// RegisterScriptlet records the raw scriptlet text for an application name.
-	RegisterScriptlet(ctx context.Context, applicationName, scriptlet string) error
+	// RegisterScriptlet records the scriptlet charm into the charm table
+	// and its relations into charm_relation.
+	RegisterScriptlet(ctx context.Context, args RegisterScriptletArgs) error
 }
 
 // ApplicationService provides access to the application domain service
@@ -60,17 +79,9 @@ type Service struct {
 	st State
 }
 
-// RegisterScriptletArgs contains the raw scriptlet text to register.
-type RegisterScriptletArgs struct {
-	ApplicationName string
-	Scriptlet       string
-}
-
 // NewService returns a new service reference wrapping the input state.
 func NewService(st State) *Service {
-	return &Service{
-		st: st,
-	}
+	return &Service{st: st}
 }
 
 // GetScriptletApplicationNames returns the names of all applications
@@ -83,7 +94,7 @@ func (s *Service) GetScriptletApplicationNames(ctx context.Context) ([]string, e
 	return names, nil
 }
 
-// RegisterScriptlet records the raw scriptlet text for an application name.
+// RegisterScriptlet records the scriptlet charm in the model database.
 func (s *Service) RegisterScriptlet(ctx context.Context, args RegisterScriptletArgs) error {
 	if !application.IsValidApplicationName(args.ApplicationName) {
 		return errors.Errorf("application name %q is not valid", args.ApplicationName).
@@ -92,7 +103,20 @@ func (s *Service) RegisterScriptlet(ctx context.Context, args RegisterScriptletA
 	if strings.TrimSpace(args.Scriptlet) == "" {
 		return errors.Errorf("scriptlet is empty").Add(coreerrors.NotValid)
 	}
-	return s.st.RegisterScriptlet(ctx, args.ApplicationName, args.Scriptlet)
+	for _, r := range args.Relations {
+		if r.Name == "" {
+			return errors.Errorf("relation name is empty").Add(coreerrors.NotValid)
+		}
+		switch r.Role {
+		case "provider", "requirer", "peer":
+		default:
+			return errors.Errorf("unknown relation role %q for %q", r.Role, r.Name).Add(coreerrors.NotValid)
+		}
+		if r.Scope != "" && r.Scope != "global" && r.Scope != "container" {
+			return errors.Errorf("unknown relation scope %q for %q", r.Scope, r.Name).Add(coreerrors.NotValid)
+		}
+	}
+	return s.st.RegisterScriptlet(ctx, args)
 }
 
 // WatchableService provides the API for managing scriptlet applications

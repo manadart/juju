@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"sort"
+
 	"github.com/juju/errors"
 	"github.com/juju/names/v6"
 	"gopkg.in/yaml.v2"
@@ -19,6 +21,7 @@ import (
 	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/juju/block"
 	"github.com/juju/juju/cmd/modelcmd"
+	"github.com/juju/juju/rpc/params"
 )
 
 const deployDoc = `
@@ -45,7 +48,7 @@ func NewDeployCommand() cmd.Command {
 
 // ScriptletCharmAPI defines the client methods required by the command.
 type ScriptletCharmAPI interface {
-	Register(ctx context.Context, applicationName, scriptlet string) error
+	Register(ctx context.Context, args params.RegisterScriptletCharmArgs) error
 	Close() error
 }
 
@@ -91,11 +94,11 @@ func (c *deployCommand) Init(args []string) error {
 
 // Run implements Command.Run.
 func (c *deployCommand) Run(ctx *cmd.Context) error {
-	scriptlet, defaultApplicationName, err := readScriptlet(ctx.AbsPath(c.scriptletPath))
+	registerArgs, defaultApplicationName, err := readScriptlet(ctx.AbsPath(c.scriptletPath))
 	if err != nil {
 		return errors.Trace(err)
 	}
-	if strings.TrimSpace(scriptlet) == "" {
+	if strings.TrimSpace(registerArgs.Scriptlet) == "" {
 		return errors.New("scriptlet file is empty")
 	}
 
@@ -109,6 +112,7 @@ func (c *deployCommand) Run(ctx *cmd.Context) error {
 	if err := names.ValidateApplicationName(applicationName); err != nil {
 		return errors.Trace(err)
 	}
+	registerArgs.ApplicationName = applicationName
 
 	apiRoot, err := c.NewAPIRoot(ctx)
 	if err != nil {
@@ -117,7 +121,7 @@ func (c *deployCommand) Run(ctx *cmd.Context) error {
 	client := c.newClient(apiRoot)
 	defer client.Close()
 
-	err = client.Register(ctx, applicationName, scriptlet)
+	err = client.Register(ctx, registerArgs)
 	return block.ProcessBlockedError(err, block.BlockChange)
 }
 
@@ -125,69 +129,107 @@ type scriptletConfig struct {
 	Sources []string `yaml:"sources"`
 }
 
-type charmMetadata struct {
-	Name string `yaml:"name"`
+type charmMetadataRelation struct {
+	Interface string `yaml:"interface"`
+	Scope     string `yaml:"scope"`
+	Optional  bool   `yaml:"optional"`
+	Limit     int    `yaml:"limit"`
 }
 
-func readScriptlet(path string) (string, string, error) {
+type charmMetadata struct {
+	Name     string                           `yaml:"name"`
+	Provides map[string]charmMetadataRelation `yaml:"provides"`
+	Requires map[string]charmMetadataRelation `yaml:"requires"`
+	Peers    map[string]charmMetadataRelation `yaml:"peers"`
+}
+
+func readScriptlet(path string) (params.RegisterScriptletCharmArgs, string, error) {
 	info, err := os.Stat(path)
 	if err != nil {
-		return "", "", errors.Annotatef(err, "checking scriptlet path %q", path)
+		return params.RegisterScriptletCharmArgs{}, "", errors.Annotatef(err, "checking scriptlet path %q", path)
 	}
 	if info.IsDir() {
 		return readScriptletCharmDir(path)
 	}
 	if filepath.Ext(path) != ".star" {
-		return "", "", errors.Errorf("scriptlet file %q must have .star extension", path)
+		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("scriptlet file %q must have .star extension", path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", "", errors.Annotatef(err, "reading scriptlet file %q", path)
+		return params.RegisterScriptletCharmArgs{}, "", errors.Annotatef(err, "reading scriptlet file %q", path)
 	}
-	return string(data), "", nil
+	return params.RegisterScriptletCharmArgs{Scriptlet: string(data)}, "", nil
 }
 
-func readScriptletCharmDir(path string) (string, string, error) {
-	applicationName, err := readCharmName(path)
+func readScriptletCharmDir(path string) (params.RegisterScriptletCharmArgs, string, error) {
+	metadata, err := readCharmMetadata(path)
 	if err != nil {
-		return "", "", errors.Trace(err)
+		return params.RegisterScriptletCharmArgs{}, "", errors.Trace(err)
 	}
 
 	config, err := readScriptletConfig(path)
 	if err != nil {
-		return "", "", errors.Trace(err)
+		return params.RegisterScriptletCharmArgs{}, "", errors.Trace(err)
 	}
 	if len(config.Sources) != 1 {
-		return "", "", errors.Errorf("expected exactly one scriptlet source, got %d", len(config.Sources))
+		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("expected exactly one scriptlet source, got %d", len(config.Sources))
 	}
 
 	source := filepath.Clean(config.Sources[0])
 	if filepath.IsAbs(source) || source == ".." || strings.HasPrefix(source, ".."+string(os.PathSeparator)) {
-		return "", "", errors.Errorf("scriptlet source %q escapes charm directory", config.Sources[0])
+		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("scriptlet source %q escapes charm directory", config.Sources[0])
 	}
 	if filepath.Ext(source) != ".star" {
-		return "", "", errors.Errorf("scriptlet source %q must have .star extension", config.Sources[0])
+		return params.RegisterScriptletCharmArgs{}, "", errors.Errorf("scriptlet source %q must have .star extension", config.Sources[0])
 	}
 
 	scriptletPath := filepath.Join(path, source)
 	data, err := os.ReadFile(scriptletPath)
 	if err != nil {
-		return "", "", errors.Annotatef(err, "reading scriptlet file %q", scriptletPath)
+		return params.RegisterScriptletCharmArgs{}, "", errors.Annotatef(err, "reading scriptlet file %q", scriptletPath)
 	}
-	return string(data), applicationName, nil
+
+	args := params.RegisterScriptletCharmArgs{
+		Scriptlet: string(data),
+		Relations: encodeMetadataRelations(metadata),
+	}
+	return args, metadata.Name, nil
 }
 
-func readCharmName(path string) (string, error) {
+func encodeMetadataRelations(metadata charmMetadata) []params.ScriptletRelation {
+	var relations []params.ScriptletRelation
+	for name, r := range metadata.Provides {
+		relations = append(relations, params.ScriptletRelation{
+			Name: name, Role: "provider", Interface: r.Interface,
+			Scope: r.Scope, Optional: r.Optional, Limit: r.Limit,
+		})
+	}
+	for name, r := range metadata.Requires {
+		relations = append(relations, params.ScriptletRelation{
+			Name: name, Role: "requirer", Interface: r.Interface,
+			Scope: r.Scope, Optional: r.Optional, Limit: r.Limit,
+		})
+	}
+	for name, r := range metadata.Peers {
+		relations = append(relations, params.ScriptletRelation{
+			Name: name, Role: "peer", Interface: r.Interface,
+			Scope: r.Scope, Optional: r.Optional, Limit: r.Limit,
+		})
+	}
+	sort.Slice(relations, func(i, j int) bool { return relations[i].Name < relations[j].Name })
+	return relations
+}
+
+func readCharmMetadata(path string) (charmMetadata, error) {
 	data, err := os.ReadFile(filepath.Join(path, "metadata.yaml"))
 	if err != nil {
-		return "", errors.Annotate(err, "reading metadata.yaml")
+		return charmMetadata{}, errors.Annotate(err, "reading metadata.yaml")
 	}
-
 	var metadata charmMetadata
 	if err := yaml.Unmarshal(data, &metadata); err != nil {
-		return "", errors.Annotate(err, "parsing metadata.yaml")
+		return charmMetadata{}, errors.Annotate(err, "parsing metadata.yaml")
 	}
-	return metadata.Name, nil
+	return metadata, nil
 }
 
 func readScriptletConfig(path string) (scriptletConfig, error) {
