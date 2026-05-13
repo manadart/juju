@@ -33,6 +33,7 @@ import (
 	"github.com/juju/juju/cmd/juju/machine"
 	"github.com/juju/juju/cmd/juju/model"
 	"github.com/juju/juju/cmd/juju/resource"
+	"github.com/juju/juju/cmd/juju/scriptletcharm"
 	"github.com/juju/juju/cmd/juju/secretbackends"
 	"github.com/juju/juju/cmd/juju/secrets"
 	"github.com/juju/juju/cmd/juju/space"
@@ -446,6 +447,7 @@ func registerCommands(r commandRegistry) {
 	r.Register(application.NewAddUnitCommand())
 	r.Register(application.NewConfigCommand())
 	r.Register(application.NewDeployCommand())
+	r.Register(scriptletcharm.NewDeployCommand())
 	r.Register(application.NewExposeCommand())
 	r.Register(application.NewUnexposeCommand())
 	r.Register(application.NewApplicationGetConstraintsCommand())

@@ -374,6 +374,9 @@ func (s *modelSchemaSuite) TestModelTables(c *tc.C) {
 		"application_remote_offerer_relation_macaroon",
 		"offer_connection",
 
+		// Scriptlet charms
+		"scriptlet_charm",
+
 		// Operations
 		"operation_action",
 		"operation_machine_task",

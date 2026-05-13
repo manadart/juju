@@ -98,6 +98,7 @@ var facadeVersions = facades.FacadeVersions{
 	"SecretBackendsManager":        {1},
 	"SecretBackendsRotateWatcher":  {1},
 	"SecretsRevisionWatcher":       {1},
+	"ScriptletCharm":               {1},
 	"Secrets":                      {1, 2},
 	"SecretsManager":               {4},
 	"SecretsDrain":                 {1},

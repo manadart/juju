@@ -56,6 +56,7 @@ import (
 	"github.com/juju/juju/apiserver/facades/client/modelupgrader"
 	"github.com/juju/juju/apiserver/facades/client/pinger"
 	"github.com/juju/juju/apiserver/facades/client/resources"
+	"github.com/juju/juju/apiserver/facades/client/scriptletcharm"
 	"github.com/juju/juju/apiserver/facades/client/secretbackends"
 	"github.com/juju/juju/apiserver/facades/client/secrets"
 	"github.com/juju/juju/apiserver/facades/client/spaces"    // ModelUser Write
@@ -211,6 +212,7 @@ func AllFacades() *facade.Registry {
 	secretbackendmanager.Register(registry)
 	secretsmanager.Register(registry)
 	secretsdrain.Register(registry)
+	scriptletcharm.Register(registry)
 	usersecrets.Register(registry)
 	usersecretsdrain.Register(registry)
 	sshclient.Register(registry)
