@@ -1017,7 +1017,10 @@ func (c *statusContext) processApplicationExposedEndpoints(ctx context.Context, 
 func (c *statusContext) processApplication(ctx context.Context, name string, application statusservice.Application) params.ApplicationStatus {
 	exposedEndpoints, err := c.processApplicationExposedEndpoints(ctx, name, application)
 	if err != nil {
-		return params.ApplicationStatus{Err: apiservererrors.ServerError(err)}
+		return params.ApplicationStatus{
+			Err:      apiservererrors.ServerError(err),
+			Unitless: application.Unitless,
+		}
 
 	}
 
@@ -1033,12 +1036,18 @@ func (c *statusContext) processApplication(ctx context.Context, name string, app
 
 	base, err := encodePlatform(application.Platform)
 	if err != nil {
-		return params.ApplicationStatus{Err: apiservererrors.ServerError(err)}
+		return params.ApplicationStatus{
+			Err:      apiservererrors.ServerError(err),
+			Unitless: application.Unitless,
+		}
 	}
 
 	charmURL, err := charms.CharmURLFromLocator(application.CharmLocator.Name, application.CharmLocator)
 	if err != nil {
-		return params.ApplicationStatus{Err: apiservererrors.ServerError(err)}
+		return params.ApplicationStatus{
+			Err:      apiservererrors.ServerError(err),
+			Unitless: application.Unitless,
+		}
 	}
 
 	appStatus := application.Status

@@ -197,6 +197,7 @@ func (sf *statusFormatter) formatMachine(machine params.MachineStatus) machineSt
 }
 
 func (sf *statusFormatter) formatApplication(name string, application params.ApplicationStatus) applicationStatus {
+	unitless := application.Unitless || application.Charm == ""
 	var (
 		charmAlias  = ""
 		charmOrigin = ""
@@ -206,7 +207,7 @@ func (sf *statusFormatter) formatApplication(name string, application params.App
 	if application.Charm == "" {
 		charmAlias = name
 		charmName = name
-		if application.Unitless {
+		if unitless {
 			charmOrigin = "unitless"
 			charmRev = application.CharmRev
 		}
@@ -250,7 +251,7 @@ func (sf *statusFormatter) formatApplication(name string, application params.App
 		Scale:            application.Scale,
 		ProviderId:       application.ProviderId,
 		Address:          application.PublicAddress,
-		Unitless:         application.Unitless,
+		Unitless:         unitless,
 		Relations:        sf.processApplicationRelations(name, application.Relations),
 		CanUpgradeTo:     application.CanUpgradeTo,
 		SubordinateTo:    application.SubordinateTo,

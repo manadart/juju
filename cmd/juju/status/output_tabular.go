@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/distribution/reference"
 	"github.com/juju/ansiterm"
@@ -38,7 +39,18 @@ const (
 	iaasMaxVersionWidth = 15
 	caasMaxVersionWidth = 30
 	maxMessageLength    = 120
+	unitlessMarker      = "\u26a1"
+	wideGlyphPad        = "\u200b"
 )
+
+var unitlessRainbow = []*ansiterm.Context{
+	ansiterm.Foreground(ansiterm.BrightRed).SetStyle(ansiterm.Bold),
+	ansiterm.Foreground(ansiterm.BrightYellow).SetStyle(ansiterm.Bold),
+	ansiterm.Foreground(ansiterm.BrightGreen).SetStyle(ansiterm.Bold),
+	ansiterm.Foreground(ansiterm.BrightCyan).SetStyle(ansiterm.Bold),
+	ansiterm.Foreground(ansiterm.BrightBlue).SetStyle(ansiterm.Bold),
+	ansiterm.Foreground(ansiterm.BrightMagenta).SetStyle(ansiterm.Bold),
+}
 
 // FormatTabular writes a tabular summary of machines, applications, and
 // units. Any subordinate items are indented by two spaces beneath
@@ -130,6 +142,24 @@ func endSection(tw *ansiterm.TabWriter) {
 	tw.Flush()
 }
 
+func printRainbowCell(w *output.Wrapper, colorIndex *int, value any) {
+	printRainbowCellNoTab(w, colorIndex, value)
+	fmt.Fprint(w.TabWriter, "\t")
+}
+
+func printRainbowCellNoTab(w *output.Wrapper, colorIndex *int, value any) {
+	for _, r := range fmt.Sprint(value) {
+		if string(r) == wideGlyphPad {
+			fmt.Fprint(w.TabWriter, string(r))
+			continue
+		}
+		unitlessRainbow[*colorIndex%len(unitlessRainbow)].Fprintf(w.TabWriter, "%c", r)
+		if !unicode.IsSpace(r) {
+			*colorIndex = *colorIndex + 1
+		}
+	}
+}
+
 func printApplications(tw *ansiterm.TabWriter, fs formattedStatus) {
 	maxVersionWidth := iaasMaxVersionWidth
 	if fs.Model.Type == caasModelType {
@@ -202,19 +232,35 @@ func printApplications(tw *ansiterm.TabWriter, fs formattedStatus) {
 		}
 		displayName := appName
 		if app.Unitless {
-			displayName = "⚡" + appName
+			displayName = unitlessMarker + wideGlyphPad + appName + " " + unitlessMarker + wideGlyphPad
+			rainbowIndex := 0
+			printRainbowCell(w, &rainbowIndex, displayName)
+			printRainbowCell(w, &rainbowIndex, version)
+			printRainbowCell(w, &rainbowIndex, app.StatusInfo.Current)
+			printRainbowCell(w, &rainbowIndex, "")
+			printRainbowCell(w, &rainbowIndex, app.CharmName)
+			printRainbowCell(w, &rainbowIndex, app.CharmChannel)
+			printRainbowCell(w, &rainbowIndex, app.CharmRev)
+			if fs.Model.Type == caasModelType {
+				printRainbowCell(w, &rainbowIndex, app.Address)
+			}
+			if app.Exposed {
+				printRainbowCell(w, &rainbowIndex, "yes")
+			} else {
+				printRainbowCell(w, &rainbowIndex, "no")
+			}
+			printRainbowCellNoTab(w, &rainbowIndex, truncateMessage(app.StatusInfo.Message))
+			w.Println()
+			maps.Copy(units, app.Units)
+			continue
 		}
 		w.Print(displayName, version)
 		w.PrintStatus(app.StatusInfo.Current)
-		if app.Unitless {
-			w.PrintColor(output.GoodHighlight, "⚡")
+		scale, warn := fs.applicationScale(appName)
+		if warn {
+			w.PrintColor(output.WarningHighlight, scale)
 		} else {
-			scale, warn := fs.applicationScale(appName)
-			if warn {
-				w.PrintColor(output.WarningHighlight, scale)
-			} else {
-				w.Print(scale)
-			}
+			w.Print(scale)
 		}
 
 		w.Print(app.CharmName, app.CharmChannel)
