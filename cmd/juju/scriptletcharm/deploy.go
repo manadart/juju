@@ -7,9 +7,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
-
 	"sort"
+	"strings"
 
 	"github.com/juju/errors"
 	"github.com/juju/names/v6"
@@ -94,6 +93,8 @@ func (c *deployCommand) Init(args []string) error {
 
 // Run implements Command.Run.
 func (c *deployCommand) Run(ctx *cmd.Context) error {
+	playClintEastwood(ctx, ctx.Stdout)
+
 	registerArgs, defaultApplicationName, err := readScriptlet(ctx.AbsPath(c.scriptletPath))
 	if err != nil {
 		return errors.Trace(err)
