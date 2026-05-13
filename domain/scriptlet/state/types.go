@@ -116,6 +116,18 @@ type insertApplicationConfigHash struct {
 	SHA256          string `db:"sha256"`
 }
 
+type insertApplicationConfig struct {
+	ApplicationUUID string `db:"application_uuid"`
+	Key             string `db:"key"`
+	TypeID          int    `db:"type_id"`
+	Value           string `db:"value"`
+}
+
+type insertApplicationSetting struct {
+	ApplicationUUID string `db:"application_uuid"`
+	Trust           bool   `db:"trust"`
+}
+
 type charmRelationUUID struct {
 	UUID string `db:"uuid"`
 }

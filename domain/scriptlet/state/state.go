@@ -335,6 +335,26 @@ VALUES ($insertApplicationConfigHash.application_uuid, $insertApplicationConfigH
 		return errors.Errorf("preparing insert application_config_hash: %w", err)
 	}
 
+	appConfigRows := encodeApplicationConfig(appID.String(), args.Config)
+	insAppConfigStmt, err := st.Prepare(`
+INSERT INTO application_config (*) VALUES ($insertApplicationConfig.*)
+`, insertApplicationConfig{})
+	if err != nil {
+		return errors.Errorf("preparing insert application_config: %w", err)
+	}
+
+	settingRow := insertApplicationSetting{
+		ApplicationUUID: appID.String(),
+		Trust:           false,
+	}
+	insSettingStmt, err := st.Prepare(`
+INSERT INTO application_setting (application_uuid, trust)
+VALUES ($insertApplicationSetting.application_uuid, $insertApplicationSetting.trust)
+`, settingRow)
+	if err != nil {
+		return errors.Errorf("preparing insert application_setting: %w", err)
+	}
+
 	return db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		// Insert charm rows.
 		if err := tx.Query(ctx, insCharmStmt, charmRow).Run(); err != nil {
@@ -372,6 +392,14 @@ VALUES ($insertApplicationConfigHash.application_uuid, $insertApplicationConfigH
 		}
 		if err := tx.Query(ctx, insConfigHashStmt, configHashRow).Run(); err != nil {
 			return errors.Errorf("inserting application_config_hash: %w", err)
+		}
+		if len(appConfigRows) > 0 {
+			if err := tx.Query(ctx, insAppConfigStmt, appConfigRows).Run(); err != nil {
+				return errors.Errorf("inserting application_config: %w", err)
+			}
+		}
+		if err := tx.Query(ctx, insSettingStmt, settingRow).Run(); err != nil {
+			return errors.Errorf("inserting application_setting: %w", err)
 		}
 		for _, rel := range relations {
 			epID, err := uuid.NewUUID()
@@ -433,6 +461,19 @@ func encodeRole(role string) (int, error) {
 	default:
 		return -1, errors.Errorf("unknown relation role %q", role)
 	}
+}
+
+func encodeApplicationConfig(appUUID string, opts []scriptletservice.ScriptletConfigOption) []insertApplicationConfig {
+	rows := make([]insertApplicationConfig, 0, len(opts))
+	for _, opt := range opts {
+		rows = append(rows, insertApplicationConfig{
+			ApplicationUUID: appUUID,
+			Key:             opt.Key,
+			TypeID:          encodeConfigType(opt.Type),
+			Value:           opt.DefaultValue,
+		})
+	}
+	return rows
 }
 
 func encodeCharmConfig(charmUUID string, opts []scriptletservice.ScriptletConfigOption) []insertCharmConfig {
