@@ -112,11 +112,11 @@ func (w *Worker) loop() error {
 		case <-w.catacomb.Dying():
 			return w.catacomb.ErrDying()
 
-		case appNames, ok := <-appWatcher.Changes():
+		case appUUIDs, ok := <-appWatcher.Changes():
 			if !ok {
 				return internalerrors.New("application watcher closed")
 			}
-			if err := w.handleApplicationChanges(ctx, appNames); err != nil {
+			if err := w.handleApplicationChanges(ctx, appUUIDs); err != nil {
 				return internalerrors.Errorf("handling application changes: %w", err)
 			}
 		}
@@ -124,16 +124,17 @@ func (w *Worker) loop() error {
 }
 
 // handleApplicationChanges processes changes to scriptlet applications,
-// starting per-application workers via the Runner.
-func (w *Worker) handleApplicationChanges(ctx context.Context, appNames []string) error {
+// starting per-application workers via the Runner. appUUIDs are the
+// UUIDs of applications whose charm is a scriptlet.
+func (w *Worker) handleApplicationChanges(ctx context.Context, appUUIDs []string) error {
 	logger := w.config.Logger
 
-	for _, appName := range appNames {
-		logger.Infof(ctx, "ensuring scriptlet runner for application %q", appName)
+	for _, appUUID := range appUUIDs {
+		logger.Infof(ctx, "ensuring scriptlet runner for application %q", appUUID)
 
-		err := w.runner.StartWorker(ctx, appName, func(ctx context.Context) (worker.Worker, error) {
+		err := w.runner.StartWorker(ctx, appUUID, func(ctx context.Context) (worker.Worker, error) {
 			return newApplicationRunner(applicationRunnerConfig{
-				AppName: appName,
+				AppUUID: appUUID,
 				Logger:  w.config.Logger,
 			})
 		})
@@ -141,7 +142,7 @@ func (w *Worker) handleApplicationChanges(ctx context.Context, appNames []string
 			continue
 		}
 		if err != nil {
-			return internalerrors.Errorf("starting runner for %q: %w", appName, err)
+			return internalerrors.Errorf("starting runner for %q: %w", appUUID, err)
 		}
 	}
 
@@ -171,7 +172,7 @@ type applicationRunner struct {
 }
 
 type applicationRunnerConfig struct {
-	AppName string
+	AppUUID string
 	Logger  logger.Logger
 }
 
@@ -196,7 +197,7 @@ func newApplicationRunner(config applicationRunnerConfig) (*applicationRunner, e
 	}
 
 	if err := catacomb.Invoke(catacomb.Plan{
-		Name: "scriptlet-" + config.AppName,
+		Name: "scriptlet-" + config.AppUUID,
 		Site: &r.catacomb,
 		Work: r.loop,
 	}); err != nil {
@@ -221,7 +222,7 @@ func (r *applicationRunner) loop() error {
 	defer cancel()
 
 	logger := r.config.Logger
-	logger.Infof(ctx, "scriptlet runner started for %q", r.config.AppName)
+	logger.Infof(ctx, "scriptlet runner started for %q", r.config.AppUUID)
 
 	// TODO(hackathon): Watch for config changes, relation changes,
 	// and lifecycle events for this application. Dispatch events to
@@ -251,7 +252,7 @@ func (r *applicationRunner) scopedContext() (context.Context, context.CancelFunc
 // the scriptlet worker.
 type ScriptletService interface {
 	// WatchScriptletApplications returns a watcher that emits
-	// application names when scriptlet applications are added,
+	// application UUIDs when scriptlet applications are added,
 	// removed, or changed.
 	WatchScriptletApplications(ctx context.Context) (watcher.StringsWatcher, error)
 }

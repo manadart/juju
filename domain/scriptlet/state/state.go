@@ -68,11 +68,71 @@ WHERE is_scriptlet = TRUE
 }
 
 // NamespaceForWatchScriptletApplications returns the namespace and
-// initial query for watching scriptlet application changes.
-func (st *State) NamespaceForWatchScriptletApplications() (string, eventsource.NamespaceQuery) {
-	return "charm", func(ctx context.Context, runner database.TxnRunner) ([]string, error) {
-		return st.GetScriptletApplicationNames(ctx)
+// initial query for watching scriptlet application changes. The initial
+// query returns the UUIDs of all applications whose charm has a row in
+// the scriptlet_charm table.
+func (st *State) InitialWatchStatementScriptletApplications() (string, eventsource.NamespaceQuery) {
+	queryFunc := func(ctx context.Context, runner database.TxnRunner) ([]string, error) {
+		stmt, err := st.Prepare(`
+SELECT a.uuid AS &applicationUUID.uuid
+FROM   application AS a
+JOIN   charm AS c ON c.uuid = a.charm_uuid
+JOIN   scriptlet_charm AS sc ON sc.charm_uuid = c.uuid
+`, applicationUUID{})
+		if err != nil {
+			return nil, errors.Capture(err)
+		}
+
+		var result []applicationUUID
+		err = runner.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+			if err := tx.Query(ctx, stmt).GetAll(&result); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+				return errors.Errorf("querying for scriptlet applications: %w", err)
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, errors.Capture(err)
+		}
+		uuids := make([]string, len(result))
+		for i, r := range result {
+			uuids[i] = r.UUID
+		}
+		return uuids, nil
 	}
+	return "application", queryFunc
+}
+
+// IsScriptletApplication returns true if the application with the given
+// UUID has a charm that is a scriptlet charm (has a row in scriptlet_charm).
+func (st *State) IsScriptletApplication(ctx context.Context, appUUID string) (bool, error) {
+	db, err := st.DB(ctx)
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+
+	entity := applicationUUID{UUID: appUUID}
+	stmt, err := st.Prepare(`
+SELECT a.uuid AS &applicationUUID.uuid
+FROM   application AS a
+JOIN   charm AS c ON c.uuid = a.charm_uuid
+JOIN   scriptlet_charm AS sc ON sc.charm_uuid = c.uuid
+WHERE  a.uuid = $applicationUUID.uuid
+`, entity)
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+
+	var result applicationUUID
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		return tx.Query(ctx, stmt, entity).Get(&result)
+	})
+	if errors.Is(err, sqlair.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+	return true, nil
 }
 
 // RegisterScriptlet inserts a scriptlet charm row, the scriptlet body, and all
@@ -125,16 +185,16 @@ WHERE reference_name = $insertCharm.reference_name AND is_scriptlet = TRUE
 	}
 
 	charmRow := insertCharm{
-		UUID:          charmID.String(),
-		ReferenceName: args.ApplicationName,
-		SourceID:      0, // local
-		Revision:      -1,
-		ArchitectureID: 0, // amd64 — required by chk_charm_architecture for local source
-		Available:     true,
-		IsScriptlet:   true,
-		ArchivePath:   sql.NullString{},
+		UUID:            charmID.String(),
+		ReferenceName:   args.ApplicationName,
+		SourceID:        0, // local
+		Revision:        -1,
+		ArchitectureID:  0, // amd64 — required by chk_charm_architecture for local source
+		Available:       true,
+		IsScriptlet:     true,
+		ArchivePath:     sql.NullString{},
 		ObjectStoreUUID: sql.NullString{},
-		Version:       sql.NullString{},
+		Version:         sql.NullString{},
 	}
 	insCharmStmt, err := st.Prepare(`
 INSERT INTO charm (uuid, reference_name, source_id, revision, architecture_id, available, is_scriptlet, archive_path, object_store_uuid, version)

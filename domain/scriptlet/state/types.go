@@ -9,6 +9,10 @@ type scriptletCharmName struct {
 	ReferenceName string `db:"reference_name"`
 }
 
+type applicationUUID struct {
+	UUID string `db:"uuid"`
+}
+
 type charmUUID struct {
 	UUID string `db:"uuid"`
 }

@@ -40,9 +40,14 @@ type State interface {
 	// that use scriptlet charms.
 	GetScriptletApplicationNames(ctx context.Context) ([]string, error)
 
-	// NamespaceForWatchScriptletApplications returns the namespace and
-	// initial query for watching scriptlet application changes.
-	NamespaceForWatchScriptletApplications() (string, eventsource.NamespaceQuery)
+	// InitialWatchStatementScriptletApplications returns the namespace
+	// and initial query for watching scriptlet application changes.
+	// The initial query returns application UUIDs.
+	InitialWatchStatementScriptletApplications() (string, eventsource.NamespaceQuery)
+
+	// IsScriptletApplication returns true if the application with the
+	// given UUID has a charm in the scriptlet_charm table.
+	IsScriptletApplication(ctx context.Context, appUUID string) (bool, error)
 
 	// RegisterScriptlet records the scriptlet charm into the charm table
 	// and its relations into charm_relation.
@@ -69,6 +74,18 @@ type WatcherFactory interface {
 		ctx context.Context,
 		initialQuery eventsource.NamespaceQuery,
 		summary string,
+		filterOption eventsource.FilterOption,
+		filterOptions ...eventsource.FilterOption,
+	) (watcher.StringsWatcher, error)
+
+	// NewNamespaceMapperWatcher returns a new watcher that receives
+	// changes from the input base watcher's db/queue. Filtering of
+	// values is done first by the filter, and then by the mapper.
+	NewNamespaceMapperWatcher(
+		ctx context.Context,
+		initialStateQuery eventsource.NamespaceQuery,
+		summary string,
+		mapper eventsource.Mapper,
 		filterOption eventsource.FilterOption,
 		filterOptions ...eventsource.FilterOption,
 	) (watcher.StringsWatcher, error)
@@ -136,13 +153,33 @@ func NewWatchableService(st State, watcherFactory WatcherFactory) *WatchableServ
 }
 
 // WatchScriptletApplications returns a watcher that emits application
-// names when scriptlet applications are added or removed.
+// UUIDs when scriptlet applications are added or changed. It watches
+// the application namespace and uses a mapper to filter out applications
+// whose charm doesn't have a row in scriptlet_charm.
 func (s *WatchableService) WatchScriptletApplications(ctx context.Context) (watcher.StringsWatcher, error) {
-	namespace, query := s.st.NamespaceForWatchScriptletApplications()
-	return s.watcherFactory.NewNamespaceWatcher(
+	namespace, query := s.st.InitialWatchStatementScriptletApplications()
+	return s.watcherFactory.NewNamespaceMapperWatcher(
 		ctx,
 		query,
 		"scriptlet applications watcher",
+		s.scriptletApplicationsMapper,
 		eventsource.NamespaceFilter(namespace, changestream.All),
 	)
+}
+
+// scriptletApplicationsMapper filters change events to only include
+// applications whose charm has a row in scriptlet_charm.
+func (s *WatchableService) scriptletApplicationsMapper(ctx context.Context, changes []changestream.ChangeEvent) ([]string, error) {
+	var result []string
+	for _, change := range changes {
+		appUUID := change.Changed()
+		isScriptlet, err := s.st.IsScriptletApplication(ctx, appUUID)
+		if err != nil {
+			return nil, errors.Errorf("checking if application %q is scriptlet: %w", appUUID, err)
+		}
+		if isScriptlet {
+			result = append(result, appUUID)
+		}
+	}
+	return result, nil
 }
