@@ -7,7 +7,7 @@ def init():
     juju.observe("relation_broken", on_relation_broken)
 
 def on_config_changed(event):
-    _stub_intent(event, "config changed")
+    juju.status_set("active", message = "config changed")
 
 def on_relation_created(event):
     juju.status_set("active", message = "relation created")

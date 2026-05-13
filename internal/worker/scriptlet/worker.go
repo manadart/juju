@@ -179,6 +179,7 @@ func (w *Worker) loop() error {
 				return internalerrors.New("application watcher closed")
 			}
 			if err := w.handleApplicationChanges(ctx, appUUIDs); err != nil {
+				logger.Errorf(ctx, "handling application changes: %v", err)
 				return internalerrors.Errorf("handling application changes: %w", err)
 			}
 		}
@@ -285,6 +286,7 @@ func (r *applicationRunner) loop() error {
 	// Load the scriptlet source from the database.
 	scriptletSrc, err := r.config.ScriptletService.GetApplicationScriptlet(ctx, appUUID)
 	if err != nil {
+		logger.Errorf(ctx, "loading scriptlet for %q: %v", appUUID, err)
 		return internalerrors.Errorf("loading scriptlet for %q: %w", appUUID, err)
 	}
 
@@ -298,14 +300,18 @@ func (r *applicationRunner) loop() error {
 		},
 	})
 	if err != nil {
+		logger.Errorf(ctx, "creating script set for %q: %v", appUUID, err)
 		return internalerrors.Errorf("creating script set: %w", err)
 	}
 	if err := scriptSet.LoadSources(ctx, []starform.ScriptSource{
 		&dbScriptSource{content: scriptletSrc},
 	}); err != nil {
+		logger.Errorf(ctx, "loading script set sources for %q: %v", appUUID, err)
 		return internalerrors.Errorf("loading script set sources: %w", err)
 	}
 	r.scriptSet = scriptSet
+
+	logger.Infof(ctx, "loaded scriptlet for %q", appUUID)
 
 	// Watch for config changes on this application.
 	configWatcher, err := r.config.ApplicationService.WatchApplicationConfigChangeByUUID(ctx, appUUID)
@@ -354,7 +360,7 @@ func (r *applicationRunner) loop() error {
 
 func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID application.UUID) error {
 	logger := r.config.Logger
-	logger.Debugf(ctx, "dispatching config_changed for %q", appUUID)
+	logger.Infof(ctx, "dispatching config_changed for %q", appUUID)
 
 	// Query the current application config.
 	config, err := r.config.ApplicationService.GetApplicationConfigWithDefaults(ctx, appUUID)
@@ -398,7 +404,7 @@ func (r *applicationRunner) applyStatusUpdate(ctx context.Context, appUUID appli
 		return nil
 	}
 
-	r.config.Logger.Debugf(ctx, "applying status %q message %q for %q",
+	r.config.Logger.Infof(ctx, "applying status %q message %q for %q",
 		update.Status, update.Message, appUUID)
 
 	statusInfo := corestatus.StatusInfo{
@@ -432,7 +438,7 @@ func (r *applicationRunner) applyRelationStateUpdates(
 		settings[u.Name] = val
 	}
 
-	r.config.Logger.Debugf(ctx, "applying relation settings for %q rel %s: %v",
+	r.config.Logger.Infof(ctx, "applying relation settings for %q rel %s: %v",
 		appUUID, relationUUID, settings)
 
 	return r.config.RelationService.SetRelationApplicationSettings(ctx, relUUID, appUUID, settings)
@@ -519,7 +525,7 @@ func (r *applicationRunner) handleRelationChanges(
 	knownRelations map[string]relationState,
 ) error {
 	logger := r.config.Logger
-	logger.Debugf(ctx, "relation changes for %q: %v", appUUID, relationUUIDs)
+	logger.Infof(ctx, "relation changes for %q: %v", appUUID, relationUUIDs)
 	attrs, err := r.environmentAttrs(ctx)
 	if err != nil {
 		return internalerrors.Errorf("getting environment for %q: %w", appUUID, err)
