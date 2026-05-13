@@ -1,0 +1,15 @@
+#!/bin/bash
+set -eu
+
+store=/var/lib/model-info-consumer
+controller_uuid=$(cat "$store/controller-uuid" 2>/dev/null || true)
+model_name=$(cat "$store/model-name" 2>/dev/null || true)
+
+if [ -z "$controller_uuid" ] || [ -z "$model_name" ]; then
+    action-fail "model-info relation data is not available"
+    exit 1
+fi
+
+message="I am related to model $model_name in controller $controller_uuid."
+echo "$message"
+action-set message="$message"

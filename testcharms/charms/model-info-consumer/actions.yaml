@@ -1,0 +1,3 @@
+report-model-info:
+  description: Print the related model and controller information.
+

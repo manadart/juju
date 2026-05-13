@@ -1,0 +1,6 @@
+#!/bin/bash
+set -eu
+
+mkdir -p /var/lib/model-info-consumer
+status-set waiting "waiting for model-info relation" || true
+

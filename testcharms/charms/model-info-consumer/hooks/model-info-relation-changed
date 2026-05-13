@@ -1,0 +1,23 @@
+#!/bin/bash
+set -eu
+
+store=/var/lib/model-info-consumer
+mkdir -p "$store"
+
+source=${JUJU_REMOTE_UNIT:-}
+if [ -z "$source" ]; then
+    source=${JUJU_REMOTE_APP:-}
+fi
+
+controller_uuid=$(relation-get --app controller-uuid "$source" || true)
+model_name=$(relation-get --app model-name "$source" || true)
+
+printf '%s' "$controller_uuid" > "$store/controller-uuid"
+printf '%s' "$model_name" > "$store/model-name"
+
+if [ -z "$controller_uuid" ] || [ -z "$model_name" ]; then
+    status-set waiting "waiting for model-info relation data" || true
+else
+    status-set active "related to model $model_name" || true
+fi
+
