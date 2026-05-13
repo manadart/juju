@@ -63,6 +63,8 @@ The first scriptlet charm lives here:
 scriptlet/
 ```
 
+Its charm name, and default deployed application name, is `model-operator`.
+
 Current files:
 
 - `scriptlet/metadata.yaml`
@@ -205,7 +207,7 @@ Git is configured to fetch GitHub modules through SSH.
 
 The intended demo is narrow and ruthless:
 
-1. Deploy the unitless charm with `juju deploy-unitless ./scriptlet`.
+1. Deploy `model-operator` with `juju deploy-unitless ./scriptlet`.
 2. Deploy `model-info-consumer`.
 3. Relate them over `scriptlet-model-info`.
 4. Trigger scriptlet execution with config or relation events.
