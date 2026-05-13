@@ -30,6 +30,7 @@ require (
 	github.com/canonical/pebble v1.26.0
 	github.com/canonical/sqlair v0.0.0-20260218132926-bd54c4999dea
 	github.com/canonical/starform v0.0.0-20260428155809-8da636f0fff9
+	github.com/canonical/starlark v0.0.0-20250127110116-8c33ed2b410b
 	github.com/chzyer/readline v1.5.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -157,7 +158,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.33.17 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/canonical/go-flags v0.0.0-20230403090104-105d09a091b8 // indirect
-	github.com/canonical/starlark v0.0.0-20250127110116-8c33ed2b410b // indirect
 	github.com/canonical/x-go v0.0.0-20230522092633-7947a7587f5b // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect

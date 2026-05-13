@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/canonical/starform/starform"
+	"github.com/canonical/starlark/starlark"
 	"github.com/juju/errors"
 	"github.com/juju/worker/v5"
 	"github.com/juju/worker/v5/catacomb"
@@ -24,6 +25,60 @@ const (
 	// States which report the state of the worker.
 	stateStarted = "started"
 )
+
+const setStatusSafety = starlark.NotSafe
+
+type StatusUpdate struct {
+	Status  string
+	Message string
+}
+
+func (u *StatusUpdate) statusUpdate() *StatusUpdate {
+	return u
+}
+
+type StateUpdate struct {
+	Name  string
+	Value starlark.Value
+}
+
+type StateUpdates struct {
+	Updates []StateUpdate
+}
+
+func (u *StateUpdates) stateUpdates() *StateUpdates {
+	return u
+}
+
+type OnConfigChangedState struct {
+	StatusUpdate
+	StateUpdates
+}
+
+type OnRelationCreatedState struct {
+	StatusUpdate
+	StateUpdates
+}
+
+type OnRelationJoinedState struct {
+	StatusUpdate
+	StateUpdates
+}
+
+type OnRelationChangedState struct {
+	StatusUpdate
+	StateUpdates
+}
+
+type OnRelationDepartedState struct {
+	StatusUpdate
+	StateUpdates
+}
+
+type OnRelationBrokenState struct {
+	StatusUpdate
+	StateUpdates
+}
 
 // Worker is a controller-side worker that watches for scriptlet
 // applications and dispatches model events to Starform scriptlets.
@@ -300,7 +355,9 @@ func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID app
 	_ = config
 
 	event := starform.EventObject{
-		Name: "config_changed",
+		Name:  "config_changed",
+		// TODO(kcza): complete this
+		State: &OnConfigChangedState{},
 	}
 	return r.scriptSet.Handle(ctx, &event)
 }
@@ -381,7 +438,89 @@ func (r *applicationRunner) handleRelationChanges(
 		}
 	}
 
-	return nil
+	event := starform.EventObject{
+		Name:  "relation_created",
+		// TODO(kcza): complete this
+		State: &OnRelationCreatedState{},
+	}
+	return r.scriptSet.Handle(ctx, &event)
+}
+
+func jujuSetStatus(
+	thread *starlark.Thread,
+	fn *starlark.Builtin,
+	args starlark.Tuple,
+	kwargs []starlark.Tuple,
+) (starlark.Value, error) {
+	if err := starlark.CheckSafety(thread, starlark.NotSafe); err != nil {
+		return nil, err
+	}
+
+	var status string
+	var message string
+	if err := starlark.UnpackArgs(
+		fn.Name(), args, kwargs,
+		"status", &status,
+		"message?", &message,
+	); err != nil {
+		return nil, err
+	}
+
+	event := starform.Event(thread)
+	update := StatusUpdate{
+		Status:  status,
+		Message: message,
+	}
+	if err := thread.AddAllocs(starlark.EstimateSize(update)); err != nil {
+		return nil, err
+	}
+
+	state, ok := event.State.(interface{ statusUpdate() *StatusUpdate })
+	if !ok || state == nil || state.statusUpdate() == nil {
+		return nil, starform.ErrUnavailable
+	}
+	*state.statusUpdate() = update
+
+	return starlark.None, nil
+}
+
+func jujuSetState(
+	thread *starlark.Thread,
+	fn *starlark.Builtin,
+	args starlark.Tuple,
+	kwargs []starlark.Tuple,
+) (starlark.Value, error) {
+	if err := starlark.CheckSafety(thread, starlark.NotSafe); err != nil {
+		return nil, err
+	}
+
+	var name string
+	var value starlark.Value
+	if err := starlark.UnpackArgs(
+		fn.Name(), args, kwargs,
+		"name", &name,
+		"value", &value,
+	); err != nil {
+		return nil, err
+	}
+
+	event := starform.Event(thread)
+	update := StateUpdate{
+		Name:  name,
+		Value: value,
+	}
+
+	state, ok := event.State.(interface{ stateUpdates() *StateUpdates })
+	if !ok || state == nil || state.stateUpdates() == nil {
+		return nil, starform.ErrUnavailable
+	}
+
+	appender := starlark.NewSafeAppender(thread, &state.stateUpdates().Updates)
+	if err := appender.Append(update); err != nil {
+		return nil, err
+	}
+
+	return starlark.None, nil
 }
 
 func (r *applicationRunner) scopedContext() (context.Context, context.CancelFunc) {
