@@ -14,7 +14,6 @@ import (
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/internal/errors"
 	"github.com/juju/juju/internal/services"
-	internalworker "github.com/juju/juju/internal/worker"
 )
 
 // ManifoldConfig describes how to create a scriptlet worker.
@@ -78,7 +77,6 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 			}
 			return w, nil
 		},
-		Filter: internalworker.ShouldWorkerUninstall,
 	}
 }
 

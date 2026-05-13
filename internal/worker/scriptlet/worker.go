@@ -49,8 +49,9 @@ func newWorker(config Config, internalStates chan string) (*Worker, error) {
 		IsFatal: func(err error) bool {
 			return false
 		},
-		RestartDelay: time.Second * 10,
-		Logger:       internalworker.WrapLogger(config.Logger),
+		ShouldRestart: internalworker.ShouldRunnerRestart,
+		RestartDelay:  time.Second * 10,
+		Logger:        internalworker.WrapLogger(config.Logger),
 	})
 	if err != nil {
 		return nil, internalerrors.Capture(err)
