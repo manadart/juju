@@ -286,6 +286,9 @@ func (r *applicationRunner) loop() error {
 	scriptSet, err := starform.NewScriptSet(&starform.ScriptSetOptions{
 		App: &starform.AppObject{
 			Name: "juju",
+			Methods: []*starlark.Builtin{
+				starlark.NewBuiltinWithSafety("status_set", setStatusSafety, jujuSetStatus),
+			},
 		},
 	})
 	if err != nil {
@@ -449,6 +452,7 @@ func (r *applicationRunner) handleRelationChanges(
 			event := starform.EventObject{
 				Name:  "relation_created",
 				Attrs: attrs,
+				State: &OnRelationCreatedState{},
 			}
 			if err := r.scriptSet.Handle(ctx, &event); err != nil {
 				logger.Errorf(ctx, "dispatching relation_created for %q rel %s: %v",
@@ -460,6 +464,7 @@ func (r *applicationRunner) handleRelationChanges(
 			joinEvent := starform.EventObject{
 				Name:  "relation_joined",
 				Attrs: attrs,
+				State: &OnRelationJoinedState{},
 			}
 			if err := r.scriptSet.Handle(ctx, &joinEvent); err != nil {
 				logger.Errorf(ctx, "dispatching relation_joined for %q rel %s: %v",
