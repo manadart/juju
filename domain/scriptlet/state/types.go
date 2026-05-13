@@ -21,16 +21,15 @@ type charmUUID struct {
 }
 
 type insertCharm struct {
-	UUID           string         `db:"uuid"`
-	ReferenceName  string         `db:"reference_name"`
-	SourceID       int            `db:"source_id"`
-	Revision       int            `db:"revision"`
-	ArchitectureID int            `db:"architecture_id"`
-	Available      bool           `db:"available"`
-	IsScriptlet    bool           `db:"is_scriptlet"`
-	ArchivePath    sql.NullString `db:"archive_path"`
+	UUID            string         `db:"uuid"`
+	ReferenceName   string         `db:"reference_name"`
+	SourceID        int            `db:"source_id"`
+	Revision        int            `db:"revision"`
+	ArchitectureID  int            `db:"architecture_id"`
+	Available       bool           `db:"available"`
+	ArchivePath     sql.NullString `db:"archive_path"`
 	ObjectStoreUUID sql.NullString `db:"object_store_uuid"`
-	Version        sql.NullString `db:"version"`
+	Version         sql.NullString `db:"version"`
 }
 
 type insertScriptletCharm struct {

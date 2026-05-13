@@ -47,7 +47,7 @@ func (st *State) GetScriptletApplicationNames(ctx context.Context) ([]string, er
 	stmt, err := st.Prepare(`
 SELECT &scriptletCharmName.reference_name
 FROM charm
-WHERE is_scriptlet = TRUE
+JOIN scriptlet_charm ON scriptlet_charm.charm_uuid = charm.uuid
 `, scriptletCharmName{})
 	if err != nil {
 		return nil, errors.Errorf("preparing scriptlet application names query: %w", err)
@@ -195,7 +195,11 @@ WHERE application_uuid IN (SELECT uuid FROM application WHERE name = $deployRef.
 	delAppStmt, err := st.Prepare(`
 DELETE FROM application
 WHERE name = $deployRef.name
-  AND charm_uuid IN (SELECT uuid FROM charm WHERE reference_name = $deployRef.reference_name AND is_scriptlet = TRUE)
+  AND charm_uuid IN (
+    SELECT c.uuid FROM charm c
+    JOIN scriptlet_charm sc ON sc.charm_uuid = c.uuid
+    WHERE c.reference_name = $deployRef.reference_name
+  )
 `, deployRef{})
 	if err != nil {
 		return errors.Errorf("preparing delete application: %w", err)
@@ -204,8 +208,9 @@ WHERE name = $deployRef.name
 	delCharmMetaStmt, err := st.Prepare(`
 DELETE FROM charm_metadata
 WHERE charm_uuid IN (
-    SELECT uuid FROM charm
-    WHERE reference_name = $deployRef.reference_name AND is_scriptlet = TRUE
+    SELECT c.uuid FROM charm c
+    JOIN scriptlet_charm sc ON sc.charm_uuid = c.uuid
+    WHERE c.reference_name = $deployRef.reference_name
 )`, deployRef{})
 	if err != nil {
 		return errors.Errorf("preparing delete charm_metadata: %w", err)
@@ -214,8 +219,9 @@ WHERE charm_uuid IN (
 	delCharmRelStmt, err := st.Prepare(`
 DELETE FROM charm_relation
 WHERE charm_uuid IN (
-    SELECT uuid FROM charm
-    WHERE reference_name = $deployRef.reference_name AND is_scriptlet = TRUE
+    SELECT c.uuid FROM charm c
+    JOIN scriptlet_charm sc ON sc.charm_uuid = c.uuid
+    WHERE c.reference_name = $deployRef.reference_name
 )`, deployRef{})
 	if err != nil {
 		return errors.Errorf("preparing delete charm_relation: %w", err)
@@ -224,8 +230,7 @@ WHERE charm_uuid IN (
 	delScriptletStmt, err := st.Prepare(`
 DELETE FROM scriptlet_charm
 WHERE charm_uuid IN (
-    SELECT uuid FROM charm
-    WHERE reference_name = $deployRef.reference_name AND is_scriptlet = TRUE
+    SELECT uuid FROM charm WHERE reference_name = $deployRef.reference_name
 )`, deployRef{})
 	if err != nil {
 		return errors.Errorf("preparing delete scriptlet_charm: %w", err)
@@ -233,7 +238,8 @@ WHERE charm_uuid IN (
 
 	delCharmStmt, err := st.Prepare(`
 DELETE FROM charm
-WHERE reference_name = $deployRef.reference_name AND is_scriptlet = TRUE
+WHERE reference_name = $deployRef.reference_name
+  AND uuid IN (SELECT charm_uuid FROM scriptlet_charm)
 `, deployRef{})
 	if err != nil {
 		return errors.Errorf("preparing delete charm: %w", err)
@@ -248,14 +254,13 @@ WHERE reference_name = $deployRef.reference_name AND is_scriptlet = TRUE
 		Revision:        -1,
 		ArchitectureID:  0, // amd64
 		Available:       true,
-		IsScriptlet:     true,
 		ArchivePath:     sql.NullString{},
 		ObjectStoreUUID: sql.NullString{},
 		Version:         sql.NullString{},
 	}
 	insCharmStmt, err := st.Prepare(`
-INSERT INTO charm (uuid, reference_name, source_id, revision, architecture_id, available, is_scriptlet, archive_path, object_store_uuid, version)
-VALUES ($insertCharm.uuid, $insertCharm.reference_name, $insertCharm.source_id, $insertCharm.revision, $insertCharm.architecture_id, $insertCharm.available, $insertCharm.is_scriptlet, $insertCharm.archive_path, $insertCharm.object_store_uuid, $insertCharm.version)
+INSERT INTO charm (uuid, reference_name, source_id, revision, architecture_id, available, archive_path, object_store_uuid, version)
+VALUES ($insertCharm.uuid, $insertCharm.reference_name, $insertCharm.source_id, $insertCharm.revision, $insertCharm.architecture_id, $insertCharm.available, $insertCharm.archive_path, $insertCharm.object_store_uuid, $insertCharm.version)
 `, charmRow)
 	if err != nil {
 		return errors.Errorf("preparing insert charm: %w", err)
