@@ -203,10 +203,17 @@ func (sf *statusFormatter) formatApplication(name string, application params.App
 		charmName   = ""
 		charmRev    = 0
 	)
-	if curl, err := charm.ParseURL(application.Charm); err != nil {
-		// We should never fail to parse a charm url sent back
-		// but if we do, don't crash.
-		logger.Errorf(context.TODO(), "failed to parse charm: %v", err)
+	if application.Charm == "" {
+		charmAlias = name
+		charmName = name
+		if application.Unitless {
+			charmOrigin = "unitless"
+			charmRev = application.CharmRev
+		}
+	} else if curl, err := charm.ParseURL(application.Charm); err != nil {
+		charmAlias = application.Charm
+		charmName = application.Charm
+		charmRev = application.CharmRev
 	} else {
 		switch {
 		case charm.CharmHub.Matches(curl.Schema):
