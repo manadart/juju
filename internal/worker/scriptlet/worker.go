@@ -134,9 +134,11 @@ func (w *Worker) handleApplicationChanges(ctx context.Context, appUUIDs []string
 	for _, appUUID := range appUUIDs {
 		logger.Infof(ctx, "ensuring scriptlet runner for application %q", appUUID)
 
+		id := application.UUID(appUUID)
 		err := w.runner.StartWorker(ctx, appUUID, func(ctx context.Context) (worker.Worker, error) {
 			return newApplicationRunner(applicationRunnerConfig{
-				AppUUID:            appUUID,
+				AppUUID:            id,
+				ScriptletService:   w.config.ScriptletService,
 				ApplicationService: w.config.ApplicationService,
 				Logger:             w.config.Logger,
 			})
@@ -175,33 +177,19 @@ type applicationRunner struct {
 }
 
 type applicationRunnerConfig struct {
-	AppUUID            string
+	AppUUID            application.UUID
+	ScriptletService   ScriptletService
 	ApplicationService ApplicationService
 	Logger             logger.Logger
 }
 
 func newApplicationRunner(config applicationRunnerConfig) (*applicationRunner, error) {
-	scriptSet, err := starform.NewScriptSet(&starform.ScriptSetOptions{
-		App: &starform.AppObject{
-			Name: "juju",
-		},
-	})
-	if err != nil {
-		return nil, internalerrors.Errorf("creating script set: %w", err)
-	}
-	if err := scriptSet.LoadSources(context.Background(), []starform.ScriptSource{
-		hardcodedScriptSource{},
-	}); err != nil {
-		return nil, internalerrors.Errorf("loading script set sources: %w", err)
-	}
-
 	r := &applicationRunner{
-		config:    config,
-		scriptSet: scriptSet,
+		config: config,
 	}
 
 	if err := catacomb.Invoke(catacomb.Plan{
-		Name: "scriptlet-" + config.AppUUID,
+		Name: "scriptlet-" + config.AppUUID.String(),
 		Site: &r.catacomb,
 		Work: r.loop,
 	}); err != nil {
@@ -226,14 +214,35 @@ func (r *applicationRunner) loop() error {
 	defer cancel()
 
 	logger := r.config.Logger
-	appUUID := application.UUID(r.config.AppUUID)
+	appUUID := r.config.AppUUID
 
-	logger.Infof(ctx, "scriptlet runner started for %q", r.config.AppUUID)
+	logger.Infof(ctx, "scriptlet runner started for %q", appUUID)
+
+	// Load the scriptlet source from the database.
+	scriptletSrc, err := r.config.ScriptletService.GetApplicationScriptlet(ctx, appUUID)
+	if err != nil {
+		return internalerrors.Errorf("loading scriptlet for %q: %w", appUUID, err)
+	}
+
+	scriptSet, err := starform.NewScriptSet(&starform.ScriptSetOptions{
+		App: &starform.AppObject{
+			Name: "juju",
+		},
+	})
+	if err != nil {
+		return internalerrors.Errorf("creating script set: %w", err)
+	}
+	if err := scriptSet.LoadSources(ctx, []starform.ScriptSource{
+		&dbScriptSource{content: scriptletSrc},
+	}); err != nil {
+		return internalerrors.Errorf("loading script set sources: %w", err)
+	}
+	r.scriptSet = scriptSet
 
 	// Watch for config changes on this application.
 	configWatcher, err := r.config.ApplicationService.WatchApplicationConfigChangeByUUID(ctx, appUUID)
 	if err != nil {
-		return internalerrors.Errorf("watching config for %q: %w", r.config.AppUUID, err)
+		return internalerrors.Errorf("watching config for %q: %w", appUUID, err)
 	}
 	if err := r.catacomb.Add(configWatcher); err != nil {
 		return internalerrors.Capture(err)
@@ -249,7 +258,7 @@ func (r *applicationRunner) loop() error {
 				return internalerrors.New("config watcher closed")
 			}
 			if err := r.handleConfigChanged(ctx, appUUID); err != nil {
-				logger.Errorf(ctx, "handling config-changed for %q: %v", r.config.AppUUID, err)
+				logger.Errorf(ctx, "handling config-changed for %q: %v", appUUID, err)
 			}
 		}
 	}
@@ -257,12 +266,12 @@ func (r *applicationRunner) loop() error {
 
 func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID application.UUID) error {
 	logger := r.config.Logger
-	logger.Debugf(ctx, "dispatching config_changed for %q", r.config.AppUUID)
+	logger.Debugf(ctx, "dispatching config_changed for %q", appUUID)
 
 	// Query the current application config.
 	config, err := r.config.ApplicationService.GetApplicationConfigWithDefaults(ctx, appUUID)
 	if err != nil {
-		return internalerrors.Errorf("getting config for %q: %w", r.config.AppUUID, err)
+		return internalerrors.Errorf("getting config for %q: %w", appUUID, err)
 	}
 
 	// TODO(hackathon): Serialise config and pass to starform scriptlet.
@@ -285,6 +294,10 @@ type ScriptletService interface {
 	// application UUIDs when scriptlet applications are added,
 	// removed, or changed.
 	WatchScriptletApplications(ctx context.Context) (watcher.StringsWatcher, error)
+
+	// GetApplicationScriptlet returns the scriptlet source for the
+	// application identified by its UUID.
+	GetApplicationScriptlet(ctx context.Context, appUUID application.UUID) (string, error)
 }
 
 // ApplicationService defines the application domain service methods
@@ -299,21 +312,18 @@ type ApplicationService interface {
 	GetApplicationConfigWithDefaults(ctx context.Context, appUUID application.UUID) (charm.Config, error)
 }
 
-type hardcodedScriptSource struct{}
+// dbScriptSource implements starform.ScriptSource by returning the
+// scriptlet content loaded from the database.
+type dbScriptSource struct {
+	content string
+}
 
-var _ starform.ScriptSource = &hardcodedScriptSource{}
+var _ starform.ScriptSource = &dbScriptSource{}
 
-func (hardcodedScriptSource) Path() string {
+func (s *dbScriptSource) Path() string {
 	return "hooks.star"
 }
 
-func (hardcodedScriptSource) Content(context.Context) ([]byte, error) {
-	ret := []byte(`
-def init():
-    juju.observe("config_changed", on_config_changed)
-
-def on_config_changed(event):
-	print('hello, world')
-`)
-	return ret, nil
+func (s *dbScriptSource) Content(_ context.Context) ([]byte, error) {
+	return []byte(s.content), nil
 }

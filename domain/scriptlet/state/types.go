@@ -20,6 +20,10 @@ type charmUUID struct {
 	UUID string `db:"uuid"`
 }
 
+type scriptletContent struct {
+	Scriptlet string `db:"scriptlet"`
+}
+
 type insertCharm struct {
 	UUID            string         `db:"uuid"`
 	ReferenceName   string         `db:"reference_name"`

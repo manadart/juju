@@ -12,8 +12,8 @@ import (
 
 	coreapplication "github.com/juju/juju/core/application"
 	corecharm "github.com/juju/juju/core/charm"
-	coreerrors "github.com/juju/juju/core/errors"
 	"github.com/juju/juju/core/database"
+	coreerrors "github.com/juju/juju/core/errors"
 	corenetwork "github.com/juju/juju/core/network"
 	"github.com/juju/juju/core/watcher/eventsource"
 	"github.com/juju/juju/domain"
@@ -467,3 +467,36 @@ func encodeRole(role string) (int, error) {
 
 // coreerrors is used above for NotFound — keep the import used.
 var _ = coreerrors.NotFound
+
+// GetApplicationScriptlet returns the scriptlet source for the application
+// identified by its UUID. It follows the path: application → charm →
+// scriptlet_charm.
+func (st *State) GetApplicationScriptlet(ctx context.Context, appUUID string) (string, error) {
+	db, err := st.DB(ctx)
+	if err != nil {
+		return "", errors.Capture(err)
+	}
+
+	entity := applicationUUID{UUID: appUUID}
+	stmt, err := st.Prepare(`
+SELECT sc.scriptlet AS &scriptletContent.scriptlet
+FROM   application AS a
+JOIN   scriptlet_charm AS sc ON sc.charm_uuid = a.uuid
+WHERE  a.uuid = $applicationUUID.uuid
+`, entity, scriptletContent{})
+	if err != nil {
+		return "", errors.Errorf("preparing get application scriptlet: %w", err)
+	}
+
+	var result scriptletContent
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		return tx.Query(ctx, stmt, entity).Get(&result)
+	})
+	if errors.Is(err, sqlair.ErrNoRows) {
+		return "", errors.Errorf("scriptlet not found for application %q", appUUID).Add(coreerrors.NotFound)
+	}
+	if err != nil {
+		return "", errors.Capture(err)
+	}
+	return result.Scriptlet, nil
+}

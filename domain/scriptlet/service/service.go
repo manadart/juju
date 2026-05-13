@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	coreapplication "github.com/juju/juju/core/application"
 	"github.com/juju/juju/core/changestream"
 	coreerrors "github.com/juju/juju/core/errors"
 	"github.com/juju/juju/core/watcher"
@@ -49,6 +50,10 @@ type State interface {
 	// IsScriptletApplication returns true if the application with the
 	// given UUID has a charm in the scriptlet_charm table.
 	IsScriptletApplication(ctx context.Context, appUUID string) (bool, error)
+
+	// GetApplicationScriptlet returns the scriptlet source for the
+	// application identified by its UUID.
+	GetApplicationScriptlet(ctx context.Context, appUUID string) (string, error)
 
 	// DeployScriptlet registers the scriptlet charm and creates the
 	// application entity in a single atomic transaction.
@@ -110,6 +115,19 @@ func (s *Service) GetScriptletApplicationNames(ctx context.Context) ([]string, e
 		return nil, errors.Errorf("getting scriptlet application names: %w", err)
 	}
 	return names, nil
+}
+
+// GetApplicationScriptlet returns the scriptlet source for the application
+// identified by its UUID.
+func (s *Service) GetApplicationScriptlet(ctx context.Context, appUUID coreapplication.UUID) (string, error) {
+	if err := appUUID.Validate(); err != nil {
+		return "", errors.Errorf("application UUID: %w", err).Add(coreerrors.NotValid)
+	}
+	scriptlet, err := s.st.GetApplicationScriptlet(ctx, appUUID.String())
+	if err != nil {
+		return "", errors.Errorf("getting scriptlet for application %q: %w", appUUID, err)
+	}
+	return scriptlet, nil
 }
 
 // DeployScriptlet registers the scriptlet charm and creates the application
