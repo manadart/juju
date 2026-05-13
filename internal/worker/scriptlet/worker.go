@@ -293,6 +293,7 @@ func (r *applicationRunner) loop() error {
 			Name: "juju",
 			Methods: []*starlark.Builtin{
 				starlark.NewBuiltinWithSafety("status_set", setStatusSafety, jujuSetStatus),
+				starlark.NewBuiltinWithSafety("state_set", starlark.NotSafe, jujuSetState),
 			},
 		},
 	})
