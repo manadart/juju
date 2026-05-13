@@ -666,10 +666,6 @@ func jujuSetStatus(
 	args starlark.Tuple,
 	kwargs []starlark.Tuple,
 ) (starlark.Value, error) {
-	if err := starlark.CheckSafety(thread, starlark.NotSafe); err != nil {
-		return nil, err
-	}
-
 	var status string
 	var message string
 	if err := starlark.UnpackArgs(
@@ -681,11 +677,16 @@ func jujuSetStatus(
 	}
 
 	event := starform.Event(thread)
+
 	update := StatusUpdate{
 		Status:  status,
 		Message: message,
 	}
-	if err := thread.AddAllocs(starlark.EstimateSize(update)); err != nil {
+	allocs := starlark.SafeAdd(
+		starlark.EstimateSize(status),
+		starlark.EstimateSize(message),
+	)
+	if err := thread.AddAllocs(allocs); err != nil {
 		return nil, err
 	}
 
@@ -693,7 +694,18 @@ func jujuSetStatus(
 	if !ok || state == nil || state.statusUpdate() == nil {
 		return nil, starform.ErrUnavailable
 	}
-	*state.statusUpdate() = update
+	statusUpdate := state.statusUpdate()
+	if statusUpdate != nil {
+		prevAllocs := starlark.SafeAdd(
+			starlark.EstimateSize(statusUpdate.Status),
+			starlark.EstimateSize(statusUpdate.Message),
+		)
+		allocsToRemove := starlark.SafeNeg(prevAllocs)
+		if err := thread.AddAllocs(allocsToRemove); err != nil {
+			return nil, err
+		}
+	}
+	*statusUpdate = update
 
 	return starlark.None, nil
 }
@@ -704,10 +716,6 @@ func jujuSetState(
 	args starlark.Tuple,
 	kwargs []starlark.Tuple,
 ) (starlark.Value, error) {
-	if err := starlark.CheckSafety(thread, starlark.NotSafe); err != nil {
-		return nil, err
-	}
-
 	var name string
 	var value starlark.Value
 	if err := starlark.UnpackArgs(
