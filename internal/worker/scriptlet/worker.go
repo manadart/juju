@@ -12,8 +12,10 @@ import (
 	"github.com/juju/worker/v5"
 	"github.com/juju/worker/v5/catacomb"
 
+	"github.com/juju/juju/core/application"
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/watcher"
+	"github.com/juju/juju/domain/deployment/charm"
 	internalerrors "github.com/juju/juju/internal/errors"
 	internalworker "github.com/juju/juju/internal/worker"
 )
@@ -134,8 +136,9 @@ func (w *Worker) handleApplicationChanges(ctx context.Context, appUUIDs []string
 
 		err := w.runner.StartWorker(ctx, appUUID, func(ctx context.Context) (worker.Worker, error) {
 			return newApplicationRunner(applicationRunnerConfig{
-				AppUUID: appUUID,
-				Logger:  w.config.Logger,
+				AppUUID:            appUUID,
+				ApplicationService: w.config.ApplicationService,
+				Logger:             w.config.Logger,
 			})
 		})
 		if errors.Is(err, errors.AlreadyExists) {
@@ -172,8 +175,9 @@ type applicationRunner struct {
 }
 
 type applicationRunnerConfig struct {
-	AppUUID string
-	Logger  logger.Logger
+	AppUUID            string
+	ApplicationService ApplicationService
+	Logger             logger.Logger
 }
 
 func newApplicationRunner(config applicationRunnerConfig) (*applicationRunner, error) {
@@ -222,22 +226,48 @@ func (r *applicationRunner) loop() error {
 	defer cancel()
 
 	logger := r.config.Logger
+	appUUID := application.UUID(r.config.AppUUID)
+
 	logger.Infof(ctx, "scriptlet runner started for %q", r.config.AppUUID)
 
-	// TODO(hackathon): Watch for config changes, relation changes,
-	// and lifecycle events for this application. Dispatch events to
-	// the Starform scriptlet when they occur.
-	if err := r.handleConfigChanged(ctx); err != nil {
-		return internalerrors.Errorf("handling scriptlet event: %w", err)
+	// Watch for config changes on this application.
+	configWatcher, err := r.config.ApplicationService.WatchApplicationConfigChangeByUUID(ctx, appUUID)
+	if err != nil {
+		return internalerrors.Errorf("watching config for %q: %w", r.config.AppUUID, err)
+	}
+	if err := r.catacomb.Add(configWatcher); err != nil {
+		return internalerrors.Capture(err)
 	}
 
-	select {
-	case <-r.catacomb.Dying():
-		return r.catacomb.ErrDying()
+	for {
+		select {
+		case <-r.catacomb.Dying():
+			return r.catacomb.ErrDying()
+
+		case _, ok := <-configWatcher.Changes():
+			if !ok {
+				return internalerrors.New("config watcher closed")
+			}
+			if err := r.handleConfigChanged(ctx, appUUID); err != nil {
+				logger.Errorf(ctx, "handling config-changed for %q: %v", r.config.AppUUID, err)
+			}
+		}
 	}
 }
 
-func (r *applicationRunner) handleConfigChanged(ctx context.Context) error {
+func (r *applicationRunner) handleConfigChanged(ctx context.Context, appUUID application.UUID) error {
+	logger := r.config.Logger
+	logger.Debugf(ctx, "dispatching config_changed for %q", r.config.AppUUID)
+
+	// Query the current application config.
+	config, err := r.config.ApplicationService.GetApplicationConfigWithDefaults(ctx, appUUID)
+	if err != nil {
+		return internalerrors.Errorf("getting config for %q: %w", r.config.AppUUID, err)
+	}
+
+	// TODO(hackathon): Serialise config and pass to starform scriptlet.
+	_ = config
+
 	event := starform.EventObject{
 		Name: "config_changed",
 	}
@@ -255,6 +285,18 @@ type ScriptletService interface {
 	// application UUIDs when scriptlet applications are added,
 	// removed, or changed.
 	WatchScriptletApplications(ctx context.Context) (watcher.StringsWatcher, error)
+}
+
+// ApplicationService defines the application domain service methods
+// needed by the scriptlet worker for per-application operations.
+type ApplicationService interface {
+	// WatchApplicationConfigChangeByUUID returns a watcher that emits
+	// notifications when the application's config changes.
+	WatchApplicationConfigChangeByUUID(ctx context.Context, appUUID application.UUID) (watcher.NotifyWatcher, error)
+
+	// GetApplicationConfigWithDefaults returns the application config
+	// with defaults applied.
+	GetApplicationConfigWithDefaults(ctx context.Context, appUUID application.UUID) (charm.Config, error)
 }
 
 type hardcodedScriptSource struct{}

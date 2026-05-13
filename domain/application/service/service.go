@@ -489,6 +489,24 @@ func (s *WatchableService) WatchApplicationConfig(ctx context.Context, name stri
 	)
 }
 
+// WatchApplicationConfigChangeByUUID watches for changes to the specified
+// application's config, identified by application UUID. This emits a
+// notification whenever the config hash changes.
+func (s *WatchableService) WatchApplicationConfigChangeByUUID(ctx context.Context, appUUID coreapplication.UUID) (watcher.NotifyWatcher, error) {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	return s.watcherFactory.NewNotifyWatcher(
+		ctx,
+		fmt.Sprintf("application config watcher for UUID %q", appUUID),
+		eventsource.PredicateFilter(
+			s.st.NamespaceForWatchApplicationConfig(),
+			changestream.All,
+			eventsource.EqualsPredicate(appUUID.String()),
+		),
+	)
+}
+
 // WatchApplicationConfigHash watches for changes to the specified application's
 // config hash.
 // This notifies on any changes to the application's config hash, which is

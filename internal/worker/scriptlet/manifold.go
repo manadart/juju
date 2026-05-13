@@ -18,11 +18,12 @@ import (
 
 // ManifoldConfig describes how to create a scriptlet worker.
 type ManifoldConfig struct {
-	DomainServicesName  string
-	ClockName           string
-	NewWorker           func(Config) (*Worker, error)
-	GetScriptletService func(dependency.Getter, string) (ScriptletService, error)
-	Logger              logger.Logger
+	DomainServicesName    string
+	ClockName             string
+	NewWorker             func(Config) (*Worker, error)
+	GetScriptletService   func(dependency.Getter, string) (ScriptletService, error)
+	GetApplicationService func(dependency.Getter, string) (ApplicationService, error)
+	Logger                logger.Logger
 }
 
 // Validate checks the manifold configuration for obvious errors.
@@ -38,6 +39,9 @@ func (cfg ManifoldConfig) Validate() error {
 	}
 	if cfg.GetScriptletService == nil {
 		return jujuerrors.NotValidf("nil GetScriptletService")
+	}
+	if cfg.GetApplicationService == nil {
+		return jujuerrors.NotValidf("nil GetApplicationService")
 	}
 	if cfg.Logger == nil {
 		return jujuerrors.NotValidf("nil Logger")
@@ -62,15 +66,21 @@ func Manifold(cfg ManifoldConfig) dependency.Manifold {
 				return nil, errors.Capture(err)
 			}
 
+			applicationService, err := cfg.GetApplicationService(getter, cfg.DomainServicesName)
+			if err != nil {
+				return nil, errors.Capture(err)
+			}
+
 			var clk clock.Clock
 			if err := getter.Get(cfg.ClockName, &clk); err != nil {
 				return nil, errors.Capture(err)
 			}
 
 			w, err := cfg.NewWorker(Config{
-				ScriptletService: scriptletService,
-				Clock:            clk,
-				Logger:           cfg.Logger,
+				ScriptletService:   scriptletService,
+				ApplicationService: applicationService,
+				Clock:              clk,
+				Logger:             cfg.Logger,
 			})
 			if err != nil {
 				return nil, errors.Errorf("creating scriptlet worker: %w", err)
@@ -90,17 +100,31 @@ func GetScriptletService(getter dependency.Getter, name string) (ScriptletServic
 	return domainServices.Scriptlet(), nil
 }
 
+// GetApplicationService extracts the ApplicationService from the
+// dependency engine via the DomainServices.
+func GetApplicationService(getter dependency.Getter, name string) (ApplicationService, error) {
+	var domainServices services.DomainServices
+	if err := getter.Get(name, &domainServices); err != nil {
+		return nil, errors.Capture(err)
+	}
+	return domainServices.Application(), nil
+}
+
 // Config holds the dependencies needed by the scriptlet worker.
 type Config struct {
-	ScriptletService ScriptletService
-	Clock            clock.Clock
-	Logger           logger.Logger
+	ScriptletService   ScriptletService
+	ApplicationService ApplicationService
+	Clock              clock.Clock
+	Logger             logger.Logger
 }
 
 // Validate checks the worker configuration.
 func (c Config) Validate() error {
 	if c.ScriptletService == nil {
 		return jujuerrors.NotValidf("nil ScriptletService")
+	}
+	if c.ApplicationService == nil {
+		return jujuerrors.NotValidf("nil ApplicationService")
 	}
 	if c.Clock == nil {
 		return jujuerrors.NotValidf("nil Clock")

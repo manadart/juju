@@ -313,11 +313,12 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 		})),
 
 		scriptletWorkerName: ifNotMigrating(scriptlet.Manifold(scriptlet.ManifoldConfig{
-			DomainServicesName:  domainServicesName,
-			ClockName:           clockName,
-			NewWorker:           scriptlet.NewWorker,
-			GetScriptletService: scriptlet.GetScriptletService,
-			Logger:              config.LoggingContext.GetLogger("juju.worker.scriptlet"),
+			DomainServicesName:    domainServicesName,
+			ClockName:             clockName,
+			NewWorker:             scriptlet.NewWorker,
+			GetScriptletService:   scriptlet.GetScriptletService,
+			GetApplicationService: scriptlet.GetApplicationService,
+			Logger:                config.LoggingContext.GetLogger("juju.worker.scriptlet"),
 		})),
 
 		remoteRelationConsumerName: ifNotMigrating(remoterelationconsumer.Manifold(remoterelationconsumer.ManifoldConfig{
