@@ -1,4 +1,4 @@
-# Agentless Charm / Starform Primer
+# Unitless Charm / Starform Primer
 
 This is a working-session primer for a future clean session. It is not a
 user-facing design document. Some hackathon demo artifacts now exist, but the
@@ -128,7 +128,7 @@ Relevant existing model:
   operations to charm code.
 - The uniter structure is useful conceptually: watcher snapshot, resolver,
   operation factory, executor, retry/error state.
-- The runner and `jujuc` machinery are not a good fit for agentless Starform
+- The runner and `jujuc` machinery are not a good fit for unitless Starform
   charms because they assume an executing charm process and hook-tool context.
 - `domain/unitstate.CommitHookChangesArg` is a useful precedent for
   post-hook transactional output.
@@ -138,7 +138,7 @@ Relevant existing model:
 Important mismatch:
 
 - `CommitHookChangesArg` is unit-scoped.
-- Agentless charm logic may need application-scoped state and relation writes,
+- Unitless charm logic may need application-scoped state and relation writes,
   or a deliberately defined synthetic/controller unit identity.
 - This identity question affects status, relation data ownership, leadership,
   secrets, hook ordering, and lifecycle.
@@ -184,9 +184,9 @@ Initial scriptlet charm:
 
 - Location: `scriptlet/`.
 - Charm metadata: `scriptlet/metadata.yaml`.
-- Agentless marker: `scriptlet/scriptlet.yaml`.
+- Unitless marker: `scriptlet/scriptlet.yaml`.
 - Marker shape:
-  - `agentless: true`
+  - `unitless: true`
   - `runtime: starform`
   - `app: juju`
   - `sources: [scriptlets/hooks.star]`
@@ -247,7 +247,7 @@ application, and status visibility.
 
 Assume these simplifying constraints unless they become blockers:
 
-- Treat an agentless charm as an application with no real units.
+- Treat a unitless charm as an application with no real units.
 - Prefer application-scoped status, state, and relation data.
 - Avoid secrets, leadership, storage, actions, ports, and unit-scoped relation
   data.
@@ -360,7 +360,7 @@ Things to defer:
 - Production identity remains open: application, synthetic unit, controller
   unit, or a new concept. The hackathon decision is "application with no real
   units" unless blocked by deploy/status assumptions.
-- How many workers run for one agentless application in HA controller setups,
+- How many workers run for one unitless application in HA controller setups,
   and what lease prevents duplicate execution?
 - How should event ordering and retries be persisted across controller restarts?
 - How are script errors surfaced: application status, model status, controller

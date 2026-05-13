@@ -1,4 +1,4 @@
-agentless: true
+unitless: true
 runtime: starform
 app: juju
 sources:
@@ -10,4 +10,3 @@ events:
   - relation_changed
   - relation_departed
   - relation_broken
-

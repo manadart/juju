@@ -1,5 +1,5 @@
 name: scriptlet
-summary: Agentless Starform scriptlet charm stub
+summary: Unitless Starform scriptlet charm stub
 description: |
   A minimal charm package for exercising controller-side Starform scriptlet
   execution.
@@ -7,4 +7,3 @@ description: |
 provides:
   model-info:
     interface: scriptlet-model-info
-

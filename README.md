@@ -1,6 +1,6 @@
 ![SCRIPTLETS](./scriptlets.gif)
 
-# Agentless Charms: The Controller Takes The Reins
+# Unitless Charms: The Controller Takes The Reins
 
 This branch is about a new charm execution mode: no unit agent, no workload
 machine, no little hook process standing in the dust waiting for orders.
@@ -73,7 +73,7 @@ Current files:
 The hackathon marker is `scriptlet/scriptlet.yaml`:
 
 ```yaml
-agentless: true
+unitless: true
 runtime: starform
 app: juju
 sources:
