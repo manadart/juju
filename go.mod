@@ -29,7 +29,7 @@ require (
 	github.com/canonical/lxd v0.0.0-20251125210512-b190d213bd11
 	github.com/canonical/pebble v1.26.0
 	github.com/canonical/sqlair v0.0.0-20260218132926-bd54c4999dea
-	github.com/canonical/starform v0.0.0
+	github.com/canonical/starform v0.0.0-20260428155809-8da636f0fff9
 	github.com/chzyer/readline v1.5.1
 	github.com/coreos/go-systemd/v22 v22.5.0
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -131,10 +131,6 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 )
-
-replace github.com/canonical/starform => ../starform
-
-replace github.com/canonical/starlark => ../starlark
 
 require (
 	cloud.google.com/go/auth v0.17.0 // indirect
