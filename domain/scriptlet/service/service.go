@@ -42,6 +42,9 @@ type DeployScriptletArgs struct {
 	Scriptlet       string
 	Relations       []ScriptletRelation
 	Config          []ScriptletConfigOption
+	Runtime         string
+	App             string
+	Events          []string
 }
 
 // State describes retrieval and persistence methods for scriptlet

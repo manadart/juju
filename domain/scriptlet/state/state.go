@@ -243,6 +243,27 @@ INSERT INTO charm_config (*) VALUES ($insertCharmConfig.*)
 		return errors.Errorf("preparing insert charm_config: %w", err)
 	}
 
+	scriptletConfigRow := insertScriptletConfig{
+		CharmUUID: charmID.String(),
+		Runtime:   args.Runtime,
+		App:       args.App,
+	}
+	insScriptletConfigStmt, err := st.Prepare(`
+INSERT INTO scriptlet_config (charm_uuid, runtime, app)
+VALUES ($insertScriptletConfig.charm_uuid, $insertScriptletConfig.runtime, $insertScriptletConfig.app)
+`, scriptletConfigRow)
+	if err != nil {
+		return errors.Errorf("preparing insert scriptlet_config: %w", err)
+	}
+
+	insScriptletEventStmt, err := st.Prepare(`
+INSERT INTO scriptlet_event (charm_uuid, event_name)
+VALUES ($insertScriptletEvent.charm_uuid, $insertScriptletEvent.event_name)
+`, insertScriptletEvent{})
+	if err != nil {
+		return errors.Errorf("preparing insert scriptlet_event: %w", err)
+	}
+
 	charmMetaRow := insertCharmMetadata{
 		CharmUUID:   charmID.String(),
 		Name:        args.ApplicationName,
@@ -371,6 +392,18 @@ VALUES ($insertApplicationSetting.application_uuid, $insertApplicationSetting.tr
 		if len(configRows) > 0 {
 			if err := tx.Query(ctx, insConfigStmt, configRows).Run(); err != nil {
 				return errors.Errorf("inserting charm_config: %w", err)
+			}
+		}
+		if err := tx.Query(ctx, insScriptletConfigStmt, scriptletConfigRow).Run(); err != nil {
+			return errors.Errorf("inserting scriptlet_config: %w", err)
+		}
+		for _, eventName := range args.Events {
+			eventRow := insertScriptletEvent{
+				CharmUUID: charmID.String(),
+				EventName: eventName,
+			}
+			if err := tx.Query(ctx, insScriptletEventStmt, eventRow).Run(); err != nil {
+				return errors.Errorf("inserting scriptlet_event: %w", err)
 			}
 		}
 		if err := tx.Query(ctx, insCharmMetaStmt, charmMetaRow).Run(); err != nil {

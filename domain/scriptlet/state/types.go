@@ -66,6 +66,17 @@ type insertCharmMetadata struct {
 	RunAsID     int    `db:"run_as_id"`
 }
 
+type insertScriptletConfig struct {
+	CharmUUID string `db:"charm_uuid"`
+	Runtime   string `db:"runtime"`
+	App       string `db:"app"`
+}
+
+type insertScriptletEvent struct {
+	CharmUUID string `db:"charm_uuid"`
+	EventName string `db:"event_name"`
+}
+
 type insertApplication struct {
 	UUID      string `db:"uuid"`
 	Name      string `db:"name"`

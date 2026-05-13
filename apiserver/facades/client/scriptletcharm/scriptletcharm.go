@@ -77,6 +77,9 @@ func (api *API) Deploy(ctx context.Context, args params.DeployScriptletCharmArgs
 		Scriptlet:       args.Scriptlet,
 		Relations:       relations,
 		Config:          config,
+		Runtime:         args.Runtime,
+		App:             args.App,
+		Events:          args.Events,
 	})
 	return params.ErrorResult{Error: apiservererrors.ServerError(err)}
 }

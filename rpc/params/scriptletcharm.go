@@ -29,4 +29,7 @@ type DeployScriptletCharmArgs struct {
 	Scriptlet       string                  `json:"scriptlet"`
 	Relations       []ScriptletRelation     `json:"relations,omitempty"`
 	Config          []ScriptletConfigOption `json:"config,omitempty"`
+	Runtime         string                  `json:"runtime,omitempty"`
+	App             string                  `json:"app,omitempty"`
+	Events          []string                `json:"events,omitempty"`
 }

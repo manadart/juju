@@ -177,6 +177,7 @@ var modelPostPatchFilesByVersion = []struct {
 	version: semversion.MustParse("4.0.10"),
 	files: []string{
 		"0058-scriptlet-charm.PATCH.sql",
+		"0059-scriptlet-config.PATCH.sql",
 	},
 }}
 
