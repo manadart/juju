@@ -510,7 +510,6 @@ func (s *bootstrapSuite) TestBootstrap(c *tc.C) {
 			},
 			Template: core.PodTemplateSpec{
 				ObjectMeta: v1.ObjectMeta{
-					Name:      "controller-0",
 					Namespace: s.namespace,
 					Labels: map[string]string{
 						"app.kubernetes.io/name":        "juju-controller-test",
@@ -655,7 +654,8 @@ func (s *bootstrapSuite) TestBootstrap(c *tc.C) {
 				},
 				{
 					Name:      "juju-controller-test-agent-conf",
-					MountPath: "/var/lib/juju/template-agent.conf",
+					ReadOnly:  true,
+					MountPath: "/var/lib/juju/controller-unit-agent.conf",
 					SubPath:   "controller-unit-agent.conf",
 				},
 				{
@@ -684,7 +684,17 @@ export JUJU_TOOLS_DIR=$JUJU_DATA_DIR/tools
 mkdir -p $JUJU_TOOLS_DIR
 cp /opt/jujud $JUJU_TOOLS_DIR/jujud
 
-test -e $JUJU_DATA_DIR/agents/controller-0/agent.conf || JUJU_DEV_FEATURE_FLAGS=developer-mode $JUJU_TOOLS_DIR/jujud bootstrap-state --data-dir $JUJU_DATA_DIR --debug --timeout 10m0s
+controller_id="${HOSTNAME##*-}"
+controller_agent_dir=$JUJU_DATA_DIR/agents/controller-${controller_id}
+controller_agent_conf=$controller_agent_dir/agent.conf
+controller_agent_template=$controller_agent_dir/template-agent.conf
+mkdir -p "$controller_agent_dir"
+sed "s/controller-0/controller-${controller_id}/g" "$JUJU_DATA_DIR/controller-agent.conf" > "$controller_agent_template"
+if [ "$controller_id" = "0" ]; then
+    test -e "$controller_agent_conf" || JUJU_DEV_FEATURE_FLAGS=developer-mode $JUJU_TOOLS_DIR/jujud bootstrap-state --data-dir $JUJU_DATA_DIR --debug --timeout 10m0s
+else
+    test -e "$controller_agent_conf" || cp "$controller_agent_template" "$controller_agent_conf"
+fi
 
 mkdir -p /var/lib/pebble/default/layers
 cat > /var/lib/pebble/default/layers/001-jujud.yaml <<EOF
@@ -694,7 +704,7 @@ services:
         summary: Juju controller agent
         startup: enabled
         override: replace
-        command: $JUJU_TOOLS_DIR/jujud machine --data-dir $JUJU_DATA_DIR --controller-id 0 --log-to-stderr --debug
+        command: sh -c 'controller_id="${HOSTNAME##*-}"; exec $JUJU_TOOLS_DIR/jujud machine --data-dir $JUJU_DATA_DIR --controller-id "$controller_id" --log-to-stderr --debug'
         environment:
             JUJU_DEV_FEATURE_FLAGS: developer-mode
 
@@ -732,14 +742,9 @@ exec /opt/pebble run --http :38811 --verbose
 					MountPath: "/var/lib/juju",
 				},
 				{
-					Name:      "storage",
-					MountPath: "/var/lib/juju/agents/controller-0",
-					SubPath:   "agents/controller-0",
-				},
-				{
 					Name:      "juju-controller-test-agent-conf",
 					ReadOnly:  true,
-					MountPath: "/var/lib/juju/agents/controller-0/template-agent.conf",
+					MountPath: "/var/lib/juju/controller-agent.conf",
 					SubPath:   "controller-agent.conf",
 				},
 				{
@@ -875,10 +880,6 @@ exec /opt/pebble run --http :38811 --verbose
 		VolumeMounts: []core.VolumeMount{
 			{
 				Name:      "charm-data",
-				MountPath: "/var/lib/juju",
-				SubPath:   "var/lib/juju",
-			}, {
-				Name:      "charm-data",
 				MountPath: "/charm/bin",
 				SubPath:   "charm/bin",
 			}, {
@@ -899,8 +900,12 @@ exec /opt/pebble run --http :38811 --verbose
 				SubPath:   "charm/etc/pebble/",
 			}, {
 				Name:      "juju-controller-test-agent-conf",
-				MountPath: "/var/lib/juju/template-agent.conf",
+				ReadOnly:  true,
+				MountPath: "/var/lib/juju/controller-unit-agent.conf",
 				SubPath:   "controller-unit-agent.conf",
+			}, {
+				Name:      "storage",
+				MountPath: "/var/lib/juju",
 			},
 		},
 		SecurityContext: &core.SecurityContext{

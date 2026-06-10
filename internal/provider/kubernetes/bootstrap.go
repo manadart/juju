@@ -899,7 +899,6 @@ func (c *controllerStack) createControllerStatefulset(ctx context.Context) error
 						c.selectorLabels,
 						providerutils.LabelsJujuModelOperatorDisableWebhook,
 					),
-					Name:        c.pcfg.GetPodName(), // This really should not be set.
 					Namespace:   c.broker.Namespace(),
 					Annotations: c.stackAnnotations,
 				},
@@ -1240,23 +1239,10 @@ func (c *controllerStack) controllerContainers(setupCmd, machineCmd, controllerI
 				MountPath: c.pcfg.DataDir,
 			},
 			{
-				Name: storageName,
-				MountPath: c.pathJoin(
-					c.pcfg.DataDir,
-					"agents",
-					"controller-"+c.pcfg.ControllerId,
-				),
-				SubPath: c.pathJoin("agents",
-					"controller-"+c.pcfg.ControllerId,
-				),
-			},
-			{
 				Name: c.resourceNameVolAgentConf,
 				MountPath: c.pathJoin(
 					c.pcfg.DataDir,
-					"agents",
-					"controller-"+c.pcfg.ControllerId,
-					constants.TemplateFileNameAgentConf,
+					constants.ControllerAgentConfigFilename,
 				),
 				SubPath:  constants.ControllerAgentConfigFilename,
 				ReadOnly: true,
@@ -1338,41 +1324,43 @@ func (c *controllerStack) buildContainerSpecForController() (*core.PodSpec, erro
 		loggingOption = "--debug"
 	}
 
-	agentConfigRelativePath := c.pathJoin(
-		"agents",
-		fmt.Sprintf("controller-%s", c.pcfg.ControllerId),
-		agentconstants.AgentConfigFilename,
-	)
-
 	var jujudEnv map[string]string = nil
 	featureFlags := featureflag.AsEnvironmentValue()
 	if featureFlags != "" {
 		jujudEnv = map[string]string{osenv.JujuFeatureFlagEnvKey: featureFlags}
 	}
 
-	setupCmd := ""
-	if c.pcfg.ControllerId == agent.BootstrapControllerId {
-		// only do bootstrap-state on the bootstrap controller - controller-0.
-		bootstrapStateCmd := fmt.Sprintf(
-			"%s bootstrap-state --data-dir $JUJU_DATA_DIR %s --timeout %s",
-			c.pathJoin("$JUJU_TOOLS_DIR", "jujud"),
-			loggingOption,
-			c.timeout.String(),
-		)
-		if featureFlags != "" {
-			bootstrapStateCmd = fmt.Sprintf("%s=%s %s", osenv.JujuFeatureFlagEnvKey, featureFlags, bootstrapStateCmd)
-		}
-		setupCmd = fmt.Sprintf(
-			"test -e %s || %s",
-			c.pathJoin("$JUJU_DATA_DIR", agentConfigRelativePath),
-			bootstrapStateCmd,
-		)
+	bootstrapStateCmd := fmt.Sprintf(
+		"%s bootstrap-state --data-dir $JUJU_DATA_DIR %s --timeout %s",
+		c.pathJoin("$JUJU_TOOLS_DIR", "jujud"),
+		loggingOption,
+		c.timeout.String(),
+	)
+	if featureFlags != "" {
+		bootstrapStateCmd = fmt.Sprintf("%s=%s %s", osenv.JujuFeatureFlagEnvKey, featureFlags, bootstrapStateCmd)
 	}
+	setupCmd := fmt.Sprintf(
+		`controller_id="${HOSTNAME##*-}"
+controller_agent_dir=$JUJU_DATA_DIR/agents/controller-${controller_id}
+controller_agent_conf=$controller_agent_dir/%s
+controller_agent_template=$controller_agent_dir/%s
+mkdir -p "$controller_agent_dir"
+sed "s/controller-0/controller-${controller_id}/g" "$JUJU_DATA_DIR/%s" > "$controller_agent_template"
+if [ "$controller_id" = "%s" ]; then
+    test -e "$controller_agent_conf" || %s
+else
+    test -e "$controller_agent_conf" || cp "$controller_agent_template" "$controller_agent_conf"
+fi`,
+		agentconstants.AgentConfigFilename,
+		constants.TemplateFileNameAgentConf,
+		constants.ControllerAgentConfigFilename,
+		agent.BootstrapControllerId,
+		bootstrapStateCmd,
+	)
 
 	machineCmd := fmt.Sprintf(
-		"%s machine --data-dir $JUJU_DATA_DIR --controller-id %s --log-to-stderr %s",
+		`sh -c 'controller_id="${HOSTNAME##*-}"; exec %s machine --data-dir $JUJU_DATA_DIR --controller-id "$controller_id" --log-to-stderr %s'`,
 		c.pathJoin("$JUJU_TOOLS_DIR", "jujud"),
-		c.pcfg.ControllerId,
 		loggingOption,
 	)
 
@@ -1440,13 +1428,14 @@ func (c *controllerStack) buildContainerSpecForCommands(setupCmd, machineCmd str
 	}
 	spec.Containers = append(spec.Containers, containers...)
 
-	agentConfigMount := core.VolumeMount{
+	controllerUnitAgentConfigMount := core.VolumeMount{
 		Name: c.resourceNameVolAgentConf,
 		MountPath: c.pathJoin(
 			c.pcfg.DataDir,
-			constants.TemplateFileNameAgentConf,
+			constants.ControllerUnitAgentConfigFilename,
 		),
-		SubPath: constants.ControllerUnitAgentConfigFilename,
+		SubPath:  constants.ControllerUnitAgentConfigFilename,
+		ReadOnly: true,
 	}
 	dataDirMount := core.VolumeMount{
 		Name:      storageName,
@@ -1457,7 +1446,13 @@ func (c *controllerStack) buildContainerSpecForCommands(setupCmd, machineCmd str
 		if ct.Name != constants.ApplicationInitContainer {
 			continue
 		}
-		ct.VolumeMounts = append(ct.VolumeMounts, agentConfigMount)
+		for j, mount := range ct.VolumeMounts {
+			if mount.MountPath == c.pcfg.DataDir {
+				ct.VolumeMounts = append(ct.VolumeMounts[:j], ct.VolumeMounts[j+1:]...)
+				break
+			}
+		}
+		ct.VolumeMounts = append(ct.VolumeMounts, controllerUnitAgentConfigMount, dataDirMount)
 		ct.Args = append(ct.Args, "--controller")
 		spec.InitContainers[i] = ct
 	}
@@ -1474,7 +1469,7 @@ func (c *controllerStack) buildContainerSpecForCommands(setupCmd, machineCmd str
 				break
 			}
 		}
-		ct.VolumeMounts = append(ct.VolumeMounts, agentConfigMount, dataDirMount)
+		ct.VolumeMounts = append(ct.VolumeMounts, controllerUnitAgentConfigMount, dataDirMount)
 
 		// Remove probes to prevent controller death.
 		ct.LivenessProbe = nil

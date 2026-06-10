@@ -145,9 +145,12 @@ func (c *initCommand) Run(ctx *cmd.Context) (err error) {
 	// If the agent conf already exists, no need to do the unit introduction.
 	// TODO(wallyworld) - we may need to revisit this when we support stateless workloads.
 	templateConfigPath := path.Join(c.dataDir, k8sconstants.TemplateFileNameAgentConf)
-	_, err = c.fileReaderWriter.Stat(templateConfigPath)
-	if err == nil || !os.IsNotExist(err) {
+	templateConfigExists, err := c.ensureControllerTemplateConfig(templateConfigPath)
+	if err != nil {
 		return errors.Trace(err)
+	}
+	if templateConfigExists {
+		return nil
 	}
 
 	applicationAPI, err := c.getApplicationAPI(ctx)
@@ -191,6 +194,36 @@ func (c *initCommand) Run(ctx *cmd.Context) (err error) {
 	}
 
 	return nil
+}
+
+func (c *initCommand) ensureControllerTemplateConfig(templateConfigPath string) (bool, error) {
+	_, err := c.fileReaderWriter.Stat(templateConfigPath)
+	if err == nil {
+		return true, nil
+	} else if !os.IsNotExist(err) {
+		return false, errors.Trace(err)
+	}
+
+	if !c.isController {
+		return false, nil
+	}
+	podName := c.environment.Getenv(k8sconstants.EnvJujuK8sPodName)
+	if !strings.HasSuffix(podName, "-0") {
+		return false, nil
+	}
+
+	templateSourcePath := path.Join(c.dataDir, k8sconstants.ControllerUnitAgentConfigFilename)
+	data, err := c.fileReaderWriter.ReadFile(templateSourcePath)
+	if err != nil {
+		return false, errors.Trace(err)
+	}
+	if err = c.fileReaderWriter.MkdirAll(c.dataDir, 0775); err != nil {
+		return false, errors.Trace(err)
+	}
+	if err = c.fileReaderWriter.WriteFile(templateConfigPath, data, 0664); err != nil {
+		return false, errors.Trace(err)
+	}
+	return true, nil
 }
 
 func (c *initCommand) copyBinaries() error {
