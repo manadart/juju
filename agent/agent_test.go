@@ -637,6 +637,15 @@ func (*suite) TestSetDqliteBusyTimeout(c *tc.C) {
 	c.Assert(dqliteBusyTimeout, tc.Equals, time.Second*10, tc.Commentf("dqlite busy timeout not updated"))
 }
 
+func (*suite) TestSetValueInitializesValues(c *tc.C) {
+	conf, err := agent.NewAgentConfig(attributeParams)
+	c.Assert(err, tc.ErrorIsNil)
+
+	conf.SetValue(agent.DqliteBindAddressKey, "controller-0.controller-dqlite.controller.svc")
+
+	c.Assert(conf.Value(agent.DqliteBindAddressKey), tc.Equals, "controller-0.controller-dqlite.controller.svc")
+}
+
 func (*suite) TestSetOpenTelemetryEnabled(c *tc.C) {
 	conf, err := agent.NewAgentConfig(attributeParams)
 	c.Assert(err, tc.ErrorIsNil)

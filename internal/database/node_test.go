@@ -97,6 +97,18 @@ func (s *nodeManagerSuite) TestIsLoopbackPreferred(c *tc.C) {
 	c.Check(ok, tc.IsFalse)
 }
 
+func (s *nodeManagerSuite) TestIsLoopbackPreferredConfiguredBindAddress(c *tc.C) {
+	cfg := fakeAgentConfig{
+		values: map[string]string{
+			agent.DqliteBindAddressKey: "controller-0.controller-dqlite.controller.svc",
+		},
+	}
+
+	m := NewNodeManager(cfg, true, loggertesting.WrapCheckLog(c), coredatabase.NoopSlowQueryLogger{})
+
+	c.Check(m.IsLoopbackPreferred(), tc.IsFalse)
+}
+
 func (s *nodeManagerSuite) TestIsExistingNode(c *tc.C) {
 	subDir := strconv.Itoa(rand.Intn(10))
 
@@ -491,6 +503,31 @@ func (s *nodeManagerSuite) TestWithPreferredCloudLocalAddressOptionNoAddrFallbac
 	c.Assert(err, tc.ErrorIsNil)
 }
 
+func (s *nodeManagerSuite) TestWithPreferredCloudLocalAddressOptionConfiguredBindAddress(c *tc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	src := NewMockConfigSource(ctrl)
+	cfg := fakeAgentConfig{
+		values: map[string]string{
+			agent.DqliteBindAddressKey: "127.0.0.1",
+		},
+	}
+	m := NewNodeManager(cfg, true, loggertesting.WrapCheckLog(c), coredatabase.NoopSlowQueryLogger{})
+	m.port = dqlitetesting.FindTCPPort(c)
+
+	opt, err := m.WithPreferredCloudLocalAddressOption(src)
+	c.Assert(err, tc.ErrorIsNil)
+
+	dqliteApp, err := app.New(c.MkDir(), opt)
+	c.Assert(err, tc.ErrorIsNil)
+
+	c.Check(strings.Split(dqliteApp.Address(), ":")[0], tc.Equals, "127.0.0.1")
+
+	err = dqliteApp.Close()
+	c.Assert(err, tc.ErrorIsNil)
+}
+
 func (s *nodeManagerSuite) TestWithPreferredCloudLocalAddressOptionSingleAddrSuccess(c *tc.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()
@@ -544,6 +581,7 @@ type fakeAgentConfig struct {
 
 	dataDir  string
 	apiAddrs []string
+	values   map[string]string
 }
 
 // DataDir implements agent.Config.
@@ -573,6 +611,11 @@ func (cfg fakeAgentConfig) APIAddresses() ([]string, error) {
 // DqlitePort implements agent.Config.
 func (cfg fakeAgentConfig) DqlitePort() (int, bool) {
 	return 0, false
+}
+
+// Value implements agent.Config.
+func (cfg fakeAgentConfig) Value(key string) string {
+	return cfg.values[key]
 }
 
 func firstCertificateDNSName(c *tc.C, certPEM string) string {

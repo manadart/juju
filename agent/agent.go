@@ -41,6 +41,10 @@ const (
 
 	// BootstrapControllerId is the ID of the initial controller.
 	BootstrapControllerId = "0"
+
+	// DqliteBindAddressKey is the agent configuration key used to supply an
+	// explicit Dqlite bind address.
+	DqliteBindAddressKey = "dqlite-bind-address"
 )
 
 // These are base values used for the corresponding defaults.
@@ -699,6 +703,9 @@ func (c *configInternal) SetValue(key, value string) {
 	if value == "" {
 		delete(c.values, key)
 	} else {
+		if c.values == nil {
+			c.values = make(map[string]string)
+		}
 		c.values[key] = value
 	}
 }

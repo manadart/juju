@@ -83,6 +83,9 @@ func NewNodeManager(cfg agent.Config, isLoopbackPreferred bool, logger logger.Lo
 // This is currently true for CAAS and unit testing. Once CAAS supports
 // high availability we'll have to revisit this.
 func (m *NodeManager) IsLoopbackPreferred() bool {
+	if m.configuredDqliteBindAddress() != "" {
+		return false
+	}
 	return m.isLoopbackPreferred
 }
 
@@ -246,6 +249,10 @@ func (m *NodeManager) WithBusyTimeoutOption() app.Option {
 // joining a cluster) the bind address is determined externally and passed as
 // the argument to WithAddressOption.
 func (m *NodeManager) WithPreferredCloudLocalAddressOption(source corenetwork.ConfigSource) (app.Option, error) {
+	if addr := m.configuredDqliteBindAddress(); addr != "" {
+		return m.WithAddressOption(addr), nil
+	}
+
 	nics, err := source.Interfaces()
 	if err != nil {
 		return nil, errors.Annotate(err, "querying local network interfaces")
@@ -277,6 +284,13 @@ func (m *NodeManager) WithPreferredCloudLocalAddressOption(source corenetwork.Co
 
 	m.logger.Warningf(context.TODO(), "failed to determine a unique local-cloud address; falling back to 127.0.0.1 for Dqlite")
 	return m.WithLoopbackAddressOption(), nil
+}
+
+func (m *NodeManager) configuredDqliteBindAddress() string {
+	if m.cfg == nil {
+		return ""
+	}
+	return m.cfg.Value(agent.DqliteBindAddressKey)
 }
 
 // WithLoopbackAddressOption returns a Dqlite application
