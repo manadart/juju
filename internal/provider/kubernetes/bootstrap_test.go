@@ -688,8 +688,19 @@ controller_id="${HOSTNAME##*-}"
 controller_agent_dir=$JUJU_DATA_DIR/agents/controller-${controller_id}
 controller_agent_conf=$controller_agent_dir/agent.conf
 controller_agent_template=$controller_agent_dir/template-agent.conf
+controller_conf=$controller_agent_dir/controller.conf
+controller_dqlite_service="juju-controller-test-dqlite"
+controller_namespace="controller-1"
 mkdir -p "$controller_agent_dir"
 sed "s/controller-0/controller-${controller_id}/g" "$JUJU_DATA_DIR/controller-agent.conf" > "$controller_agent_template"
+{
+    echo "db-bind-addresses:"
+    i=0
+    while [ "$i" -le "$controller_id" ]; do
+        echo "  ${i}: controller-${i}.${controller_dqlite_service}.${controller_namespace}.svc"
+        i=$((i + 1))
+    done
+} > "$controller_conf"
 if [ "$controller_id" = "0" ]; then
     test -e "$controller_agent_conf" || JUJU_DEV_FEATURE_FLAGS=developer-mode $JUJU_TOOLS_DIR/jujud bootstrap-state --data-dir $JUJU_DATA_DIR --debug --timeout 10m0s
 else

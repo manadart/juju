@@ -1344,8 +1344,19 @@ func (c *controllerStack) buildContainerSpecForController() (*core.PodSpec, erro
 controller_agent_dir=$JUJU_DATA_DIR/agents/controller-${controller_id}
 controller_agent_conf=$controller_agent_dir/%s
 controller_agent_template=$controller_agent_dir/%s
+controller_conf=$controller_agent_dir/controller.conf
+controller_dqlite_service=%q
+controller_namespace=%q
 mkdir -p "$controller_agent_dir"
 sed "s/controller-0/controller-${controller_id}/g" "$JUJU_DATA_DIR/%s" > "$controller_agent_template"
+{
+    echo "db-bind-addresses:"
+    i=0
+    while [ "$i" -le "$controller_id" ]; do
+        echo "  ${i}: controller-${i}.${controller_dqlite_service}.${controller_namespace}.svc"
+        i=$((i + 1))
+    done
+} > "$controller_conf"
 if [ "$controller_id" = "%s" ]; then
     test -e "$controller_agent_conf" || %s
 else
@@ -1353,6 +1364,8 @@ else
 fi`,
 		agentconstants.AgentConfigFilename,
 		constants.TemplateFileNameAgentConf,
+		c.resourceNameDqliteService,
+		c.controllerNamespace(),
 		constants.ControllerAgentConfigFilename,
 		agent.BootstrapControllerId,
 		bootstrapStateCmd,
