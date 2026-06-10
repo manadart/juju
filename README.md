@@ -18,3 +18,31 @@ operators called ‘charms’.
 - Read the [docs](https://documentation.ubuntu.com/juju/).
 - Read our [Code of conduct](https://ubuntu.com/community/code-of-conduct) and join our [chat](https://matrix.to/#/#charmhub-juju:ubuntu.com) and [forum](https://discourse.charmhub.io/) or [open an issue](https://github.com/juju/juju/issues).
 - Read our [CONTRIBUTING guide](./CONTRIBUTING.md) and contribute!
+
+## Kubernetes controller HA spike
+
+This branch contains exploratory work toward high availability for Juju
+controllers running on Kubernetes. The spike is intended to illustrate the
+shape of a possible implementation rather than present a final design.
+
+The prototype makes the controller workload scale past one pod by deriving a
+stable controller identity from each StatefulSet ordinal. It also introduces a
+separate headless service for Dqlite so each controller pod has a unique,
+routable peer address instead of sharing the normal controller API service
+address.
+
+Controller startup then generates per-pod agent configuration from the bootstrap
+controller template. That configuration carries the pod-specific controller
+identity and the Dqlite peer addresses needed to form a cluster. Dqlite startup
+can use those configured bind addresses on Kubernetes rather than being limited
+to loopback.
+
+Bootstrap also seeds the initial Dqlite cluster configuration and the
+credentials required by the Kubernetes controller path. When additional
+controller pods register as Dqlite nodes, the worker records a matching
+controller-node password so those agents can authenticate to their local API.
+
+The overall model is: give every controller pod stable identity, provide Dqlite
+with unique peer addresses, propagate those addresses into controller
+configuration, and ensure every scaled controller agent has matching credentials
+in the controller database.
