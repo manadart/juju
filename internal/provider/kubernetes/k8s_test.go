@@ -906,6 +906,74 @@ func (s *K8sBrokerSuite) TestGetServiceSvcFoundNoWorkload(c *tc.C) {
 	)
 }
 
+func (s *K8sBrokerSuite) TestGetServiceIgnoresControllerDqliteService(c *tc.C) {
+	ctrl := s.setupController(c)
+	defer ctrl.Finish()
+
+	appName := "controller"
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/managed-by": "juju",
+		"app.kubernetes.io/name":       appName,
+	}
+	labels := k8sutils.LabelsMerge(selectorLabels, k8sutils.LabelsJuju)
+	selector := k8sutils.LabelsToSelector(labels).String()
+
+	dqliteSvc := core.Service{
+		ObjectMeta: v1.ObjectMeta{
+			Name:   "controller-dqlite",
+			Labels: labels,
+		},
+		Spec: core.ServiceSpec{
+			Selector:                 selectorLabels,
+			Type:                     core.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			PublishNotReadyAddresses: true,
+		},
+	}
+
+	controllerSvc := core.Service{
+		ObjectMeta: v1.ObjectMeta{
+			Name:   appName,
+			Labels: labels,
+		},
+		Spec: core.ServiceSpec{
+			Selector: selectorLabels,
+			Type:     core.ServiceTypeLoadBalancer,
+		},
+		Status: core.ServiceStatus{
+			LoadBalancer: core.LoadBalancerStatus{
+				Ingress: []core.LoadBalancerIngress{{
+					Hostname: "controller.example.test",
+				}},
+			},
+		},
+	}
+	controllerSvc.SetUID("uid-xxxxx")
+
+	gomock.InOrder(
+		s.mockServices.EXPECT().List(gomock.Any(), v1.ListOptions{LabelSelector: selector}).
+			Return(&core.ServiceList{Items: []core.Service{dqliteSvc, controllerSvc}}, nil),
+
+		s.mockStatefulSets.EXPECT().Get(gomock.Any(), "juju-operator-controller", v1.GetOptions{}).
+			Return(nil, s.k8sNotFoundError()),
+		s.mockStatefulSets.EXPECT().Get(gomock.Any(), appName, v1.GetOptions{}).
+			Return(nil, s.k8sNotFoundError()),
+		s.mockDeployments.EXPECT().Get(gomock.Any(), appName, v1.GetOptions{}).
+			Return(nil, s.k8sNotFoundError()),
+		s.mockDaemonSets.EXPECT().Get(gomock.Any(), appName, v1.GetOptions{}).
+			Return(nil, s.k8sNotFoundError()),
+	)
+
+	caasSvc, err := s.broker.GetService(c.Context(), appName, false)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(caasSvc, tc.DeepEquals, &caas.Service{
+		Id: "uid-xxxxx",
+		Addresses: network.ProviderAddresses{
+			network.NewMachineAddress("controller.example.test", network.WithScope(network.ScopePublic)).AsProviderAddress(),
+		},
+	})
+}
+
 func (s *K8sBrokerSuite) TestGetServiceSvcFoundWithStatefulSet(c *tc.C) {
 	ctrl := s.setupController(c)
 	defer ctrl.Finish()

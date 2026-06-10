@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -648,8 +647,8 @@ func (k *kubernetesClient) GetService(ctx context.Context, appName string, inclu
 	if len(servicesList.Items) > 0 {
 		for _, v := range servicesList.Items {
 			s := v
-			// Ignore any headless service for this app.
-			if !strings.HasSuffix(s.Name, "-endpoints") {
+			// Ignore any auxiliary service for this app.
+			if !isAuxiliaryServiceForApplication(appName, s.Name) {
 				svc = &s
 				break
 			}

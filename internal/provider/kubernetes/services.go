@@ -77,15 +77,10 @@ func findServiceForApplication(
 	}
 
 	services := []core.Service{}
-	endpointSvcName := application.HeadlessServiceName(appName)
-	dqliteSvcName := ""
-	if appName == constants.JujuControllerStackName {
-		dqliteSvcName = controllerDqliteServiceName(appName)
-	}
-	// We want to filter out the endpoints services made by juju as they should
-	// not be considered.
+	// We want to filter out auxiliary services made by Juju as they should not
+	// be considered.
 	for _, svc := range servicesList.Items {
-		if svc.Name != endpointSvcName && (dqliteSvcName == "" || svc.Name != dqliteSvcName) {
+		if !isAuxiliaryServiceForApplication(appName, svc.Name) {
 			services = append(services, svc)
 		}
 	}
@@ -95,4 +90,14 @@ func findServiceForApplication(
 	}
 
 	return &services[0], nil
+}
+
+func isAuxiliaryServiceForApplication(appName, svcName string) bool {
+	if svcName == application.HeadlessServiceName(appName) {
+		return true
+	}
+	if appName == constants.JujuControllerStackName && svcName == controllerDqliteServiceName(appName) {
+		return true
+	}
+	return false
 }
