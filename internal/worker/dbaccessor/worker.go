@@ -17,8 +17,10 @@ import (
 
 	"github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/logger"
-	"github.com/juju/juju/domain/controllernode/service"
-	"github.com/juju/juju/domain/controllernode/state"
+	agentpasswordservice "github.com/juju/juju/domain/agentpassword/service"
+	agentpasswordstate "github.com/juju/juju/domain/agentpassword/state"
+	controllernodeservice "github.com/juju/juju/domain/controllernode/service"
+	controllernodestate "github.com/juju/juju/domain/controllernode/state"
 	internaldatabase "github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/database/app"
 	"github.com/juju/juju/internal/database/dqlite"
@@ -160,6 +162,9 @@ type WorkerConfig struct {
 	// ControllerID uniquely identifies the controller that this
 	// worker is running on. It is equivalent to the machine ID.
 	ControllerID string
+
+	// ControllerNodePassword is the API password for the controller agent.
+	ControllerNodePassword string
 
 	// ControllerConfigWatcher is used to get notifications when the controller
 	// agent configuration changes on disk. When it changes, we must reload it
@@ -635,6 +640,10 @@ func (w *dbWorker) initialiseDqlite(ctx context.Context, options ...app.Option) 
 		return errors.Annotatef(err, "adding Dqlite node %q with id %d and address %q", w.cfg.ControllerID, w.dbApp.ID(), addr)
 	}
 
+	if err := w.setControllerNodePassword(ctx); err != nil {
+		return errors.Annotatef(err, "setting controller node %q password", w.cfg.ControllerID)
+	}
+
 	// Begin handling external requests.
 	close(w.dbReady)
 	return nil
@@ -1055,10 +1064,23 @@ func (w *dbWorker) ensureNamespace(ctx context.Context, namespace string) error 
 // the Dqlite node is started - the DB worker for the controller is always
 // running in this case. Do not place a call to this method where that may
 // *not* be the case.
-func (w *dbWorker) nodeService() *service.Service {
-	return service.NewService(
-		state.NewState(
+func (w *dbWorker) nodeService() *controllernodeservice.Service {
+	return controllernodeservice.NewService(
+		controllernodestate.NewState(
 			database.NewTxnRunnerFactoryForNamespace(w.workerFromCache, database.ControllerNS)),
 		w.cfg.Logger.Child("controllernode"),
 	)
+}
+
+func (w *dbWorker) setControllerNodePassword(ctx context.Context) error {
+	if w.cfg.ControllerNodePassword == "" {
+		return nil
+	}
+
+	passwordService := agentpasswordservice.NewService(
+		nil,
+		agentpasswordstate.NewControllerState(
+			database.NewTxnRunnerFactoryForNamespace(w.workerFromCache, database.ControllerNS)),
+	)
+	return passwordService.SetControllerNodePassword(ctx, w.cfg.ControllerID, w.cfg.ControllerNodePassword)
 }

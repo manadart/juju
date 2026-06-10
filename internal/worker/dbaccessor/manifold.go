@@ -106,6 +106,10 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 			controllerID := agentConfig.Tag().Id()
 			configPath := path.Join(agentConfig.DataDir(), "agents", "controller-"+controllerID, "controller.conf")
 			controllerConf := controllerConfigReader{configPath: configPath}
+			controllerNodePassword := agentConfig.OldPassword()
+			if apiInfo, ok := agentConfig.APIInfo(); ok && apiInfo.Password != "" {
+				controllerNodePassword = apiInfo.Password
+			}
 
 			var controllerConfigWatcher controlleragentconfig.ConfigWatcher
 			if err := getter.Get(config.ControllerAgentConfigName, &controllerConfigWatcher); err != nil {
@@ -134,6 +138,7 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 				NewDBWorker:             config.NewDBWorker,
 				ControllerConfigWatcher: controllerConfigWatcher,
 				ClusterConfig:           controllerConf,
+				ControllerNodePassword:  controllerNodePassword,
 			}
 
 			w, err := NewWorker(cfg)

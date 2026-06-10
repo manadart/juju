@@ -21,6 +21,8 @@ import (
 	coredatabase "github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/model"
 	jujuversion "github.com/juju/juju/core/version"
+	agentpasswordservice "github.com/juju/juju/domain/agentpassword/service"
+	agentpasswordstate "github.com/juju/juju/domain/agentpassword/state"
 	"github.com/juju/juju/domain/schema"
 	"github.com/juju/juju/internal/database"
 	"github.com/juju/juju/internal/database/app"
@@ -39,6 +41,8 @@ type integrationSuite struct {
 	dbGetter  coredatabase.DBGetter
 	dbDeleter coredatabase.DBDeleter
 	worker    worker.Worker
+
+	controllerNodePassword string
 }
 
 func TestIntegrationSuite(t *stdtesting.T) {
@@ -58,12 +62,13 @@ func (s *integrationSuite) SetUpSuite(c *tc.C) {
 
 func (s *integrationSuite) SetUpTest(c *tc.C) {
 	s.DqliteSuite.SetUpTest(c)
+	s.controllerNodePassword = "controller-node-password-123456"
 
 	params := agent.AgentConfigParams{
 		Tag:               names.NewMachineTag("0"),
 		UpgradedToVersion: jujuversion.Current,
 		Jobs:              []model.MachineJob{model.JobHostUnits},
-		Password:          "sekrit",
+		Password:          s.controllerNodePassword,
 		CACert:            "ca cert",
 		APIAddresses:      []string{"localhost:1235"},
 		Nonce:             "a nonce",
@@ -103,6 +108,7 @@ func (s *integrationSuite) SetUpTest(c *tc.C) {
 		Clock:                   clock.WallClock,
 		Logger:                  logger,
 		ControllerID:            agentConfig.Tag().Id(),
+		ControllerNodePassword:  s.controllerNodePassword,
 		ControllerConfigWatcher: controllerConfigWatcher{},
 		ClusterConfig:           clusterConfig{},
 	})
@@ -143,6 +149,22 @@ func (s *integrationSuite) TestWorkerSetsNodeIDAndAddress(c *tc.C) {
 
 	c.Check(nodeID, tc.Not(tc.Equals), uint64(0))
 	c.Check(addr, tc.HasPrefix, "127.")
+}
+
+func (s *integrationSuite) TestWorkerSetsControllerNodePassword(c *tc.C) {
+	db, err := s.dbGetter.GetDB(c.Context(), coredatabase.ControllerNS)
+	c.Assert(err, tc.ErrorIsNil)
+
+	passwordService := agentpasswordservice.NewService(
+		nil,
+		agentpasswordstate.NewControllerState(func(context.Context) (coredatabase.TxnRunner, error) {
+			return db, nil
+		}),
+	)
+
+	valid, err := passwordService.MatchesControllerNodePasswordHash(c.Context(), "0", s.controllerNodePassword)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(valid, tc.IsTrue)
 }
 
 func (s *integrationSuite) TestWorkerAccessingControllerDB(c *tc.C) {

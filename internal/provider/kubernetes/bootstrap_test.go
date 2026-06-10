@@ -697,7 +697,10 @@ controller_conf=$controller_agent_dir/controller.conf
 controller_dqlite_service="juju-controller-test-dqlite"
 controller_namespace="controller-1"
 mkdir -p "$controller_agent_dir"
-sed "s/controller-0/controller-${controller_id}/g" "$JUJU_DATA_DIR/controller-agent.conf" > "$controller_agent_template"
+sed \
+    -e "s/^tag: controller-0$/tag: controller-${controller_id}/" \
+    -e "s/controller-0\.${controller_dqlite_service}/controller-${controller_id}.${controller_dqlite_service}/g" \
+    "$JUJU_DATA_DIR/controller-agent.conf" > "$controller_agent_template"
 {
     echo "db-bind-addresses:"
     i=0
