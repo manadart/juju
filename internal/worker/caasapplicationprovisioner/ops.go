@@ -112,6 +112,10 @@ type ApplicationOps interface {
 	EnsureScale(ctx context.Context, appName string, appUUID coreapplication.UUID,
 		app caas.Application, appLife life.Value, facade CAASProvisionerFacade,
 		applicationService ApplicationService, logger logger.Logger) error
+
+	EnsureControllerScale(ctx context.Context, appName string, appUUID coreapplication.UUID,
+		app caas.Application, appLife life.Value, applicationService ApplicationService,
+		logger logger.Logger) error
 }
 
 type applicationOps struct{}
@@ -211,6 +215,15 @@ func (applicationOps) EnsureScale(
 	logger logger.Logger,
 ) error {
 	return ensureScale(ctx, appName, appUUID, app, appLife, facade, applicationService, logger)
+}
+
+func (applicationOps) EnsureControllerScale(
+	ctx context.Context,
+	appName string, appUUID coreapplication.UUID, app caas.Application, appLife life.Value,
+	applicationService ApplicationService,
+	logger logger.Logger,
+) error {
+	return ensureControllerScale(ctx, appName, appUUID, app, appLife, applicationService, logger)
 }
 
 type Tomb interface {
@@ -795,6 +808,73 @@ func ensureScale(
 		return tryAgain
 	}
 	return nil
+}
+
+// ensureControllerScale updates the controller StatefulSet replica count while
+// leaving unit creation to CAAS pod introduction.
+func ensureControllerScale(
+	ctx context.Context,
+	appName string, appUUID coreapplication.UUID, app caas.Application, appLife life.Value,
+	applicationService ApplicationService,
+	logger logger.Logger,
+) error {
+	if appLife != life.Alive {
+		return errors.NotSupportedf("scaling controller application with life %q", appLife)
+	}
+
+	desiredScale, err := applicationService.GetApplicationScale(ctx, appName)
+	if err != nil {
+		return errors.Annotatef(err, "fetching controller application %q desired scale", appName)
+	}
+
+	ps, err := applicationService.GetApplicationScalingState(ctx, appName)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if !ps.Scaling || ps.ScaleTarget != desiredScale {
+		if err := updateProvisioningState(ctx, appName, true, desiredScale, applicationService); err != nil {
+			return err
+		}
+	}
+
+	appState, err := app.State()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	currentScale := appState.DesiredReplicas
+	if currentScale == 0 {
+		currentScale = len(appState.Replicas)
+	}
+	if desiredScale < currentScale {
+		return errors.NotSupportedf(
+			"scaling down controller application from %d to %d",
+			currentScale,
+			desiredScale,
+		)
+	}
+	if desiredScale == currentScale {
+		units, err := applicationService.GetAllUnitLifeForApplication(ctx, appUUID)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		unitScale := 0
+		for unitName := range units {
+			nextUnitNumber := unitName.Number() + 1
+			if nextUnitNumber > unitScale {
+				unitScale = nextUnitNumber
+			}
+		}
+		if unitScale < desiredScale {
+			return tryAgain
+		}
+		return updateProvisioningState(ctx, appName, false, 0, applicationService)
+	}
+
+	logger.Infof(ctx, "scaling controller application %q to desired scale %d", appName, desiredScale)
+	if err := app.Scale(desiredScale); err != nil {
+		return errors.Trace(err)
+	}
+	return tryAgain
 }
 
 func getStorageUniqueID(appUUID coreapplication.UUID) string {

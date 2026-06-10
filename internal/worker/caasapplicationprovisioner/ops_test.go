@@ -611,6 +611,88 @@ func (s *OpsSuite) TestEnsureScaleWithAttachStorageEnsurePVCsFails(c *tc.C) {
 	c.Assert(err, tc.ErrorMatches, "PVC creation failed")
 }
 
+func (s *OpsSuite) TestEnsureControllerScaleScalesUp(c *tc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	appUUID := tc.Must(c, application.NewUUID)
+	app := caasmocks.NewMockApplication(ctrl)
+	applicationService := mocks.NewMockApplicationService(ctrl)
+
+	gomock.InOrder(
+		applicationService.EXPECT().GetApplicationScale(gomock.Any(), "controller").Return(3, nil),
+		applicationService.EXPECT().GetApplicationScalingState(gomock.Any(), "controller").Return(applicationservice.ScalingState{}, nil),
+		applicationService.EXPECT().SetApplicationScalingState(gomock.Any(), "controller", 3, true).Return(nil),
+		app.EXPECT().State().Return(caas.ApplicationState{
+			DesiredReplicas: 1,
+			Replicas:        []string{"controller-0"},
+		}, nil),
+		app.EXPECT().Scale(3).Return(nil),
+	)
+
+	err := caasapplicationprovisioner.AppOps.EnsureControllerScale(
+		c.Context(), "controller", appUUID, app, life.Alive, applicationService, s.logger)
+	c.Assert(err, tc.ErrorMatches, "try again")
+}
+
+func (s *OpsSuite) TestEnsureControllerScaleClearsWhenUnitsRegistered(c *tc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	appUUID := tc.Must(c, application.NewUUID)
+	app := caasmocks.NewMockApplication(ctrl)
+	applicationService := mocks.NewMockApplicationService(ctrl)
+
+	units := map[unit.Name]life.Value{
+		"controller/0": life.Alive,
+		"controller/1": life.Alive,
+		"controller/2": life.Alive,
+	}
+
+	gomock.InOrder(
+		applicationService.EXPECT().GetApplicationScale(gomock.Any(), "controller").Return(3, nil),
+		applicationService.EXPECT().GetApplicationScalingState(gomock.Any(), "controller").Return(applicationservice.ScalingState{
+			Scaling:     true,
+			ScaleTarget: 3,
+		}, nil),
+		app.EXPECT().State().Return(caas.ApplicationState{
+			DesiredReplicas: 3,
+			Replicas:        []string{"controller-0", "controller-1", "controller-2"},
+		}, nil),
+		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(units, nil),
+		applicationService.EXPECT().SetApplicationScalingState(gomock.Any(), "controller", 0, false).Return(nil),
+	)
+
+	err := caasapplicationprovisioner.AppOps.EnsureControllerScale(
+		c.Context(), "controller", appUUID, app, life.Alive, applicationService, s.logger)
+	c.Assert(err, tc.ErrorIsNil)
+}
+
+func (s *OpsSuite) TestEnsureControllerScaleDownNotSupported(c *tc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	appUUID := tc.Must(c, application.NewUUID)
+	app := caasmocks.NewMockApplication(ctrl)
+	applicationService := mocks.NewMockApplicationService(ctrl)
+
+	gomock.InOrder(
+		applicationService.EXPECT().GetApplicationScale(gomock.Any(), "controller").Return(1, nil),
+		applicationService.EXPECT().GetApplicationScalingState(gomock.Any(), "controller").Return(applicationservice.ScalingState{
+			Scaling:     true,
+			ScaleTarget: 1,
+		}, nil),
+		app.EXPECT().State().Return(caas.ApplicationState{
+			DesiredReplicas: 3,
+			Replicas:        []string{"controller-0", "controller-1", "controller-2"},
+		}, nil),
+	)
+
+	err := caasapplicationprovisioner.AppOps.EnsureControllerScale(
+		c.Context(), "controller", appUUID, app, life.Alive, applicationService, s.logger)
+	c.Assert(err, tc.ErrorMatches, "scaling down controller application from 3 to 1 not supported")
+}
+
 func (s *OpsSuite) TestAppAlive(c *tc.C) {
 	ctrl := gomock.NewController(c)
 	defer ctrl.Finish()

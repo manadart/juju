@@ -159,6 +159,44 @@ func (c *MockApplicationOpsAppDyingCall) DoAndReturn(f func(context.Context, str
 	return c
 }
 
+// EnsureControllerScale mocks base method.
+func (m *MockApplicationOps) EnsureControllerScale(arg0 context.Context, arg1 string, arg2 application.UUID, arg3 caas.Application, arg4 life.Value, arg5 caasapplicationprovisioner.ApplicationService, arg6 logger.Logger) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnsureControllerScale", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnsureControllerScale indicates an expected call of EnsureControllerScale.
+func (mr *MockApplicationOpsMockRecorder) EnsureControllerScale(arg0, arg1, arg2, arg3, arg4, arg5, arg6 any) *MockApplicationOpsEnsureControllerScaleCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureControllerScale", reflect.TypeOf((*MockApplicationOps)(nil).EnsureControllerScale), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+	return &MockApplicationOpsEnsureControllerScaleCall{Call: call}
+}
+
+// MockApplicationOpsEnsureControllerScaleCall wrap *gomock.Call
+type MockApplicationOpsEnsureControllerScaleCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockApplicationOpsEnsureControllerScaleCall) Return(arg0 error) *MockApplicationOpsEnsureControllerScaleCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockApplicationOpsEnsureControllerScaleCall) Do(f func(context.Context, string, application.UUID, caas.Application, life.Value, caasapplicationprovisioner.ApplicationService, logger.Logger) error) *MockApplicationOpsEnsureControllerScaleCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockApplicationOpsEnsureControllerScaleCall) DoAndReturn(f func(context.Context, string, application.UUID, caas.Application, life.Value, caasapplicationprovisioner.ApplicationService, logger.Logger) error) *MockApplicationOpsEnsureControllerScaleCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // EnsureScale mocks base method.
 func (m *MockApplicationOps) EnsureScale(arg0 context.Context, arg1 string, arg2 application.UUID, arg3 caas.Application, arg4 life.Value, arg5 caasapplicationprovisioner.CAASProvisionerFacade, arg6 caasapplicationprovisioner.ApplicationService, arg7 logger.Logger) error {
 	m.ctrl.T.Helper()

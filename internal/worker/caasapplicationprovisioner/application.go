@@ -258,11 +258,7 @@ func (a *appWorker) loop() error {
 			}
 			if ps.Scaling {
 				if statusOnly {
-					// Clear provisioning state for status only app.
-					err = a.applicationService.SetApplicationScalingState(ctx, name, 0, false)
-					if err != nil {
-						return errors.Trace(err)
-					}
+					scaleChan = a.clock.After(0)
 				} else {
 					scaleChan = a.clock.After(0)
 					reconcileDeadChan = a.clock.After(0)
@@ -376,7 +372,23 @@ func (a *appWorker) loop() error {
 			shouldRefresh = false
 		case <-scaleChan:
 			if statusOnly {
-				scaleChan = nil
+				err := a.ops.EnsureControllerScale(ctx, name, a.appUUID, app, a.life,
+					a.applicationService, a.logger)
+				if errors.Is(err, errors.NotFound) {
+					if scaleTries >= maxRetries {
+						return errors.Annotatef(err, "more than %d retries ensuring controller scale", maxRetries)
+					}
+					scaleTries++
+					scaleChan = a.clock.After(retryDelay)
+					shouldRefresh = false
+				} else if errors.Is(err, tryAgain) {
+					scaleChan = a.clock.After(retryDelay)
+					shouldRefresh = false
+				} else if err != nil {
+					return errors.Trace(err)
+				} else {
+					scaleChan = nil
+				}
 				break
 			}
 			if !ready {
