@@ -431,7 +431,12 @@ func (s *bootstrapSuite) TestBootstrap(c *tc.C) {
 		},
 		Type: core.SecretTypeOpaque,
 		Data: map[string][]byte{
-			"JUJU_K8S_UNIT_PASSWORD": []byte(controllerStacker.GetControllerUnitAgentPassword()),
+			"JUJU_K8S_APPLICATION":          []byte("controller"),
+			"JUJU_K8S_MODEL":                []byte(s.cfg.UUID()),
+			"JUJU_K8S_APPLICATION_PASSWORD": []byte(controllerStacker.GetControllerUnitAgentPassword()),
+			"JUJU_K8S_CONTROLLER_ADDRESSES": []byte("juju-controller-test-service.controller-1.svc:17777"),
+			"JUJU_K8S_CONTROLLER_CA_CERT":   []byte(coretesting.CACert),
+			"JUJU_K8S_UNIT_PASSWORD":        []byte(controllerStacker.GetControllerUnitAgentPassword()),
 		},
 	}
 

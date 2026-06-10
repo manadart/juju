@@ -29,6 +29,8 @@ import (
 
 // AgentPasswordService provides access to agent password management.
 type AgentPasswordService interface {
+	// SetApplicationPassword sets the password for the given application.
+	SetApplicationPassword(ctx context.Context, appID coreapplication.UUID, password string) error
 	// SetUnitPassword sets the password for the given unit.
 	SetUnitPassword(ctx context.Context, unitName unit.Name, password string) error
 	// SetMachinePassword sets the password for the given machine.

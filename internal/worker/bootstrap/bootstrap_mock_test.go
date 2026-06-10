@@ -1364,6 +1364,44 @@ func (m *MockAgentPasswordService) EXPECT() *MockAgentPasswordServiceMockRecorde
 	return m.recorder
 }
 
+// SetApplicationPassword mocks base method.
+func (m *MockAgentPasswordService) SetApplicationPassword(arg0 context.Context, arg1 application.UUID, arg2 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetApplicationPassword", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetApplicationPassword indicates an expected call of SetApplicationPassword.
+func (mr *MockAgentPasswordServiceMockRecorder) SetApplicationPassword(arg0, arg1, arg2 any) *MockAgentPasswordServiceSetApplicationPasswordCall {
+	mr.mock.ctrl.T.Helper()
+	call := mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetApplicationPassword", reflect.TypeOf((*MockAgentPasswordService)(nil).SetApplicationPassword), arg0, arg1, arg2)
+	return &MockAgentPasswordServiceSetApplicationPasswordCall{Call: call}
+}
+
+// MockAgentPasswordServiceSetApplicationPasswordCall wrap *gomock.Call
+type MockAgentPasswordServiceSetApplicationPasswordCall struct {
+	*gomock.Call
+}
+
+// Return rewrite *gomock.Call.Return
+func (c *MockAgentPasswordServiceSetApplicationPasswordCall) Return(arg0 error) *MockAgentPasswordServiceSetApplicationPasswordCall {
+	c.Call = c.Call.Return(arg0)
+	return c
+}
+
+// Do rewrite *gomock.Call.Do
+func (c *MockAgentPasswordServiceSetApplicationPasswordCall) Do(f func(context.Context, application.UUID, string) error) *MockAgentPasswordServiceSetApplicationPasswordCall {
+	c.Call = c.Call.Do(f)
+	return c
+}
+
+// DoAndReturn rewrite *gomock.Call.DoAndReturn
+func (c *MockAgentPasswordServiceSetApplicationPasswordCall) DoAndReturn(f func(context.Context, application.UUID, string) error) *MockAgentPasswordServiceSetApplicationPasswordCall {
+	c.Call = c.Call.DoAndReturn(f)
+	return c
+}
+
 // SetControllerNodePassword mocks base method.
 func (m *MockAgentPasswordService) SetControllerNodePassword(arg0 context.Context, arg1, arg2 string) error {
 	m.ctrl.T.Helper()

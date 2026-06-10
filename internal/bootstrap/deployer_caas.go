@@ -95,7 +95,7 @@ func (b *CAASDeployer) AddCAASControllerApplication(ctx context.Context, info De
 		return errors.Errorf("creating download info: %w", err)
 	}
 
-	if _, err := b.applicationService.CreateCAASApplication(ctx,
+	appID, err := b.applicationService.CreateCAASApplication(ctx,
 		bootstrap.ControllerApplicationName,
 		info.Charm,
 		origin,
@@ -115,8 +115,13 @@ func (b *CAASDeployer) AddCAASControllerApplication(ctx context.Context, info De
 			IsController: true,
 		},
 		applicationservice.AddUnitArg{},
-	); err != nil {
+	)
+	if err != nil {
 		return errors.Errorf("creating CAAS controller application: %w", err)
+	}
+
+	if err := b.passwordService.SetApplicationPassword(ctx, appID, b.unitPassword); err != nil {
+		return errors.Errorf("setting controller application password: %w", err)
 	}
 
 	return nil

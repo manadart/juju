@@ -18,6 +18,11 @@ import (
 
 // AgentPasswordService provides access to agent password management.
 type AgentPasswordService interface {
+	// SetApplicationPassword sets the password for the given application. If
+	// the application does not exist, an error satisfying
+	// [applicationerrors.ApplicationNotFound] is returned.
+	SetApplicationPassword(ctx context.Context, appID coreapplication.UUID, password string) error
+
 	// SetUnitPassword sets the password for the given unit. If the unit does
 	// not exist, an error satisfying [applicationerrors.UnitNotFound] is
 	// returned.

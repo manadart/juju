@@ -10,10 +10,13 @@ import (
 	"github.com/juju/tc"
 	"go.uber.org/mock/gomock"
 
+	coreapplication "github.com/juju/juju/core/application"
+	corecharm "github.com/juju/juju/core/charm"
 	network "github.com/juju/juju/core/network"
 	unit "github.com/juju/juju/core/unit"
 	"github.com/juju/juju/core/version"
 	applicationservice "github.com/juju/juju/domain/application/service"
+	deploymentcharm "github.com/juju/juju/domain/deployment/charm"
 	"github.com/juju/juju/environs/bootstrap"
 	"github.com/juju/juju/internal/uuid"
 )
@@ -47,6 +50,44 @@ func (s *deployerCAASSuite) TestControllerCharmBase(c *tc.C) {
 	base, err := deployer.ControllerCharmBase()
 	c.Assert(err, tc.ErrorIsNil)
 	c.Assert(base, tc.DeepEquals, version.DefaultSupportedLTSBase())
+}
+
+func (s *deployerCAASSuite) TestAddCAASControllerApplicationSetsApplicationPassword(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	cfg := s.newConfig(c)
+	appID := coreapplication.UUID("controller-app-uuid")
+	s.caasApplicationService.EXPECT().CreateCAASApplication(
+		gomock.Any(),
+		bootstrap.ControllerApplicationName,
+		s.charm,
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(appID, nil)
+	s.agentPasswordService.EXPECT().SetApplicationPassword(gomock.Any(), appID, cfg.UnitPassword).Return(nil)
+
+	deployer := s.newDeployerWithConfig(c, cfg)
+	origin := corecharm.Origin{
+		Source:   corecharm.CharmHub,
+		Type:     "charm",
+		Channel:  &deploymentcharm.Channel{},
+		Revision: new(1),
+		Hash:     "sha-256",
+		Platform: corecharm.Platform{
+			Architecture: "arm64",
+			OS:           "ubuntu",
+			Channel:      "22.04",
+		},
+	}
+	err := deployer.AddCAASControllerApplication(c.Context(), DeployCharmInfo{
+		URL:             deploymentcharm.MustParseURL("ch:juju-controller-0"),
+		Charm:           s.charm,
+		Origin:          &origin,
+		ArchivePath:     "path",
+		ObjectStoreUUID: "1234",
+	})
+	c.Assert(err, tc.ErrorIsNil)
 }
 
 func (s *deployerCAASSuite) TestCompleteCAASProcess(c *tc.C) {

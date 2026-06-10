@@ -809,6 +809,11 @@ func (c *controllerStack) ensureControllerApplicationSecret(ctx context.Context)
 		},
 		Type: core.SecretTypeOpaque,
 		Data: map[string][]byte{
+			"JUJU_K8S_APPLICATION":           []byte(environsbootstrap.ControllerApplicationName),
+			"JUJU_K8S_MODEL":                 []byte(c.broker.ModelUUID()),
+			"JUJU_K8S_APPLICATION_PASSWORD":  []byte(controllerUnitPassword),
+			"JUJU_K8S_CONTROLLER_ADDRESSES":  []byte(c.controllerAPIServiceAddress()),
+			"JUJU_K8S_CONTROLLER_CA_CERT":    []byte(c.unitAgentConfig.CACert()),
 			constants.EnvJujuK8sUnitPassword: []byte(controllerUnitPassword),
 		},
 	}
@@ -818,6 +823,14 @@ func (c *controllerStack) ensureControllerApplicationSecret(ctx context.Context)
 		cleanUp()
 	})
 	return errors.Trace(err)
+}
+
+func (c *controllerStack) controllerAPIServiceAddress() string {
+	return fmt.Sprintf("%s.%s.svc:%d",
+		c.resourceNameService,
+		c.controllerNamespace(),
+		c.portAPIServer,
+	)
 }
 
 // ensureControllerServiceAccount is responsible for making sure the in cluster
