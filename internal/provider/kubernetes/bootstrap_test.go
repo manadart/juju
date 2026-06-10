@@ -407,6 +407,20 @@ func (s *bootstrapSuite) TestBootstrap(c *tc.C) {
 			ExternalIPs: []string{"10.0.0.1"},
 		},
 	}
+	dqliteSvc := &core.Service{
+		ObjectMeta: v1.ObjectMeta{
+			Name:        "juju-controller-test-dqlite",
+			Namespace:   s.namespace,
+			Labels:      map[string]string{"app.kubernetes.io/managed-by": "juju", "app.kubernetes.io/name": "juju-controller-test"},
+			Annotations: map[string]string{"controller.juju.is/id": coretesting.ControllerTag.Id()},
+		},
+		Spec: core.ServiceSpec{
+			Selector:                 map[string]string{"app.kubernetes.io/name": "juju-controller-test"},
+			Type:                     core.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			PublishNotReadyAddresses: true,
+		},
+	}
 
 	secretControllerAppConfig := &core.Secret{
 		ObjectMeta: v1.ObjectMeta{
@@ -455,6 +469,8 @@ func (s *bootstrapSuite) TestBootstrap(c *tc.C) {
 			"controller-unit-agent.conf": controllerStacker.GetControllerUnitAgentConfigContent(c),
 		},
 	}
+	c.Assert(configMapWithAgentConfAdded.Data["controller-agent.conf"], tc.Contains,
+		"dqlite-bind-address: controller-0.juju-controller-test-dqlite.controller-1.svc")
 
 	numberOfPods := int32(1)
 	statefulSetSpec := &apps.StatefulSet{
@@ -469,7 +485,7 @@ func (s *bootstrapSuite) TestBootstrap(c *tc.C) {
 			Annotations: map[string]string{"controller.juju.is/id": coretesting.ControllerTag.Id()},
 		},
 		Spec: apps.StatefulSetSpec{
-			ServiceName: "juju-controller-test-service",
+			ServiceName: "juju-controller-test-dqlite",
 			Replicas:    &numberOfPods,
 			Selector: &v1.LabelSelector{
 				MatchLabels: map[string]string{"app.kubernetes.io/name": "juju-controller-test"},
@@ -1035,6 +1051,10 @@ exec /opt/pebble run --http :38811 --verbose
 		svc, err := s.mockServices.Get(c.Context(), `juju-controller-test-service`, v1.GetOptions{})
 		c.Assert(err, tc.ErrorIsNil)
 		c.Assert(svc, tc.DeepEquals, svcProvisioned)
+
+		svc, err = s.mockServices.Get(c.Context(), `juju-controller-test-dqlite`, v1.GetOptions{})
+		c.Assert(err, tc.ErrorIsNil)
+		c.Assert(svc, tc.DeepEquals, dqliteSvc)
 
 		secret, err := s.mockSecrets.Get(c.Context(), "juju-controller-test-application-config", v1.GetOptions{})
 		c.Assert(err, tc.ErrorIsNil)

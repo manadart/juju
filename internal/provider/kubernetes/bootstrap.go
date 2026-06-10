@@ -58,6 +58,7 @@ const (
 	proxyResourceName           = "proxy"
 	storageName                 = "storage"
 	apiServerScratchStorageName = "apiserver-scratch"
+	dqliteServiceNameSuffix     = "dqlite"
 )
 
 const (
@@ -154,6 +155,7 @@ type controllerStack struct {
 	portSSHServer int
 
 	resourceNameService,
+	resourceNameDqliteService,
 	resourceNameConfigMap,
 	resourceNameSecret, resourceNamedockerSecret,
 	resourceNameVolBootstrapParams, resourceNameVolAgentConf string
@@ -289,9 +291,11 @@ func newControllerStack(
 		portSSHServer: pcfg.Bootstrap.ControllerConfig.SSHServerPort(),
 	}
 	cs.resourceNameService = cs.getResourceName("service")
+	cs.resourceNameDqliteService = controllerDqliteServiceName(cs.stackName)
 	cs.resourceNameConfigMap = cs.getResourceName("configmap")
 	cs.resourceNameSecret = cs.getResourceName("secret")
 	cs.resourceNamedockerSecret = constants.CAASImageRepoSecretName
+	agentConfig.SetValue(agent.DqliteBindAddressKey, cs.controllerDqliteAddress())
 
 	cs.resourceNameVolBootstrapParams = cs.getResourceName(cloudconfig.FileNameBootstrapParams)
 	cs.resourceNameVolAgentConf = cs.getResourceName(agentconstants.AgentConfigFilename)
@@ -329,6 +333,10 @@ func (c *controllerStack) isPrivateRepo() bool {
 
 func getBootstrapResourceName(stackName string, name string) string {
 	return stackName + "-" + strings.Replace(name, ".", "-", -1)
+}
+
+func controllerDqliteServiceName(appName string) string {
+	return fmt.Sprintf("%s-%s", appName, dqliteServiceNameSuffix)
 }
 
 func (c *controllerStack) getResourceName(name string) string {
@@ -398,6 +406,14 @@ func (c *controllerStack) Deploy(ctx context.Context) (err error) {
 	// create service for controller pod.
 	if err = c.createControllerService(ctx); err != nil {
 		return errors.Annotate(err, "creating service for controller")
+	}
+	if environsbootstrap.IsContextDone(ctx) {
+		return environsbootstrap.Cancelled()
+	}
+
+	// create a headless service for stable per-controller Dqlite DNS.
+	if err = c.createControllerDqliteService(ctx); err != nil {
+		return errors.Annotate(err, "creating Dqlite service for controller")
 	}
 	if environsbootstrap.IsContextDone(ctx) {
 		return environsbootstrap.Cancelled()
@@ -553,6 +569,36 @@ func (c *controllerStack) createControllerProxy(ctx context.Context) error {
 	return errors.Trace(err)
 }
 
+func (c *controllerStack) createControllerDqliteService(ctx context.Context) error {
+	svcName := c.resourceNameDqliteService
+	spec := &core.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        svcName,
+			Labels:      c.stackLabels,
+			Namespace:   c.broker.Namespace(),
+			Annotations: c.stackAnnotations,
+		},
+		Spec: core.ServiceSpec{
+			Selector:                 c.selectorLabels,
+			Type:                     core.ServiceTypeClusterIP,
+			ClusterIP:                "None",
+			PublishNotReadyAddresses: true,
+		},
+	}
+
+	logger.Debugf(context.TODO(), "creating controller Dqlite service: \n%+v", spec)
+	if _, err := c.broker.ensureK8sService(ctx, spec); err != nil {
+		return errors.Trace(err)
+	}
+
+	c.addCleanUp(func() {
+		logger.Debugf(context.TODO(), "deleting %q", svcName)
+		_ = c.broker.deleteService(ctx, svcName)
+	})
+
+	return nil
+}
+
 func (c *controllerStack) createControllerService(ctx context.Context) error {
 	svcName := c.resourceNameService
 
@@ -635,6 +681,21 @@ func (c *controllerStack) createControllerService(ctx context.Context) error {
 		return errors.Timeoutf("waiting for controller service address fully provisioned")
 	}
 	return errors.Trace(err)
+}
+
+func (c *controllerStack) controllerDqliteAddress() string {
+	return fmt.Sprintf("%s.%s.%s.svc",
+		c.pcfg.GetPodName(),
+		c.resourceNameDqliteService,
+		c.controllerNamespace(),
+	)
+}
+
+func (c *controllerStack) controllerNamespace() string {
+	if c.broker == nil {
+		return c.pcfg.ControllerName
+	}
+	return c.broker.Namespace()
 }
 
 func (c *controllerStack) addCleanUp(cleanUp func()) {
@@ -827,7 +888,7 @@ func (c *controllerStack) createControllerStatefulset(ctx context.Context) error
 			Annotations: c.stackAnnotations,
 		},
 		Spec: apps.StatefulSetSpec{
-			ServiceName: c.resourceNameService,
+			ServiceName: c.resourceNameDqliteService,
 			Replicas:    &numberOfPods,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: c.selectorLabels,

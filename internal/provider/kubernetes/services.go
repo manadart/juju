@@ -78,10 +78,14 @@ func findServiceForApplication(
 
 	services := []core.Service{}
 	endpointSvcName := application.HeadlessServiceName(appName)
+	dqliteSvcName := ""
+	if appName == constants.JujuControllerStackName {
+		dqliteSvcName = controllerDqliteServiceName(appName)
+	}
 	// We want to filter out the endpoints services made by juju as they should
 	// not be considered.
 	for _, svc := range servicesList.Items {
-		if svc.Name != endpointSvcName {
+		if svc.Name != endpointSvcName && (dqliteSvcName == "" || svc.Name != dqliteSvcName) {
 			services = append(services, svc)
 		}
 	}

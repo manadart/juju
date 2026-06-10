@@ -97,6 +97,48 @@ func (s *servicesSuite) TestFindServiceForApplicationWithEndpoints(c *tc.C) {
 	c.Assert(svc.Name, tc.Equals, "wallyworld")
 }
 
+func (s *servicesSuite) TestFindServiceForApplicationWithControllerDqlite(c *tc.C) {
+	_, err := s.client.CoreV1().Services("test").Create(
+		c.Context(),
+		&core.Service{
+			ObjectMeta: meta.ObjectMeta{
+				Name: "controller",
+				Labels: map[string]string{
+					"app.kubernetes.io/name":       "controller",
+					"app.kubernetes.io/managed-by": "juju",
+				},
+			},
+		},
+		meta.CreateOptions{},
+	)
+	c.Assert(err, tc.ErrorIsNil)
+
+	_, err = s.client.CoreV1().Services("test").Create(
+		c.Context(),
+		&core.Service{
+			ObjectMeta: meta.ObjectMeta{
+				Name: "controller-dqlite",
+				Labels: map[string]string{
+					"app.kubernetes.io/name":       "controller",
+					"app.kubernetes.io/managed-by": "juju",
+				},
+			},
+		},
+		meta.CreateOptions{},
+	)
+	c.Assert(err, tc.ErrorIsNil)
+
+	svc, err := findServiceForApplication(
+		c.Context(),
+		s.client.CoreV1().Services("test"),
+		"controller",
+		constants.LabelVersion1,
+	)
+
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(svc.Name, tc.Equals, "controller")
+}
+
 func (s *servicesSuite) TestFindServiceForApplicationWithMultiple(c *tc.C) {
 	_, err := s.client.CoreV1().Services("test").Create(
 		c.Context(),
