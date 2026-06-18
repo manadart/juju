@@ -158,6 +158,58 @@ func (s *SwitchSimpleSuite) TestSwitchControllerToModel(c *tc.C) {
 	c.Assert(s.store.Models["ctrl"].CurrentModel, tc.Equals, "admin/mymodel")
 }
 
+func (s *SwitchSimpleSuite) TestSwitchControllerToModelUUID(c *tc.C) {
+	s.store.CurrentControllerName = "ctrl"
+	s.addController(c, "ctrl")
+	s.store.Models["ctrl"] = &jujuclient.ControllerModels{
+		Models: map[string]jujuclient.ModelDetails{
+			"admin/mymodel": {
+				ModelUUID: "deadbeef-0bad-400d-8000-4b1d0d06f00d",
+			},
+		},
+	}
+	context, err := s.run(c, "deadbeef-0bad-400d-8000-4b1d0d06f00d")
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(cmdtesting.Stderr(context), tc.Equals, "ctrl (controller) -> ctrl:admin/mymodel\n")
+	c.Assert(s.store.Models["ctrl"].CurrentModel, tc.Equals, "admin/mymodel")
+}
+
+func (s *SwitchSimpleSuite) TestSwitchControllerToModelUUIDPrefix(c *tc.C) {
+	s.store.CurrentControllerName = "ctrl"
+	s.addController(c, "ctrl")
+	s.store.Models["ctrl"] = &jujuclient.ControllerModels{
+		Models: map[string]jujuclient.ModelDetails{
+			"admin/mymodel": {
+				ModelUUID: "deadbeef-0bad-400d-8000-4b1d0d06f00d",
+			},
+		},
+	}
+	context, err := s.run(c, "deadbeef")
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(cmdtesting.Stderr(context), tc.Equals, "ctrl (controller) -> ctrl:admin/mymodel\n")
+	c.Assert(s.store.Models["ctrl"].CurrentModel, tc.Equals, "admin/mymodel")
+}
+
+func (s *SwitchSimpleSuite) TestSwitchUnknownUUIDRefreshModels(c *tc.C) {
+	s.store.CurrentControllerName = "ctrl"
+	s.addController(c, "ctrl")
+	s.onRefresh = func() {
+		s.store.Models["ctrl"] = &jujuclient.ControllerModels{
+			Models: map[string]jujuclient.ModelDetails{
+				"admin/mymodel": {
+					ModelUUID: "deadbeef-0bad-400d-8000-4b1d0d06f00d",
+				},
+			},
+		}
+	}
+
+	ctx, err := s.run(c, "deadbeef-0bad-400d-8000-4b1d0d06f00d")
+	c.Assert(err, tc.ErrorIsNil)
+	c.Assert(cmdtesting.Stderr(ctx), tc.Equals, "ctrl (controller) -> ctrl:admin/mymodel\n")
+	c.Assert(s.store.Models["ctrl"].CurrentModel, tc.Equals, "admin/mymodel")
+	s.CheckCallNames(c, "RefreshModels")
+}
+
 func (s *SwitchSimpleSuite) TestSwitchControllerToModelDifferentController(c *tc.C) {
 	s.store.CurrentControllerName = "old"
 	s.addController(c, "old")

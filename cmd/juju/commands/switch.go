@@ -50,6 +50,9 @@ When a single argument without a colon is provided, Juju first looks for a
 controller by that name and switches to it and, if it's not found, it tries
 to switch to a model within the current controller.
 
+Model arguments may be model names, full model UUIDs, or model UUID prefixes
+of at least six characters.
+
 ` + "`mycontroller:`" + ` switches to the default model in ` + "`mycontroller`" + `,
 ` + "`:mymodel`" + ` switches to mymodel in the current controller and
 ` + "`mycontroller:mymodel`" + ` switches to ` + "`mymodel`" + ` on ` + "`mycontroller`" + `.
@@ -79,7 +82,7 @@ const usageExamples = `
 func (c *switchCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
 		Name:     "switch",
-		Args:     "[<controller>|<model>|<controller>:|:<model>|<controller>:<model>]",
+		Args:     "[<controller>|<model>|<model UUID>|<controller>:|:<model>|<controller>:<model>]",
 		Purpose:  usageSummary,
 		Doc:      usageDetails,
 		Examples: usageExamples,
@@ -94,7 +97,7 @@ func (c *switchCommand) Info() *cmd.Info {
 // SetFlags implements Command.SetFlags.
 func (c *switchCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.CommandBase.SetFlags(f)
-	f.StringVar(&c.modelName, "m", "", "Model to operate in. Accepts [<controller name>:]<model name>")
+	f.StringVar(&c.modelName, "m", "", "Model to operate in. Accepts [<controller name>:]<model name>|<model UUID>")
 	f.StringVar(&c.modelName, "model", "", "")
 	f.StringVar(&c.controllerName, "c", "", "Controller to operate in")
 	f.StringVar(&c.controllerName, "controller", "", "")
@@ -340,18 +343,14 @@ func (c *switchCommand) trySwitchToModel(ctx context.Context, store modelcmd.Qua
 	if err := store.SetCurrentController(controller); err != nil {
 		return "", errors.Trace(err)
 	}
-	modelName, err := store.QualifiedModelName(controller, model)
-	if err != nil {
-		return "", errors.Trace(err)
-	}
 
-	err = store.SetCurrentModel(controller, modelName)
+	modelName, err := c.setCurrentModel(store, controller, model)
 	if errors.Is(err, errors.NotFound) {
 		// The model isn't known locally, so we must query the controller.
 		if err := c.RefreshModels(ctx, store, controller); err != nil {
 			return "", errors.Annotate(err, "refreshing models cache")
 		}
-		err := store.SetCurrentModel(controller, modelName)
+		modelName, err = c.setCurrentModel(store, controller, model)
 		if errors.Is(err, errors.NotFound) {
 			return "", unknownSwitchTargetError(controller + ":" + model)
 		} else if err != nil {
@@ -361,4 +360,44 @@ func (c *switchCommand) trySwitchToModel(ctx context.Context, store modelcmd.Qua
 		return "", errors.Trace(err)
 	}
 	return modelcmd.JoinModelName(controller, modelName), nil
+}
+
+func (c *switchCommand) setCurrentModel(store modelcmd.QualifyingClientStore, controller string, model string) (string, error) {
+	modelName, err := store.QualifiedModelName(controller, model)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	err = store.SetCurrentModel(controller, modelName)
+	if !errors.Is(err, errors.NotFound) {
+		return modelName, errors.Trace(err)
+	}
+
+	uuidModelName, uuidErr := modelNameFromUUID(store, controller, model)
+	if uuidErr != nil {
+		if errors.Is(uuidErr, errors.NotFound) {
+			return modelName, errors.Trace(err)
+		}
+		return "", errors.Trace(uuidErr)
+	}
+
+	err = store.SetCurrentModel(controller, uuidModelName)
+	return uuidModelName, errors.Trace(err)
+}
+
+func modelNameFromUUID(store jujuclient.ModelGetter, controller string, modelUUID string) (string, error) {
+	if len(modelUUID) <= 5 {
+		return "", errors.NotFoundf("model %s:%s", controller, modelUUID)
+	}
+
+	models, err := store.AllModels(controller)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+	for name, details := range models {
+		if strings.HasPrefix(details.ModelUUID, modelUUID) {
+			return name, nil
+		}
+	}
+	return "", errors.NotFoundf("model %s:%s", controller, modelUUID)
 }
