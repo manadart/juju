@@ -8,9 +8,13 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"time"
 
+	lxdapi "github.com/canonical/lxd/shared/api"
+	"github.com/juju/clock"
 	"github.com/juju/collections/set"
 	"github.com/juju/errors"
+	"github.com/juju/retry"
 
 	"github.com/juju/juju/core/arch"
 	"github.com/juju/juju/core/instance"
@@ -141,8 +145,124 @@ func (env *environ) newContainer(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	if err := publishOVNAddresses(target, container); err != nil {
+		if removeErr := target.RemoveContainer(container.Name); removeErr != nil {
+			logger.Errorf(ctx, "removing container after OVN address publication failed: %v", removeErr)
+		}
+		return nil, errors.Annotatef(err, "publishing OVN addresses for container %q", container.Name)
+	}
 	_ = statusCallback(ctx, status.Running, "Container started", nil)
 	return container, nil
+}
+
+func publishOVNAddresses(srv Server, container *lxd.Container) error {
+	ovnNICs := make(map[string]map[string]string)
+	providerNetworks, err := srv.GetNetworks()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	networksByName := make(map[string]lxdapi.Network, len(providerNetworks))
+	for _, providerNetwork := range providerNetworks {
+		networksByName[providerNetwork.Name] = providerNetwork
+	}
+
+	for deviceName, details := range container.ExpandedDevices {
+		providerNetwork := networksByName[lxd.NetworkName(details)]
+		if details["type"] != "nic" || providerNetwork.Type != "ovn" {
+			continue
+		}
+		ovnNICs[deviceName] = maps.Clone(details)
+	}
+	if len(ovnNICs) == 0 {
+		return nil
+	}
+
+	var state *lxdapi.InstanceState
+	err = retry.Call(retry.CallArgs{
+		Clock: clock.WallClock,
+		Func: func() error {
+			var err error
+			state, _, err = srv.GetInstanceState(container.Name)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for deviceName, details := range ovnNICs {
+				interfaceName := details["name"]
+				if interfaceName == "" {
+					interfaceName = deviceName
+				}
+				interfaceState, ok := state.Network[interfaceName]
+				if !ok || interfaceIPv4Address(interfaceState) == "" {
+					return errors.Errorf("waiting for OVN interface %q address", interfaceName)
+				}
+			}
+			return nil
+		},
+		Delay:    time.Second,
+		Attempts: 60,
+	})
+	if err != nil {
+		return errors.Trace(err)
+	}
+	for deviceName, details := range ovnNICs {
+		interfaceName := details["name"]
+		if interfaceName == "" {
+			interfaceName = deviceName
+		}
+
+		networkName := lxd.NetworkName(details)
+		targetAddress := interfaceIPv4Address(state.Network[interfaceName])
+		forwards, err := srv.GetNetworkForwards(networkName)
+		if err != nil {
+			return errors.Annotatef(err, "retrieving forwards for OVN network %q", networkName)
+		}
+		forwardExists := false
+		for _, forward := range forwards {
+			if forward.Config[lxd.JujuInstanceForwardKey] != container.Name ||
+				forward.Config[lxd.JujuDeviceForwardKey] != interfaceName {
+				continue
+			}
+			if forward.Config["target_address"] == targetAddress {
+				forwardExists = true
+				break
+			}
+			op, err := srv.DeleteNetworkForward(networkName, forward.ListenAddress)
+			if err := lxd.WaitOp(op, err); err != nil {
+				return errors.Annotatef(err, "deleting stale forward %q", forward.ListenAddress)
+			}
+		}
+		if forwardExists {
+			continue
+		}
+		forward := lxdapi.NetworkForwardsPost{
+			ListenAddress: "0.0.0.0",
+			NetworkForwardPut: lxdapi.NetworkForwardPut{
+				Description: fmt.Sprintf("Juju instance %s interface %s", container.Name, interfaceName),
+				Config: map[string]string{
+					"target_address":           targetAddress,
+					lxd.JujuInstanceForwardKey: container.Name,
+					lxd.JujuDeviceForwardKey:   interfaceName,
+				},
+			},
+		}
+		op, err := srv.CreateNetworkForward(networkName, forward)
+		if err := lxd.WaitOp(op, err); err != nil {
+			return errors.Annotatef(err, "creating forward for OVN interface %q", interfaceName)
+		}
+	}
+	return nil
+}
+
+func interfaceIPv4Address(interfaceState lxdapi.InstanceStateNetwork) string {
+	for _, address := range interfaceState.Addresses {
+		providerAddress := corenetwork.NewMachineAddress(address.Address).AsProviderAddress()
+		if address.Family == "inet" &&
+			providerAddress.Scope != corenetwork.ScopeLinkLocal &&
+			providerAddress.Scope != corenetwork.ScopeMachineLocal {
+			return address.Address
+		}
+	}
+	return ""
 }
 
 func (env *environ) getImageSources(ctx context.Context) ([]lxd.ServerSpec, error) {
@@ -290,7 +410,7 @@ func (env *environ) assignContainerNICs(ctx context.Context, instStartParams env
 		return assignedNICs, nil
 	}
 
-	// Map each requested subnet to the LXD network (host bridge) that hosts it.
+	// Map each requested subnet to the LXD network that hosts it.
 	// The subnet's ProviderNetworkId identifies the bridge to attach for a
 	// subnet requested by space constraints.
 	requestedSubnetIDs := make([]corenetwork.Id, 0)
@@ -303,19 +423,29 @@ func (env *environ) assignContainerNICs(ctx context.Context, instStartParams env
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	subnetBridges := make(map[corenetwork.Id]string, len(subnets))
+	subnetNetworks := make(map[corenetwork.Id]string, len(subnets))
 	for _, subnet := range subnets {
-		subnetBridges[subnet.ProviderId] = string(subnet.ProviderNetworkId)
+		subnetNetworks[subnet.ProviderId] = string(subnet.ProviderNetworkId)
+	}
+	providerNetworks, err := env.server().GetNetworks()
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	managedNetworks := set.NewStrings()
+	for _, providerNetwork := range providerNetworks {
+		if providerNetwork.Managed {
+			managedNetworks.Add(providerNetwork.Name)
+		}
 	}
 
 	// We use two sets to de-dup the required NICs and ensure that each
 	// additional NIC gets assigned a sequential ethX name.
-	requestedHostBridges := set.NewStrings()
+	requestedNetworks := set.NewStrings()
 	requestedNICNames := set.NewStrings()
 	for nicName, details := range assignedNICs {
 		requestedNICNames.Add(nicName)
 		netName := lxd.NetworkName(details)
-		requestedHostBridges.Add(netName)
+		requestedNetworks.Add(netName)
 	}
 
 	// Assign any extra NICs required to satisfy the subnet requirements
@@ -324,21 +454,21 @@ func (env *environ) assignContainerNICs(ctx context.Context, instStartParams env
 	var unsatisfied []string
 	for _, subnetList := range instStartParams.SubnetsToZones {
 		for providerSubnetID := range subnetList {
-			// Recover the host bridge that hosts this subnet. A subnet with
-			// no host bridge on this LXD host means we cannot provide the
+			// Recover the provider network that hosts this subnet. A subnet
+			// with no network on this LXD host means we cannot provide the
 			// requested connectivity, so we must fail rather than hand back
 			// an under-connected container.
-			hostBridge, ok := subnetBridges[providerSubnetID]
-			if !ok || hostBridge == "" {
+			providerNetwork, ok := subnetNetworks[providerSubnetID]
+			if !ok || providerNetwork == "" {
 				unsatisfied = append(unsatisfied, string(providerSubnetID))
 				continue
 			}
 
 			// A profile or generated device already attaches the container to
-			// the bridge hosting this subnet. Profile NICs are included in
+			// the network hosting this subnet. Profile NICs are included in
 			// assignedNICs above, so they can satisfy space subnet requirements
 			// without adding a duplicate device.
-			if requestedHostBridges.Contains(hostBridge) {
+			if requestedNetworks.Contains(providerNetwork) {
 				continue
 			}
 
@@ -354,15 +484,24 @@ func (env *environ) assignContainerNICs(ctx context.Context, instStartParams env
 				break
 			}
 			hwaddr := corenetwork.GenerateVirtualMACAddress()
-			assignedNICs[devName] = map[string]string{
-				"name":    devName,
-				"type":    "nic",
-				"hwaddr":  hwaddr,
-				"nictype": "bridged",
-				"parent":  hostBridge,
+			if managedNetworks.Contains(providerNetwork) {
+				assignedNICs[devName] = map[string]string{
+					"name":    devName,
+					"type":    "nic",
+					"hwaddr":  hwaddr,
+					"network": providerNetwork,
+				}
+			} else {
+				assignedNICs[devName] = map[string]string{
+					"name":    devName,
+					"type":    "nic",
+					"hwaddr":  hwaddr,
+					"nictype": "bridged",
+					"parent":  providerNetwork,
+				}
 			}
 
-			requestedHostBridges.Add(hostBridge)
+			requestedNetworks.Add(providerNetwork)
 			requestedNICNames.Add(devName)
 		}
 	}

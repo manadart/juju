@@ -18,6 +18,7 @@ import (
 	"github.com/juju/juju/core/instance"
 	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/environs"
+	containerlxd "github.com/juju/juju/internal/container/lxd"
 )
 
 var _ environs.Networking = (*environ)(nil)
@@ -51,7 +52,7 @@ func (e *environ) Subnets(ctx context.Context, subnetIDs []network.Id) ([]networ
 	)
 	for _, networkDetails := range networkStates {
 		state := networkDetails.state
-		if state.Bridge == nil {
+		if state.Bridge == nil && networkDetails.networkType != "ovn" {
 			continue
 		}
 
@@ -87,12 +88,13 @@ func (e *environ) Subnets(ctx context.Context, subnetIDs []network.Id) ([]networ
 }
 
 type providerNetworkState struct {
-	name  string
-	state *lxdapi.NetworkState
+	name        string
+	networkType string
+	state       *lxdapi.NetworkState
 }
 
 func providerNetworkStates(srv Server) ([]providerNetworkState, error) {
-	networkNames, err := srv.GetNetworkNames()
+	networks, err := srv.GetNetworks()
 	if err != nil {
 		if isErrMissingAPIExtension(err, "network") {
 			return nil, errors.NewNotSupported(nil, `subnet discovery requires the "network" extension to be enabled on the lxd server`)
@@ -100,19 +102,23 @@ func providerNetworkStates(srv Server) ([]providerNetworkState, error) {
 		return nil, errors.Trace(err)
 	}
 
-	networkStates := make([]providerNetworkState, 0, len(networkNames))
-	for _, networkName := range networkNames {
-		state, err := srv.GetNetworkState(networkName)
+	networkStates := make([]providerNetworkState, 0, len(networks))
+	for _, providerNetwork := range networks {
+		state, err := srv.GetNetworkState(providerNetwork.Name)
 		if err != nil {
 			if isErrMissingAPIExtension(err, "network_state") {
 				return nil, errors.Errorf("network_state extension unsupported; upgrade to a newer version of LXD")
 			}
-			return nil, errors.Annotatef(err, "querying lxd server for state of network %q", networkName)
+			return nil, errors.Annotatef(err, "querying lxd server for state of network %q", providerNetwork.Name)
 		}
 		if state == nil {
-			return nil, errors.Errorf("network state %q not found", networkName)
+			return nil, errors.Errorf("network state %q not found", providerNetwork.Name)
 		}
-		networkStates = append(networkStates, providerNetworkState{name: networkName, state: state})
+		networkStates = append(networkStates, providerNetworkState{
+			name:        providerNetwork.Name,
+			networkType: providerNetwork.Type,
+			state:       state,
+		})
 	}
 	return networkStates, nil
 }
@@ -141,6 +147,14 @@ func (e *environ) NetworkInterfaces(_ context.Context, ids []instance.Id) ([]net
 	)
 
 	for instIdx, id := range ids {
+		container, _, err := srv.GetInstance(string(id))
+		if err != nil {
+			if isErrNotFound(err) {
+				missing++
+				continue
+			}
+			return nil, errors.Annotatef(err, "retrieving instance %q", id)
+		}
 		state, _, err := srv.GetInstanceState(string(id))
 		if err != nil {
 			if isErrNotFound(err) {
@@ -150,6 +164,14 @@ func (e *environ) NetworkInterfaces(_ context.Context, ids []instance.Id) ([]net
 			return nil, errors.Annotatef(err, "retrieving network interface info for instance %q", id)
 		} else if len(state.Network) == 0 {
 			continue
+		}
+		deviceDetails := make(map[string]map[string]string)
+		for deviceName, details := range container.ExpandedDevices {
+			interfaceName := details["name"]
+			if interfaceName == "" {
+				interfaceName = deviceName
+			}
+			deviceDetails[interfaceName] = details
 		}
 
 		// Sort interfaces by name to ensure consistent device indexes
@@ -175,6 +197,13 @@ func (e *environ) NetworkInterfaces(_ context.Context, ids []instance.Id) ([]net
 			} else if len(ni.Addresses) == 0 {
 				continue
 			}
+			details := deviceDetails[interfaceName]
+			ni.ParentInterfaceName = lxdNetworkName(details)
+			shadowAddresses, err := ovnForwardAddresses(srv, string(id), interfaceName, details)
+			if err != nil {
+				return nil, errors.Annotatef(err, "retrieving OVN forward addresses for instance %q", id)
+			}
+			ni.ShadowAddresses = shadowAddresses
 
 			ni.DeviceIndex = devIdx
 			devIdx++
@@ -191,6 +220,37 @@ func (e *environ) NetworkInterfaces(_ context.Context, ids []instance.Id) ([]net
 		return nil, environs.ErrNoInstances
 	}
 	return res, nil
+}
+
+func lxdNetworkName(details map[string]string) string {
+	if networkName := details["network"]; networkName != "" {
+		return networkName
+	}
+	return details["parent"]
+}
+
+func ovnForwardAddresses(
+	srv Server, instanceName, interfaceName string, details map[string]string,
+) (network.ProviderAddresses, error) {
+	networkName := lxdNetworkName(details)
+	if networkName == "" {
+		return nil, nil
+	}
+	forwards, err := srv.GetNetworkForwards(networkName)
+	if err != nil {
+		return nil, nil
+	}
+	var addresses network.ProviderAddresses
+	for _, forward := range forwards {
+		if forward.Config[containerlxd.JujuInstanceForwardKey] != instanceName ||
+			forward.Config[containerlxd.JujuDeviceForwardKey] != interfaceName {
+			continue
+		}
+		addresses = append(addresses, network.NewMachineAddress(
+			forward.ListenAddress, network.WithScope(network.ScopePublic),
+		).AsProviderAddress())
+	}
+	return addresses, nil
 }
 
 func makeInterfaceInfo(interfaceName string, netInfo lxdapi.InstanceStateNetwork) (network.InterfaceInfo, error) {

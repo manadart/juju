@@ -27,11 +27,13 @@ import (
 )
 
 const (
-	UserNamespacePrefix = "user."
-	UserDataKey         = UserNamespacePrefix + "user-data"
-	NetworkConfigKey    = UserNamespacePrefix + "network-config"
-	JujuModelKey        = UserNamespacePrefix + "juju-model"
-	AutoStartKey        = "boot.autostart"
+	UserNamespacePrefix    = "user."
+	UserDataKey            = UserNamespacePrefix + "user-data"
+	NetworkConfigKey       = UserNamespacePrefix + "network-config"
+	JujuModelKey           = UserNamespacePrefix + "juju-model"
+	AutoStartKey           = "boot.autostart"
+	JujuInstanceForwardKey = UserNamespacePrefix + "juju-instance"
+	JujuDeviceForwardKey   = UserNamespacePrefix + "juju-device"
 )
 
 // ContainerSpec represents the data required to create a new container.
@@ -228,17 +230,24 @@ func (s *Server) FilterContainers(prefix string, statuses ...string) ([]Containe
 // ContainerAddresses gets usable network addresses for the container
 // identified by the input name.
 func (s *Server) ContainerAddresses(name string) ([]corenetwork.ProviderAddress, error) {
+	container, _, err := s.GetInstance(name)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	state, _, err := s.GetInstanceState(name)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
+	results, err := s.externalContainerAddresses(container)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	networks := state.Network
 	if networks == nil {
-		return []corenetwork.ProviderAddress{}, nil
+		return results, nil
 	}
 
-	var results []corenetwork.ProviderAddress
 	for netName, net := range networks {
 		if netName == network.DefaultLXDBridge {
 			continue
@@ -250,6 +259,33 @@ func (s *Server) ContainerAddresses(name string) ([]corenetwork.ProviderAddress,
 				continue
 			}
 			results = append(results, netAddr)
+		}
+	}
+	return results, nil
+}
+
+func (s *Server) externalContainerAddresses(container *api.Instance) ([]corenetwork.ProviderAddress, error) {
+	var results []corenetwork.ProviderAddress
+	checkedNetworks := make(map[string]struct{})
+	for _, details := range container.ExpandedDevices {
+		networkName := NetworkName(details)
+		if networkName == "" {
+			continue
+		}
+		if _, ok := checkedNetworks[networkName]; ok {
+			continue
+		}
+		checkedNetworks[networkName] = struct{}{}
+		forwards, err := s.GetNetworkForwards(networkName)
+		if err != nil {
+			continue
+		}
+		for _, forward := range forwards {
+			if forward.Config[JujuInstanceForwardKey] == container.Name {
+				results = append(results, corenetwork.NewMachineAddress(
+					forward.ListenAddress, corenetwork.WithScope(corenetwork.ScopePublic),
+				).AsProviderAddress())
+			}
 		}
 	}
 	return results, nil
@@ -418,6 +454,9 @@ func (s *Server) RemoveContainer(name string) error {
 			return errors.Is(err, errors.BadRequest)
 		},
 		Func: func() error {
+			if err := s.removeContainerNetworkForwards(name); err != nil {
+				return errors.Trace(err)
+			}
 			// We force the instance to stop before deleting it.
 			op, err := s.DeleteInstance(name, true)
 			if err != nil {
@@ -435,6 +474,50 @@ func (s *Server) RemoveContainer(name string) error {
 	}
 	if err := retry.Call(retryArgs); err != nil {
 		return errors.Trace(errors.Cause(err))
+	}
+	return nil
+}
+
+func (s *Server) removeContainerNetworkForwards(name string) error {
+	container, _, err := s.GetInstance(name)
+	if err != nil {
+		if IsLXDNotFound(errors.Cause(err)) {
+			return nil
+		}
+		return errors.Trace(err)
+	}
+	providerNetworks, err := s.GetNetworks()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	networkTypes := make(map[string]string, len(providerNetworks))
+	for _, providerNetwork := range providerNetworks {
+		networkTypes[providerNetwork.Name] = providerNetwork.Type
+	}
+
+	checkedNetworks := make(map[string]struct{})
+	for _, details := range container.ExpandedDevices {
+		networkName := NetworkName(details)
+		if networkTypes[networkName] != netTypeOVN {
+			continue
+		}
+		if _, ok := checkedNetworks[networkName]; ok {
+			continue
+		}
+		checkedNetworks[networkName] = struct{}{}
+		forwards, err := s.GetNetworkForwards(networkName)
+		if err != nil {
+			return errors.Annotatef(err, "retrieving forwards for network %q", networkName)
+		}
+		for _, forward := range forwards {
+			if forward.Config[JujuInstanceForwardKey] != name {
+				continue
+			}
+			op, err := s.DeleteNetworkForward(networkName, forward.ListenAddress)
+			if err := WaitOp(op, err); err != nil {
+				return errors.Annotatef(err, "deleting network forward %q", forward.ListenAddress)
+			}
+		}
 	}
 	return nil
 }

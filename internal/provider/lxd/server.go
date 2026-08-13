@@ -85,6 +85,9 @@ type Server interface {
 	GetNetworks() ([]lxdapi.Network, error)
 	GetNetworkNames() ([]string, error)
 	GetNetworkState(name string) (*lxdapi.NetworkState, error)
+	GetNetworkForwards(networkName string) ([]lxdapi.NetworkForward, error)
+	CreateNetworkForward(networkName string, forward lxdapi.NetworkForwardsPost) (lxdclient.Operation, error)
+	DeleteNetworkForward(networkName string, listenAddress string) (lxdclient.Operation, error)
 	GetInstance(name string) (*lxdapi.Instance, string, error)
 	GetInstanceState(name string) (*lxdapi.InstanceState, string, error)
 	GetProfileNames() (names []string, err error)
@@ -362,23 +365,24 @@ func (s *serverFactory) bootstrapRemoteServer(ctx context.Context, svr Server) e
 }
 
 func (s *serverFactory) validateServer(ctx context.Context, svr Server) error {
+	profile, eTag, err := svr.GetProfile("default")
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if err := svr.VerifyNetworkDevice(profile, eTag); err != nil {
+		return errors.Trace(err)
+	}
+
 	// If the storage API is supported, let's make sure the LXD has a
 	// default pool; we'll just use dir backend for now.
 	if svr.StorageSupported() {
-		// Ensure that the default profile has a network configuration that will
-		// allow access to containers that we create.
-		profile, eTag, err := svr.GetProfile("default")
-		if err != nil {
-			return errors.Trace(err)
-		}
-
 		if err := svr.EnsureDefaultStorage(profile, eTag); err != nil {
 			return errors.Trace(err)
 		}
 	}
 
 	apiVersion := svr.ServerVersion()
-	err := ValidateAPIVersion(apiVersion)
+	err = ValidateAPIVersion(apiVersion)
 	if errors.Is(err, errors.NotSupported) {
 		return errors.Trace(err)
 	}
