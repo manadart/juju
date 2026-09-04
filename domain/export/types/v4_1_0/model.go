@@ -711,18 +711,19 @@ type MachineAgentVersion struct {
 }
 
 type MachineCloudInstance struct {
-	MachineUUID          string  `db:"machine_uuid" json:"machine_uuid" yaml:"machine_uuid"`
-	LifeID               int64   `db:"life_id" json:"life_id" yaml:"life_id"`
-	InstanceID           *string `db:"instance_id" json:"instance_id" yaml:"instance_id"`
-	DisplayName          *string `db:"display_name" json:"display_name" yaml:"display_name"`
-	Arch                 *string `db:"arch" json:"arch" yaml:"arch"`
-	AvailabilityZoneUUID *string `db:"availability_zone_uuid" json:"availability_zone_uuid" yaml:"availability_zone_uuid"`
-	CpuCores             *int64  `db:"cpu_cores" json:"cpu_cores" yaml:"cpu_cores"`
-	CpuPower             *int64  `db:"cpu_power" json:"cpu_power" yaml:"cpu_power"`
-	Mem                  *int64  `db:"mem" json:"mem" yaml:"mem"`
-	RootDisk             *int64  `db:"root_disk" json:"root_disk" yaml:"root_disk"`
-	RootDiskSource       *string `db:"root_disk_source" json:"root_disk_source" yaml:"root_disk_source"`
-	VirtType             *string `db:"virt_type" json:"virt_type" yaml:"virt_type"`
+	MachineUUID                string     `db:"machine_uuid" json:"machine_uuid" yaml:"machine_uuid"`
+	LifeID                     int64      `db:"life_id" json:"life_id" yaml:"life_id"`
+	InstanceID                 *string    `db:"instance_id" json:"instance_id" yaml:"instance_id"`
+	DisplayName                *string    `db:"display_name" json:"display_name" yaml:"display_name"`
+	ProviderAddressesUpdatedAt *time.Time `db:"provider_addresses_updated_at" json:"provider_addresses_updated_at" yaml:"provider_addresses_updated_at"`
+	Arch                       *string    `db:"arch" json:"arch" yaml:"arch"`
+	AvailabilityZoneUUID       *string    `db:"availability_zone_uuid" json:"availability_zone_uuid" yaml:"availability_zone_uuid"`
+	CpuCores                   *int64     `db:"cpu_cores" json:"cpu_cores" yaml:"cpu_cores"`
+	CpuPower                   *int64     `db:"cpu_power" json:"cpu_power" yaml:"cpu_power"`
+	Mem                        *int64     `db:"mem" json:"mem" yaml:"mem"`
+	RootDisk                   *int64     `db:"root_disk" json:"root_disk" yaml:"root_disk"`
+	RootDiskSource             *string    `db:"root_disk_source" json:"root_disk_source" yaml:"root_disk_source"`
+	VirtType                   *string    `db:"virt_type" json:"virt_type" yaml:"virt_type"`
 }
 
 type MachineCloudInstanceStatus struct {

@@ -93,14 +93,19 @@ func (st *State) MergeLinkLayerDevice(
 	ctx context.Context,
 	netNodeUUID string,
 	incoming []network.NetInterface,
-) error {
+) (bool, error) {
 	db, err := st.DB(ctx)
 	if err != nil {
-		return errors.Capture(err)
+		return false, errors.Capture(err)
 	}
 
-	return db.Txn(
+	var applied bool
+	err = db.Txn(
 		ctx, func(ctx context.Context, tx *sqlair.TX) error {
+			// Transactions can be retried, so do not retain the result from an
+			// earlier attempt.
+			applied = false
+
 			existingDevices, err := st.getExistingLinkLayerDevicesWithAddresses(ctx, tx, netNodeUUID)
 			if err != nil {
 				return errors.Errorf("getting existing link layer devices for node %q: %w", netNodeUUID, err)
@@ -120,9 +125,17 @@ func (st *State) MergeLinkLayerDevice(
 
 			lldChanges := st.computeMergeLinkLayerDeviceChanges(ctx, existingDevices, normalized, namelessHWAddrs)
 			addressChanges := st.computeMergeAddressChanges(normalized, existingDevices)
-			return st.applyMergeLinkLayerChanges(ctx, tx, lldChanges, addressChanges, netNodeUUID)
+			if err := st.applyMergeLinkLayerChanges(ctx, tx, lldChanges, addressChanges, netNodeUUID); err != nil {
+				return err
+			}
+			applied = true
+			return nil
 		},
 	)
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+	return applied, nil
 }
 
 // addProviderLinkLayerDevice associates provider IDs with device UUIDs in the

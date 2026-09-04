@@ -59,11 +59,12 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceNoExistingDevices(c *tc.C)
 	incoming := []network.NetInterface{{}}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID,
+	applied, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID,
 		incoming)
 
-	// Asser: Expect no error, but no changes either (noop)
+	// Assert: Expect no error, but no changes either (noop)
 	c.Assert(err, tc.ErrorIsNil)
+	c.Check(applied, tc.IsFalse)
 }
 
 // TestMergeLinkLayerDeviceIncomingProviderIDDuplicated verifies that merging
@@ -102,7 +103,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceIncomingProviderIDDuplicat
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(
+	_, err := st.MergeLinkLayerDevice(
 		c.Context(), netNodeUUID,
 		incoming,
 	)
@@ -137,13 +138,14 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceBridgeAndEthernet(c *tc.C)
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(
+	applied, err := st.MergeLinkLayerDevice(
 		c.Context(), netNodeUUID,
 		incoming,
 	)
 
 	// Assert
 	c.Assert(err, tc.ErrorIsNil)
+	c.Check(applied, tc.IsTrue)
 	c.Check(s.fetchLinkLayerDevices(c, netNodeUUID), tc.SameContents,
 		[]mergedLinkLayerDevice{
 			{
@@ -207,7 +209,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDevice(c *tc.C) {
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID,
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID,
 		incoming)
 
 	// Assert
@@ -287,7 +289,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceEmptyIPAddrProviderID(c *t
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID,
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID,
 		incoming)
 
 	// Assert
@@ -409,7 +411,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceLiveData(c *tc.C) {
 	}}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Assert(err, tc.ErrorIsNil)
@@ -1111,7 +1113,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceProviderSubnetIDMatching(c
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1156,7 +1158,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceProviderSubnetIDMatchingWi
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1203,7 +1205,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceProviderSubnetIDMatchingWi
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1247,7 +1249,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceNoSubnet(c *tc.C) {
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1292,7 +1294,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceSubnetNotInAlphaSpace(c *t
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1332,7 +1334,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceProviderSubnetIDNotFound(c
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1372,7 +1374,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceAddressAlreadyHasCorrectSu
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)
@@ -1415,7 +1417,7 @@ func (s *mergeLinkLayerSuite) TestMergeLinkLayerDeviceAddressNotInTheNewSubnet(c
 	}
 
 	// Act
-	err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
+	_, err := st.MergeLinkLayerDevice(c.Context(), netNodeUUID, incoming)
 
 	// Assert
 	c.Check(err, tc.IsNil)

@@ -349,6 +349,7 @@ WHERE uuid = $entityUUID.uuid`,
 UPDATE machine_cloud_instance
 SET instance_id = NULL,
     display_name = NULL,
+    provider_addresses_updated_at = NULL,
     arch = NULL,
     availability_zone_uuid = NULL,
     cpu_cores = NULL,

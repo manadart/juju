@@ -7,6 +7,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"github.com/canonical/sqlair"
 
@@ -316,6 +317,52 @@ WHERE  availability_zone.name = $availabilityZoneName.name
 			if err := tx.Query(ctx, clearReprovisionStmt, entityUUID{UUID: mUUID}).Run(); err != nil {
 				return errors.Errorf("clearing machine reprovision marker: %w", err)
 			}
+		}
+		return nil
+	})
+}
+
+// SetProviderAddressesUpdatedAt records when provider-sourced addresses were
+// last successfully reconciled for the specified machine cloud instance.
+//
+// The update is conditional on the instance ID so that a stale poll cannot
+// update a replacement instance after reprovisioning.
+func (st *State) SetProviderAddressesUpdatedAt(
+	ctx context.Context,
+	machineUUID, instanceID string,
+	updatedAt time.Time,
+) error {
+	db, err := st.DB(ctx)
+	if err != nil {
+		return errors.Capture(err)
+	}
+
+	update := providerAddressesUpdate{
+		MachineUUID: machineUUID,
+		InstanceID:  instanceID,
+		UpdatedAt:   updatedAt,
+	}
+	stmt, err := st.Prepare(`
+UPDATE machine_cloud_instance
+SET    provider_addresses_updated_at = $providerAddressesUpdate.provider_addresses_updated_at
+WHERE  machine_uuid = $providerAddressesUpdate.machine_uuid
+AND    instance_id = $providerAddressesUpdate.instance_id
+`, update)
+	if err != nil {
+		return errors.Capture(err)
+	}
+
+	return db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		var outcome sqlair.Outcome
+		if err := tx.Query(ctx, stmt, update).Get(&outcome); err != nil {
+			return errors.Capture(err)
+		}
+		affected, err := outcome.Result().RowsAffected()
+		if err != nil {
+			return errors.Capture(err)
+		}
+		if affected != 1 {
+			return machineerrors.MachineCloudInstanceChanged
 		}
 		return nil
 	})

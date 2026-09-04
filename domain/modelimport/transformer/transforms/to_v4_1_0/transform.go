@@ -21,6 +21,8 @@ import (
 type Deltas interface {
 	// Constraint: struct shape changed in 4.1.0.
 	Constraint(ctx context.Context, src []v4_0_12.Constraint) ([]v4_1_0.Constraint, error)
+	// MachineCloudInstance: struct shape changed in 4.1.0.
+	MachineCloudInstance(ctx context.Context, src []v4_0_12.MachineCloudInstance) ([]v4_1_0.MachineCloudInstance, error)
 	// Operation: struct shape changed in 4.1.0.
 	Operation(ctx context.Context, src []v4_0_12.Operation) ([]v4_1_0.Operation, error)
 	// RelationApplicationSetting: struct shape changed in 4.1.0.
@@ -556,11 +558,6 @@ func NewTransform(d Deltas) transformer.TransformationFunc[v4_0_12.ModelExport, 
 		dst.MachineAgentVersion = make([]v4_1_0.MachineAgentVersion, len(src.MachineAgentVersion))
 		for i := range src.MachineAgentVersion {
 			dst.MachineAgentVersion[i] = v4_1_0.MachineAgentVersion(src.MachineAgentVersion[i])
-		}
-
-		dst.MachineCloudInstance = make([]v4_1_0.MachineCloudInstance, len(src.MachineCloudInstance))
-		for i := range src.MachineCloudInstance {
-			dst.MachineCloudInstance[i] = v4_1_0.MachineCloudInstance(src.MachineCloudInstance[i])
 		}
 
 		dst.MachineCloudInstanceStatus = make([]v4_1_0.MachineCloudInstanceStatus, len(src.MachineCloudInstanceStatus))
@@ -1250,6 +1247,10 @@ func NewTransform(d Deltas) transformer.TransformationFunc[v4_0_12.ModelExport, 
 
 		if dst.Constraint, err = d.Constraint(ctx, src.Constraint); err != nil {
 			return v4_1_0.ModelExport{}, errors.Errorf("Constraint delta: %w", err)
+		}
+
+		if dst.MachineCloudInstance, err = d.MachineCloudInstance(ctx, src.MachineCloudInstance); err != nil {
+			return v4_1_0.ModelExport{}, errors.Errorf("MachineCloudInstance delta: %w", err)
 		}
 
 		if dst.Operation, err = d.Operation(ctx, src.Operation); err != nil {

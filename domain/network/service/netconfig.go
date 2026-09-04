@@ -15,25 +15,27 @@ import (
 )
 
 // SetProviderNetConfig merges the existing link layer devices with the
-// incoming ones.
+// incoming ones. It reports whether the merge was applied. A merge is not
+// applied when no machine-reported devices exist yet.
 func (s *Service) SetProviderNetConfig(
 	ctx context.Context,
 	machineUUID machine.UUID,
 	incoming []network.NetInterface,
-) error {
+) (bool, error) {
 	ctx, span := trace.Start(ctx, trace.NameFromFunc())
 	defer span.End()
 
 	if err := machineUUID.Validate(); err != nil {
-		return errors.Errorf("invalid machine UUID: %w", err)
+		return false, errors.Errorf("invalid machine UUID: %w", err)
 	}
 
 	nodeUUID, err := s.st.GetMachineNetNodeUUID(ctx, machineUUID.String())
 	if err != nil {
-		return errors.Errorf("retrieving net node for machine %q: %w", machineUUID, err)
+		return false, errors.Errorf("retrieving net node for machine %q: %w", machineUUID, err)
 	}
 
-	return errors.Capture(s.st.MergeLinkLayerDevice(ctx, nodeUUID, incoming))
+	applied, err := s.st.MergeLinkLayerDevice(ctx, nodeUUID, incoming)
+	return applied, errors.Capture(err)
 }
 
 // SetMachineNetConfig updates the detected network configuration for

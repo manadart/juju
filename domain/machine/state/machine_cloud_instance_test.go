@@ -134,6 +134,7 @@ VALUES (?, ?)`, machineName.String(), time.Now())
 		&instanceData.LifeID,
 		&instanceData.InstanceID,
 		&instanceData.DisplayName,
+		&instanceData.ProviderAddressesUpdatedAt,
 		&instanceData.Arch,
 		&instanceData.AvailabilityZoneUUID,
 		&instanceData.CPUCores,
@@ -148,6 +149,7 @@ VALUES (?, ?)`, machineName.String(), time.Now())
 	c.Check(instanceData.LifeID, tc.Equals, int64(0))
 	c.Check(instanceData.InstanceID, tc.DeepEquals, sql.Null[string]{V: "1", Valid: true})
 	c.Check(instanceData.DisplayName, tc.DeepEquals, sql.Null[string]{V: "one", Valid: true})
+	c.Check(instanceData.ProviderAddressesUpdatedAt, tc.IsNil)
 	c.Check(*instanceData.Arch, tc.Equals, "arm64")
 	c.Check(*instanceData.Mem, tc.Equals, uint64(1024))
 	c.Check(*instanceData.RootDisk, tc.Equals, uint64(256))
@@ -355,6 +357,42 @@ func (s *stateSuite) TestInstanceNameError(c *tc.C) {
 
 	_, _, err := s.state.GetInstanceIDAndName(c.Context(), machineUUID.String())
 	c.Assert(err, tc.ErrorIs, machineerrors.NotProvisioned)
+}
+
+func (s *stateSuite) TestSetProviderAddressesUpdatedAt(c *tc.C) {
+	machineUUID, _ := s.ensureInstance(c)
+	updatedAt := time.Date(2026, time.September, 4, 12, 30, 0, 0, time.UTC)
+
+	err := s.state.SetProviderAddressesUpdatedAt(
+		c.Context(), machineUUID.String(), "123", updatedAt,
+	)
+	c.Assert(err, tc.ErrorIsNil)
+
+	var obtained time.Time
+	err = s.DB().QueryRowContext(c.Context(), `
+SELECT provider_addresses_updated_at
+FROM machine_cloud_instance
+WHERE machine_uuid = ?`, machineUUID.String()).Scan(&obtained)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(obtained, tc.Equals, updatedAt)
+}
+
+func (s *stateSuite) TestSetProviderAddressesUpdatedAtInstanceChanged(c *tc.C) {
+	machineUUID, _ := s.ensureInstance(c)
+	updatedAt := time.Date(2026, time.September, 4, 12, 30, 0, 0, time.UTC)
+
+	err := s.state.SetProviderAddressesUpdatedAt(
+		c.Context(), machineUUID.String(), "stale-instance", updatedAt,
+	)
+	c.Assert(err, tc.ErrorIs, machineerrors.MachineCloudInstanceChanged)
+
+	var obtained sql.Null[time.Time]
+	err = s.DB().QueryRowContext(c.Context(), `
+SELECT provider_addresses_updated_at
+FROM machine_cloud_instance
+WHERE machine_uuid = ?`, machineUUID.String()).Scan(&obtained)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(obtained.Valid, tc.IsFalse)
 }
 
 func (s *stateSuite) ensureInstance(c *tc.C) (machine.UUID, machine.Name) {

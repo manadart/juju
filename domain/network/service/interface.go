@@ -173,8 +173,9 @@ type NetConfigState interface {
 	GetAllLinkLayerDevicesByNetNodeUUIDs(ctx context.Context) (map[string][]domainnetwork.NetInterface, error)
 
 	// MergeLinkLayerDevice merges the existing link layer devices with the
-	// incoming ones.
-	MergeLinkLayerDevice(ctx context.Context, machineUUID string, incoming []domainnetwork.NetInterface) error
+	// incoming ones. It reports whether the merge was applied. A merge is not
+	// applied when no machine-reported devices exist yet.
+	MergeLinkLayerDevice(ctx context.Context, machineUUID string, incoming []domainnetwork.NetInterface) (bool, error)
 }
 
 // NetworkInfoState defines a persistence layer interface for retrieving

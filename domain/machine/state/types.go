@@ -39,18 +39,25 @@ type CreateMachineArgs struct {
 // instanceData represents the struct to be inserted into the instance_data
 // table.
 type instanceData struct {
-	MachineUUID          string           `db:"machine_uuid"`
-	LifeID               int64            `db:"life_id"`
-	InstanceID           sql.Null[string] `db:"instance_id"`
-	DisplayName          sql.Null[string] `db:"display_name"`
-	Arch                 *string          `db:"arch"`
-	Mem                  *uint64          `db:"mem"`
-	RootDisk             *uint64          `db:"root_disk"`
-	RootDiskSource       *string          `db:"root_disk_source"`
-	CPUCores             *uint64          `db:"cpu_cores"`
-	CPUPower             *uint64          `db:"cpu_power"`
-	AvailabilityZoneUUID *string          `db:"availability_zone_uuid"`
-	VirtType             *string          `db:"virt_type"`
+	MachineUUID                string           `db:"machine_uuid"`
+	LifeID                     int64            `db:"life_id"`
+	InstanceID                 sql.Null[string] `db:"instance_id"`
+	DisplayName                sql.Null[string] `db:"display_name"`
+	ProviderAddressesUpdatedAt *time.Time       `db:"provider_addresses_updated_at"`
+	Arch                       *string          `db:"arch"`
+	Mem                        *uint64          `db:"mem"`
+	RootDisk                   *uint64          `db:"root_disk"`
+	RootDiskSource             *string          `db:"root_disk_source"`
+	CPUCores                   *uint64          `db:"cpu_cores"`
+	CPUPower                   *uint64          `db:"cpu_power"`
+	AvailabilityZoneUUID       *string          `db:"availability_zone_uuid"`
+	VirtType                   *string          `db:"virt_type"`
+}
+
+type providerAddressesUpdate struct {
+	MachineUUID string    `db:"machine_uuid"`
+	InstanceID  string    `db:"instance_id"`
+	UpdatedAt   time.Time `db:"provider_addresses_updated_at"`
 }
 
 // instanceDataResult represents the struct used to retrieve rows when joining
