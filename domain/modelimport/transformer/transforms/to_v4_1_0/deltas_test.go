@@ -18,6 +18,40 @@ func TestDeltasSuite(t *testing.T) {
 	tc.Run(t, &deltasSuite{})
 }
 
+func (s *deltasSuite) TestMachineCloudInstanceLeavesUpdateTimeUnset(c *tc.C) {
+	src := []v4_0_12.MachineCloudInstance{{
+		MachineUUID:          "machine-uuid",
+		LifeID:               1,
+		InstanceID:           new("instance-42"),
+		DisplayName:          new("display-name"),
+		Arch:                 new("amd64"),
+		AvailabilityZoneUUID: new("zone-uuid"),
+		CpuCores:             new(int64(4)),
+		CpuPower:             new(int64(100)),
+		Mem:                  new(int64(8192)),
+		RootDisk:             new(int64(102400)),
+		RootDiskSource:       new("root-disk"),
+		VirtType:             new("virtual-machine"),
+	}}
+
+	got, err := deltas{}.MachineCloudInstance(c.Context(), src)
+	c.Assert(err, tc.ErrorIsNil)
+	c.Check(got, tc.DeepEquals, []v4_1_0.MachineCloudInstance{{
+		MachineUUID:          "machine-uuid",
+		LifeID:               1,
+		InstanceID:           new("instance-42"),
+		DisplayName:          new("display-name"),
+		Arch:                 new("amd64"),
+		AvailabilityZoneUUID: new("zone-uuid"),
+		CpuCores:             new(int64(4)),
+		CpuPower:             new(int64(100)),
+		Mem:                  new(int64(8192)),
+		RootDisk:             new(int64(102400)),
+		RootDiskSource:       new("root-disk"),
+		VirtType:             new("virtual-machine"),
+	}})
+}
+
 // TestRelationApplicationSettingDropsEmptyValues verifies that a set value is
 // carried through while NULL and empty values are dropped, since the 4.1.0
 // value column is NOT NULL and disallows the empty string.

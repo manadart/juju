@@ -73,6 +73,33 @@ func (d deltas) Constraint(_ context.Context, src []v4_0_12.Constraint) ([]v4_1_
 	return result, nil
 }
 
+// MachineCloudInstance copies all v4_0_12 fields and leaves
+// ProviderAddressesUpdatedAt nil. Older exports have no record of a successful
+// provider address reconciliation.
+func (d deltas) MachineCloudInstance(
+	_ context.Context,
+	src []v4_0_12.MachineCloudInstance,
+) ([]v4_1_0.MachineCloudInstance, error) {
+	result := make([]v4_1_0.MachineCloudInstance, len(src))
+	for i, instance := range src {
+		result[i] = v4_1_0.MachineCloudInstance{
+			MachineUUID:          instance.MachineUUID,
+			LifeID:               instance.LifeID,
+			InstanceID:           instance.InstanceID,
+			DisplayName:          instance.DisplayName,
+			Arch:                 instance.Arch,
+			AvailabilityZoneUUID: instance.AvailabilityZoneUUID,
+			CpuCores:             instance.CpuCores,
+			CpuPower:             instance.CpuPower,
+			Mem:                  instance.Mem,
+			RootDisk:             instance.RootDisk,
+			RootDiskSource:       instance.RootDiskSource,
+			VirtType:             instance.VirtType,
+		}
+	}
+	return result, nil
+}
+
 // RelationApplicationSetting copies all v4_0_12 fields into the 4.1.0 schema,
 // where the relation_application_setting.value column is NOT NULL and disallows
 // the empty string. A 4.0.12 row whose value is NULL (or empty) has no valid
