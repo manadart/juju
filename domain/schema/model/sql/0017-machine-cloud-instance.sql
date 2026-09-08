@@ -6,6 +6,9 @@ CREATE TABLE machine_cloud_instance (
     -- to track the status of the instance creation process.
     instance_id TEXT,
     display_name TEXT,
+    -- The last time provider-sourced addresses were successfully reconciled
+    -- with the machine-reported network configuration.
+    provider_addresses_updated_at DATETIME,
     -- The data that is reported here is the cloud specific instance 
     -- information.
     arch TEXT,

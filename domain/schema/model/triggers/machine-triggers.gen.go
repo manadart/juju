@@ -78,6 +78,7 @@ WHEN
 	NEW.life_id != OLD.life_id OR
 	(NEW.instance_id != OLD.instance_id OR (NEW.instance_id IS NOT NULL AND OLD.instance_id IS NULL) OR (NEW.instance_id IS NULL AND OLD.instance_id IS NOT NULL)) OR
 	(NEW.display_name != OLD.display_name OR (NEW.display_name IS NOT NULL AND OLD.display_name IS NULL) OR (NEW.display_name IS NULL AND OLD.display_name IS NOT NULL)) OR
+	(NEW.provider_addresses_updated_at != OLD.provider_addresses_updated_at OR (NEW.provider_addresses_updated_at IS NOT NULL AND OLD.provider_addresses_updated_at IS NULL) OR (NEW.provider_addresses_updated_at IS NULL AND OLD.provider_addresses_updated_at IS NOT NULL)) OR
 	(NEW.arch != OLD.arch OR (NEW.arch IS NOT NULL AND OLD.arch IS NULL) OR (NEW.arch IS NULL AND OLD.arch IS NOT NULL)) OR
 	(NEW.availability_zone_uuid != OLD.availability_zone_uuid OR (NEW.availability_zone_uuid IS NOT NULL AND OLD.availability_zone_uuid IS NULL) OR (NEW.availability_zone_uuid IS NULL AND OLD.availability_zone_uuid IS NOT NULL)) OR
 	(NEW.cpu_cores != OLD.cpu_cores OR (NEW.cpu_cores IS NOT NULL AND OLD.cpu_cores IS NULL) OR (NEW.cpu_cores IS NULL AND OLD.cpu_cores IS NOT NULL)) OR
