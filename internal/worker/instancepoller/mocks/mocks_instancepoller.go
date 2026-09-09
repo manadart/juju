@@ -99,6 +99,7 @@ type MockMachineServiceMockRecorder struct {
 	getMachineLifeExpects                         []*gomock.Call2_2[context.Context, machine.Name, life.Value, error]
 	getMachineLifeAndIsManuallyProvisionedExpects []*gomock.Call2_3[context.Context, machine.Name, life.Value, bool, error]
 	getPollingInfosExpects                        []*gomock.Call2_2[context.Context, []machine.Name, machine0.PollingInfos, error]
+	recordProviderAddressesUpdatedExpects         []*gomock.Call3_1[context.Context, machine.UUID, instance.Id, error]
 	watchModelMachineLifeAndStartTimesExpects     []*gomock.Call1_2[context.Context, watcher.StringsWatcher, error]
 }
 
@@ -167,6 +168,24 @@ func (mr *MockMachineServiceMockRecorder) GetPollingInfos(ctx, machineNames any)
 
 // MockMachineServiceGetPollingInfosCall is the typed call wrapper for GetPollingInfos.
 type MockMachineServiceGetPollingInfosCall = gomock.Call2_2[context.Context, []machine.Name, machine0.PollingInfos, error]
+
+// RecordProviderAddressesUpdated mocks base method.
+func (m *MockMachineService) RecordProviderAddressesUpdated(arg0 context.Context, arg1 machine.UUID, arg2 instance.Id) error {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch3_1(&m.recorder.recordProviderAddressesUpdatedExpects, m.ctrl, m, "RecordProviderAddressesUpdated", arg0, arg1, arg2)
+}
+
+// RecordProviderAddressesUpdated indicates an expected call of RecordProviderAddressesUpdated.
+func (mr *MockMachineServiceMockRecorder) RecordProviderAddressesUpdated(arg0, arg1, arg2 any) *MockMachineServiceRecordProviderAddressesUpdatedCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall3_1[context.Context, machine.UUID, instance.Id, error](mr.mock.ctrl.T, mr.mock, "RecordProviderAddressesUpdated", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2))
+	mr.recordProviderAddressesUpdatedExpects = append(mr.recordProviderAddressesUpdatedExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockMachineServiceRecordProviderAddressesUpdatedCall is the typed call wrapper for RecordProviderAddressesUpdated.
+type MockMachineServiceRecordProviderAddressesUpdatedCall = gomock.Call3_1[context.Context, machine.UUID, instance.Id, error]
 
 // WatchModelMachineLifeAndStartTimes mocks base method.
 func (m *MockMachineService) WatchModelMachineLifeAndStartTimes(arg0 context.Context) (watcher.StringsWatcher, error) {
@@ -277,7 +296,7 @@ type MockNetworkService struct {
 // MockNetworkServiceMockRecorder is the mock recorder for MockNetworkService.
 type MockNetworkServiceMockRecorder struct {
 	mock                        *MockNetworkService
-	setProviderNetConfigExpects []*gomock.Call3_1[context.Context, machine.UUID, []network0.NetInterface, error]
+	setProviderNetConfigExpects []*gomock.Call3_2[context.Context, machine.UUID, []network0.NetInterface, bool, error]
 }
 
 // NewMockNetworkService creates a new mock instance.
@@ -293,19 +312,19 @@ func (m *MockNetworkService) EXPECT() *MockNetworkServiceMockRecorder {
 }
 
 // SetProviderNetConfig mocks base method.
-func (m *MockNetworkService) SetProviderNetConfig(arg0 context.Context, arg1 machine.UUID, arg2 []network0.NetInterface) error {
+func (m *MockNetworkService) SetProviderNetConfig(arg0 context.Context, arg1 machine.UUID, arg2 []network0.NetInterface) (bool, error) {
 	m.ctrl.T.Helper()
-	return gomock.Dispatch3_1(&m.recorder.setProviderNetConfigExpects, m.ctrl, m, "SetProviderNetConfig", arg0, arg1, arg2)
+	return gomock.Dispatch3_2(&m.recorder.setProviderNetConfigExpects, m.ctrl, m, "SetProviderNetConfig", arg0, arg1, arg2)
 }
 
 // SetProviderNetConfig indicates an expected call of SetProviderNetConfig.
 func (mr *MockNetworkServiceMockRecorder) SetProviderNetConfig(arg0, arg1, arg2 any) *MockNetworkServiceSetProviderNetConfigCall {
 	mr.mock.ctrl.T.Helper()
-	call := gomock.NewCall3_1[context.Context, machine.UUID, []network0.NetInterface, error](mr.mock.ctrl.T, mr.mock, "SetProviderNetConfig", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2))
+	call := gomock.NewCall3_2[context.Context, machine.UUID, []network0.NetInterface, bool, error](mr.mock.ctrl.T, mr.mock, "SetProviderNetConfig", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2))
 	mr.setProviderNetConfigExpects = append(mr.setProviderNetConfigExpects, call)
 	mr.mock.ctrl.Track(call.Call)
 	return call
 }
 
 // MockNetworkServiceSetProviderNetConfigCall is the typed call wrapper for SetProviderNetConfig.
-type MockNetworkServiceSetProviderNetConfigCall = gomock.Call3_1[context.Context, machine.UUID, []network0.NetInterface, error]
+type MockNetworkServiceSetProviderNetConfigCall = gomock.Call3_2[context.Context, machine.UUID, []network0.NetInterface, bool, error]

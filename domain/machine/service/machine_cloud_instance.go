@@ -133,3 +133,32 @@ func (s *Service) SetMachineCloudInstance(
 	}
 	return nil
 }
+
+// RecordProviderAddressesUpdated records that provider-sourced addresses were
+// successfully reconciled for the current machine cloud instance.
+func (s *Service) RecordProviderAddressesUpdated(
+	ctx context.Context,
+	machineUUID machine.UUID,
+	instanceID instance.Id,
+) error {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	if err := machineUUID.Validate(); err != nil {
+		return errors.Errorf("invalid machine UUID: %w", err)
+	}
+	if instanceID == instance.UnknownId {
+		return errors.New("instance ID is empty").Add(coreerrors.NotValid)
+	}
+
+	err := s.st.SetProviderAddressesUpdatedAt(
+		ctx, machineUUID.String(), instanceID.String(), s.clock.Now().UTC(),
+	)
+	if err != nil {
+		return errors.Errorf(
+			"recording provider address update for machine %q: %w",
+			machineUUID, err,
+		)
+	}
+	return nil
+}

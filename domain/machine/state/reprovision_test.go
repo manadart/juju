@@ -134,8 +134,12 @@ func (s *stateSuite) TestReplacementPreservesMachineAndUnitIdentity(c *tc.C) {
 UPDATE machine
 SET hostname = ?, agent_started_at = ?
 WHERE uuid = ?`, "old-hostname", time.Now(), machineUUID.String())
+	err := s.state.SetProviderAddressesUpdatedAt(
+		c.Context(), machineUUID.String(), "123", time.Now(),
+	)
+	c.Assert(err, tc.ErrorIsNil)
 
-	err := s.state.DetachLostMachineCloudInstance(
+	err = s.state.DetachLostMachineCloudInstance(
 		c.Context(), machineName.String(), "123", "reprovisioning requested",
 		nil, time.Now(),
 	)
@@ -158,16 +162,18 @@ WHERE uuid = ?`, "old-hostname", time.Now(), machineUUID.String())
 		mem, cpuCores                                                uint64
 		hostname                                                     sql.Null[string]
 		agentStartedAt                                               sql.Null[time.Time]
+		providerAddressesUpdatedAt                                   sql.Null[time.Time]
 	)
 	err = s.DB().QueryRowContext(c.Context(), `
 SELECT m.name, m.net_node_uuid, mci.instance_id, mci.display_name,
        m.nonce, mci.arch, mci.mem, mci.cpu_cores, m.hostname,
-       m.agent_started_at
+       m.agent_started_at, mci.provider_addresses_updated_at
 FROM machine AS m
 JOIN machine_cloud_instance AS mci ON mci.machine_uuid = m.uuid
 WHERE m.uuid = ?`, machineUUID.String()).Scan(
 		&name, &preservedNetNode, &instanceID, &displayName, &nonce, &arch,
 		&mem, &cpuCores, &hostname, &agentStartedAt,
+		&providerAddressesUpdatedAt,
 	)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Check(name, tc.Equals, machineName.String())
@@ -180,6 +186,7 @@ WHERE m.uuid = ?`, machineUUID.String()).Scan(
 	c.Check(cpuCores, tc.Equals, uint64(8))
 	c.Check(hostname.Valid, tc.IsFalse)
 	c.Check(agentStartedAt.Valid, tc.IsFalse)
+	c.Check(providerAddressesUpdatedAt.Valid, tc.IsFalse)
 
 	var unitUUID, unitName, unitNetNode string
 	var unitLife int

@@ -66,6 +66,10 @@ type MachineService interface {
 
 	// GetPollingInfos returns the polling information for the specified machines.
 	GetPollingInfos(ctx context.Context, machineNames []machine.Name) (domainmachine.PollingInfos, error)
+
+	// RecordProviderAddressesUpdated records that provider-sourced addresses
+	// were reconciled for the current machine cloud instance.
+	RecordProviderAddressesUpdated(context.Context, machine.UUID, instance.Id) error
 }
 
 // StatusService defines the interface for interacting with the status
@@ -85,8 +89,10 @@ type StatusService interface {
 // NetworkService is the interface that is used to interact with the
 // network spaces/subnets.
 type NetworkService interface {
-	// SetProviderNetConfig updates the network configuration for a machine using its unique identifier and new interface data.
-	SetProviderNetConfig(context.Context, machine.UUID, []domainnetwork.NetInterface) error
+	// SetProviderNetConfig updates the network configuration for a machine using
+	// its unique identifier and new interface data. It reports whether the
+	// update was applied.
+	SetProviderNetConfig(context.Context, machine.UUID, []domainnetwork.NetInterface) (bool, error)
 }
 
 // Config encapsulates the configuration options for instantiating a new
@@ -601,19 +607,22 @@ func (u *updaterWorker) processProviderInfo(
 }
 
 // syncProviderAddresses updates the provider addresses for this entry's machine
-// using either the provider sourced interface list.
-//
-// The call returns the count of provider addresses for the machine.
+// and records a successful reconciliation for the current cloud instance.
 func (u *updaterWorker) syncProviderAddresses(
 	ctx context.Context,
 	entry *pollGroupEntry, providerIfaceList network.InterfaceInfos,
 ) error {
 	devices := transform.Slice(providerIfaceList, newNetInterface)
-	err := u.config.NetworkService.SetProviderNetConfig(ctx, entry.machineUUID, devices)
+	applied, err := u.config.NetworkService.SetProviderNetConfig(ctx, entry.machineUUID, devices)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	return nil
+	if !applied {
+		return nil
+	}
+	return errors.Trace(u.config.MachineService.RecordProviderAddressesUpdated(
+		ctx, entry.machineUUID, entry.instanceID,
+	))
 }
 
 func (u *updaterWorker) maybeSwitchPollGroup(

@@ -82,6 +82,10 @@ type State interface {
 	// along with the instance tags and the link to a lxd profile if any.
 	SetMachineCloudInstance(context.Context, string, instance.Id, string, string, *instance.HardwareCharacteristics) error
 
+	// SetProviderAddressesUpdatedAt records when provider-sourced addresses were
+	// last successfully reconciled for the current machine cloud instance.
+	SetProviderAddressesUpdatedAt(context.Context, string, string, time.Time) error
+
 	// DetachLostMachineCloudInstance atomically clears the provider-observed
 	// state for a lost machine instance and moves the machine back to pending.
 	DetachLostMachineCloudInstance(

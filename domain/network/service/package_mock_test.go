@@ -68,7 +68,7 @@ type MockStateMockRecorder struct {
 	importLinkLayerDevicesExpects               []*gomock.Call2_1[context.Context, []internal.ImportLinkLayerDevice, error]
 	isCaasUnitExpects                           []*gomock.Call2_2[context.Context, string, bool, error]
 	isMachineUnmanagedExpects                   []*gomock.Call2_2[context.Context, string, bool, error]
-	mergeLinkLayerDeviceExpects                 []*gomock.Call3_1[context.Context, string, []network0.NetInterface, error]
+	mergeLinkLayerDeviceExpects                 []*gomock.Call3_2[context.Context, string, []network0.NetInterface, bool, error]
 	moveSubnetsToSpaceExpects                   []*gomock.Call4_2[context.Context, []string, string, bool, []network0.MovedSubnets, error]
 	nICsInSpacesExpects                         []*gomock.Call2_2[context.Context, string, map[string][]network0.NetInterface, error]
 	namespaceForWatchSubnetExpects              []*gomock.Call0_1[string]
@@ -741,22 +741,22 @@ func (mr *MockStateMockRecorder) IsMachineUnmanaged(ctx, machineUUID any) *MockS
 type MockStateIsMachineUnmanagedCall = gomock.Call2_2[context.Context, string, bool, error]
 
 // MergeLinkLayerDevice mocks base method.
-func (m *MockState) MergeLinkLayerDevice(ctx context.Context, machineUUID string, incoming []network0.NetInterface) error {
+func (m *MockState) MergeLinkLayerDevice(ctx context.Context, machineUUID string, incoming []network0.NetInterface) (bool, error) {
 	m.ctrl.T.Helper()
-	return gomock.Dispatch3_1(&m.recorder.mergeLinkLayerDeviceExpects, m.ctrl, m, "MergeLinkLayerDevice", ctx, machineUUID, incoming)
+	return gomock.Dispatch3_2(&m.recorder.mergeLinkLayerDeviceExpects, m.ctrl, m, "MergeLinkLayerDevice", ctx, machineUUID, incoming)
 }
 
 // MergeLinkLayerDevice indicates an expected call of MergeLinkLayerDevice.
 func (mr *MockStateMockRecorder) MergeLinkLayerDevice(ctx, machineUUID, incoming any) *MockStateMergeLinkLayerDeviceCall {
 	mr.mock.ctrl.T.Helper()
-	call := gomock.NewCall3_1[context.Context, string, []network0.NetInterface, error](mr.mock.ctrl.T, mr.mock, "MergeLinkLayerDevice", gomock.EnsureMatcher(ctx), gomock.EnsureMatcher(machineUUID), gomock.EnsureMatcher(incoming))
+	call := gomock.NewCall3_2[context.Context, string, []network0.NetInterface, bool, error](mr.mock.ctrl.T, mr.mock, "MergeLinkLayerDevice", gomock.EnsureMatcher(ctx), gomock.EnsureMatcher(machineUUID), gomock.EnsureMatcher(incoming))
 	mr.mergeLinkLayerDeviceExpects = append(mr.mergeLinkLayerDeviceExpects, call)
 	mr.mock.ctrl.Track(call.Call)
 	return call
 }
 
 // MockStateMergeLinkLayerDeviceCall is the typed call wrapper for MergeLinkLayerDevice.
-type MockStateMergeLinkLayerDeviceCall = gomock.Call3_1[context.Context, string, []network0.NetInterface, error]
+type MockStateMergeLinkLayerDeviceCall = gomock.Call3_2[context.Context, string, []network0.NetInterface, bool, error]
 
 // MoveSubnetsToSpace mocks base method.
 func (m *MockState) MoveSubnetsToSpace(ctx context.Context, subnetUUIDs []string, spaceName string, force bool) ([]network0.MovedSubnets, error) {

@@ -4,8 +4,11 @@
 package service
 
 import (
+	"time"
+
 	gomock "github.com/canonical/gomock/gomock"
 	"github.com/juju/clock"
+	"github.com/juju/clock/testclock"
 	"github.com/juju/tc"
 
 	coreerrors "github.com/juju/juju/core/errors"
@@ -142,6 +145,69 @@ func (s *serviceSuite) TestSetMachineCloudInstanceFails(c *tc.C) {
 	err := NewService(s.state, s.statusHistory, clock.WallClock, loggertesting.WrapCheckLog(c)).
 		SetMachineCloudInstance(c.Context(), "42", "instance-42", "42", "nonce", hc)
 	c.Assert(err, tc.ErrorMatches, "setting machine cloud instance for machine \"42\": boom")
+}
+
+func (s *serviceSuite) TestRecordProviderAddressesUpdated(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	machineUUID := tc.Must(c, coremachine.NewUUID)
+	instanceID := instance.Id("instance-42")
+	now := time.Date(2026, time.September, 4, 12, 30, 0, 0, time.UTC)
+	s.state.EXPECT().SetProviderAddressesUpdatedAt(
+		gomock.Any(), machineUUID.String(), instanceID.String(), now,
+	).Return(nil)
+
+	svc := NewService(
+		s.state, s.statusHistory, testclock.NewClock(now),
+		loggertesting.WrapCheckLog(c),
+	)
+	err := svc.RecordProviderAddressesUpdated(c.Context(), machineUUID, instanceID)
+	c.Assert(err, tc.ErrorIsNil)
+}
+
+func (s *serviceSuite) TestRecordProviderAddressesUpdatedInvalidMachineUUID(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	svc := NewService(
+		s.state, s.statusHistory, clock.WallClock,
+		loggertesting.WrapCheckLog(c),
+	)
+	err := svc.RecordProviderAddressesUpdated(
+		c.Context(), coremachine.UUID("invalid"), "instance-42",
+	)
+	c.Assert(err, tc.ErrorIs, coreerrors.NotValid)
+}
+
+func (s *serviceSuite) TestRecordProviderAddressesUpdatedEmptyInstanceID(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	machineUUID := tc.Must(c, coremachine.NewUUID)
+	svc := NewService(
+		s.state, s.statusHistory, clock.WallClock,
+		loggertesting.WrapCheckLog(c),
+	)
+	err := svc.RecordProviderAddressesUpdated(
+		c.Context(), machineUUID, instance.UnknownId,
+	)
+	c.Assert(err, tc.ErrorIs, coreerrors.NotValid)
+}
+
+func (s *serviceSuite) TestRecordProviderAddressesUpdatedFails(c *tc.C) {
+	defer s.setupMocks(c).Finish()
+
+	machineUUID := tc.Must(c, coremachine.NewUUID)
+	instanceID := instance.Id("instance-42")
+	stateErr := errors.New("boom")
+	s.state.EXPECT().SetProviderAddressesUpdatedAt(
+		gomock.Any(), machineUUID.String(), instanceID.String(), gomock.Any(),
+	).Return(stateErr)
+
+	svc := NewService(
+		s.state, s.statusHistory, clock.WallClock,
+		loggertesting.WrapCheckLog(c),
+	)
+	err := svc.RecordProviderAddressesUpdated(c.Context(), machineUUID, instanceID)
+	c.Assert(err, tc.ErrorIs, stateErr)
 }
 
 func (s *serviceSuite) TestGetPollingInfosSuccess(c *tc.C) {

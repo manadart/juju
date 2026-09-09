@@ -80,6 +80,7 @@ type MockStateMockRecorder struct {
 	setKeepInstanceExpects                                    []*gomock.Call3_1[context.Context, machine.Name, bool, error]
 	setMachineCloudInstanceExpects                            []*gomock.Call6_1[context.Context, string, instance.Id, string, string, *instance.HardwareCharacteristics, error]
 	setMachineHostnameExpects                                 []*gomock.Call3_1[context.Context, string, string, error]
+	setProviderAddressesUpdatedAtExpects                      []*gomock.Call4_1[context.Context, string, string, time.Time, error]
 	setRunningAgentBinaryVersionExpects                       []*gomock.Call3_1[context.Context, string, agentbinary.Version, error]
 	setSSHHostKeysExpects                                     []*gomock.Call3_1[context.Context, string, []string, error]
 	shouldKeepInstanceExpects                                 []*gomock.Call2_2[context.Context, machine.Name, bool, error]
@@ -889,6 +890,24 @@ func (mr *MockStateMockRecorder) SetMachineHostname(ctx, mUUID, hostname any) *M
 
 // MockStateSetMachineHostnameCall is the typed call wrapper for SetMachineHostname.
 type MockStateSetMachineHostnameCall = gomock.Call3_1[context.Context, string, string, error]
+
+// SetProviderAddressesUpdatedAt mocks base method.
+func (m *MockState) SetProviderAddressesUpdatedAt(arg0 context.Context, arg1, arg2 string, arg3 time.Time) error {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch4_1(&m.recorder.setProviderAddressesUpdatedAtExpects, m.ctrl, m, "SetProviderAddressesUpdatedAt", arg0, arg1, arg2, arg3)
+}
+
+// SetProviderAddressesUpdatedAt indicates an expected call of SetProviderAddressesUpdatedAt.
+func (mr *MockStateMockRecorder) SetProviderAddressesUpdatedAt(arg0, arg1, arg2, arg3 any) *MockStateSetProviderAddressesUpdatedAtCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall4_1[context.Context, string, string, time.Time, error](mr.mock.ctrl.T, mr.mock, "SetProviderAddressesUpdatedAt", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2), gomock.EnsureMatcher(arg3))
+	mr.setProviderAddressesUpdatedAtExpects = append(mr.setProviderAddressesUpdatedAtExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStateSetProviderAddressesUpdatedAtCall is the typed call wrapper for SetProviderAddressesUpdatedAt.
+type MockStateSetProviderAddressesUpdatedAtCall = gomock.Call4_1[context.Context, string, string, time.Time, error]
 
 // SetRunningAgentBinaryVersion mocks base method.
 func (m *MockState) SetRunningAgentBinaryVersion(arg0 context.Context, arg1 string, arg2 agentbinary.Version) error {

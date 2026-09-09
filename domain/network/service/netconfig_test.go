@@ -169,7 +169,7 @@ func (s *netConfigSuite) TestSetProviderNetConfigInvalidMachineUUID(c *tc.C) {
 	invalidUUID := machine.UUID("invalid-uuid")
 
 	// Act
-	err := s.service(c).SetProviderNetConfig(c.Context(), invalidUUID, nil)
+	_, err := s.service(c).SetProviderNetConfig(c.Context(), invalidUUID, nil)
 
 	// Assert
 	c.Assert(err, tc.ErrorMatches, `invalid machine UUID: id "invalid-uuid" not valid`)
@@ -185,7 +185,7 @@ func (s *netConfigSuite) TestSetProviderNetConfigGetNetNodeError(c *tc.C) {
 	s.st.EXPECT().GetMachineNetNodeUUID(gomock.Any(), machineUUID.String()).Return("", stateErr)
 
 	// Act
-	err := s.service(c).SetProviderNetConfig(c.Context(), machineUUID, nil)
+	_, err := s.service(c).SetProviderNetConfig(c.Context(), machineUUID, nil)
 
 	// Assert
 	c.Assert(err, tc.ErrorIs, stateErr)
@@ -201,10 +201,10 @@ func (s *netConfigSuite) TestSetProviderNetConfigError(c *tc.C) {
 	stateErr := errors.New("boom")
 
 	s.st.EXPECT().GetMachineNetNodeUUID(gomock.Any(), machineUUID.String()).Return(nodeUUID, nil)
-	s.st.EXPECT().MergeLinkLayerDevice(gomock.Any(), nodeUUID, incoming).Return(stateErr)
+	s.st.EXPECT().MergeLinkLayerDevice(gomock.Any(), nodeUUID, incoming).Return(false, stateErr)
 
 	// Act
-	err := s.service(c).SetProviderNetConfig(c.Context(), machineUUID, incoming)
+	_, err := s.service(c).SetProviderNetConfig(c.Context(), machineUUID, incoming)
 
 	// Assert
 	c.Assert(err, tc.ErrorIs, stateErr)
@@ -220,13 +220,14 @@ func (s *netConfigSuite) TestSetProviderNetConfig(c *tc.C) {
 		{},
 	}
 	s.st.EXPECT().GetMachineNetNodeUUID(gomock.Any(), machineUUID.String()).Return(nodeUUID, nil)
-	s.st.EXPECT().MergeLinkLayerDevice(gomock.Any(), nodeUUID, incoming).Return(nil)
+	s.st.EXPECT().MergeLinkLayerDevice(gomock.Any(), nodeUUID, incoming).Return(true, nil)
 
 	// Act
-	err := s.service(c).SetProviderNetConfig(c.Context(), machineUUID, incoming)
+	applied, err := s.service(c).SetProviderNetConfig(c.Context(), machineUUID, incoming)
 
 	// Assert
 	c.Assert(err, tc.ErrorIsNil)
+	c.Check(applied, tc.IsTrue)
 }
 
 // TestGetAllDevicesByMachineNamesMultipleMachinesWithDevices validates fetching

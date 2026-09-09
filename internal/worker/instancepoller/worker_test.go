@@ -269,6 +269,9 @@ func (s *workerSuite) TestReprovisionedMachinePollsReplacementInstance(c *tc.C) 
 	).Return(life.Alive, nil)
 	mocked.networkService.EXPECT().SetProviderNetConfig(
 		gomock.Any(), machineUUID, testDevices,
+	).Return(true, nil)
+	mocked.machineService.EXPECT().RecordProviderAddressesUpdated(
+		gomock.Any(), machineUUID, instance.Id("replacement-instance"),
 	).Return(nil)
 	mocked.statusService.EXPECT().GetMachineStatus(
 		gomock.Any(), machineName,
@@ -398,11 +401,67 @@ func (s *workerSuite) TestUpdateOfStatusAndAddressDetails(c *tc.C) {
 		Message: "Running wild",
 	}).Return(nil)
 
-	mocked.networkService.EXPECT().SetProviderNetConfig(gomock.Any(), machineUUID, testDevices).Return(nil)
+	mocked.networkService.EXPECT().SetProviderNetConfig(
+		gomock.Any(), machineUUID, testDevices,
+	).Return(true, nil)
+	mocked.machineService.EXPECT().RecordProviderAddressesUpdated(
+		gomock.Any(), machineUUID, instance.Id("b4dc0ffee"),
+	).Return(nil)
 
 	providerStatus, err := updWorker.processProviderInfo(c.Context(), entry, instInfo, testNetIfs)
 	c.Assert(err, tc.ErrorIsNil)
 	c.Assert(providerStatus, tc.Equals, status.Running)
+}
+
+func (s *workerSuite) TestSyncProviderAddressesDoesNotRecordNoop(c *tc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	machineService := mocks.NewMockMachineService(ctrl)
+	networkService := mocks.NewMockNetworkService(ctrl)
+	machineUUID := machinetesting.GenUUID(c)
+	entry := &pollGroupEntry{
+		machineUUID: machineUUID,
+		instanceID:  "instance-42",
+	}
+	worker := &updaterWorker{config: Config{
+		MachineService: machineService,
+		NetworkService: networkService,
+	}}
+	networkService.EXPECT().SetProviderNetConfig(
+		gomock.Any(), machineUUID, testDevices,
+	).Return(false, nil)
+
+	err := worker.syncProviderAddresses(c.Context(), entry, testNetIfs)
+	c.Assert(err, tc.ErrorIsNil)
+}
+
+func (s *workerSuite) TestSyncProviderAddressesRecordError(c *tc.C) {
+	ctrl := gomock.NewController(c)
+	defer ctrl.Finish()
+
+	machineService := mocks.NewMockMachineService(ctrl)
+	networkService := mocks.NewMockNetworkService(ctrl)
+	machineUUID := machinetesting.GenUUID(c)
+	instanceID := instance.Id("instance-42")
+	entry := &pollGroupEntry{
+		machineUUID: machineUUID,
+		instanceID:  instanceID,
+	}
+	worker := &updaterWorker{config: Config{
+		MachineService: machineService,
+		NetworkService: networkService,
+	}}
+	recordErr := fmt.Errorf("boom")
+	networkService.EXPECT().SetProviderNetConfig(
+		gomock.Any(), machineUUID, testDevices,
+	).Return(true, nil)
+	machineService.EXPECT().RecordProviderAddressesUpdated(
+		gomock.Any(), machineUUID, instanceID,
+	).Return(recordErr)
+
+	err := worker.syncProviderAddresses(c.Context(), entry, testNetIfs)
+	c.Assert(err, tc.ErrorIs, recordErr)
 }
 
 func (s *workerSuite) TestStartedMachineWithNetAddressesMovesToLongPollGroup(c *tc.C) {
@@ -615,7 +674,12 @@ func (s *workerSuite) TestBatchPollingOfGroupMembers(c *tc.C) {
 	mocked.machineService.EXPECT().GetMachineLife(gomock.Any(), machineName1).Return(life.Alive, nil)
 	mocked.statusService.EXPECT().GetInstanceStatus(gomock.Any(), machineName1).Return(status.StatusInfo{Status: status.Running}, nil)
 	mocked.statusService.EXPECT().GetMachineStatus(gomock.Any(), machineName1).Return(status.StatusInfo{Status: status.Started}, nil)
-	mocked.networkService.EXPECT().SetProviderNetConfig(gomock.Any(), machineUUID1, testDevices).Return(nil)
+	mocked.networkService.EXPECT().SetProviderNetConfig(
+		gomock.Any(), machineUUID1, testDevices,
+	).Return(true, nil)
+	mocked.machineService.EXPECT().RecordProviderAddressesUpdated(
+		gomock.Any(), machineUUID1, instance.Id("b4dc0ffee"),
+	).Return(nil)
 
 	updWorker.appendToShortPollGroup(machineName0)
 	updWorker.appendToShortPollGroup(machineName1)
@@ -674,7 +738,12 @@ func (s *workerSuite) TestBatchPollingOfGroupMembersWithVariousDevicesStatus(c *
 	mocked.statusService.EXPECT().GetMachineStatus(gomock.Any(),
 		gomock.AnyOf(machineName0, machineName1)).Return(status.StatusInfo{Status: status.Started}, nil).Times(2)
 	// With set config only on the machine with devices
-	mocked.networkService.EXPECT().SetProviderNetConfig(gomock.Any(), machineUUID1, testDevices).Return(nil)
+	mocked.networkService.EXPECT().SetProviderNetConfig(
+		gomock.Any(), machineUUID1, testDevices,
+	).Return(true, nil)
+	mocked.machineService.EXPECT().RecordProviderAddressesUpdated(
+		gomock.Any(), machineUUID1, instance.Id("with-devices"),
+	).Return(nil)
 
 	updWorker.appendToShortPollGroup(machineName0)
 	updWorker.appendToShortPollGroup(machineName1)
