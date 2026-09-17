@@ -8,6 +8,7 @@ import (
 
 	"github.com/canonical/sqlair"
 
+	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/domain/network/internal"
 	"github.com/juju/juju/internal/errors"
 )
@@ -75,9 +76,64 @@ WHERE a.name = $service.application_name
 			} else if affected != 1 {
 				return errors.Errorf("inserting cloud services: expected 1 row affected, got %d", affected)
 			}
+			for _, addr := range svc.Addresses {
+				if network.AddressType(addr.Type) != network.HostName {
+					continue
+				}
+				if err := st.importK8sServiceFQDN(ctx, tx, svc.NetNodeUUID, addr); err != nil {
+					return errors.Capture(err)
+				}
+			}
 		}
 		return nil
 	})
 
 	return errors.Capture(err)
+}
+
+func (st *State) importK8sServiceFQDN(ctx context.Context, tx *sqlair.TX, netNodeUUID string, addr internal.ImportK8sServiceAddress) error {
+	type hostname struct {
+		UUID        string `db:"uuid"`
+		Address     string `db:"address"`
+		Scope       string `db:"scope"`
+		NetNodeUUID string `db:"net_node_uuid"`
+	}
+	input := hostname{UUID: addr.UUID, Address: addr.Value, Scope: string(addr.Scope), NetNodeUUID: netNodeUUID}
+	insert, err := st.Prepare(`
+INSERT INTO fqdn_address (uuid, address, scope_id)
+SELECT $hostname.uuid, $hostname.address, nas.id
+FROM network_address_scope AS nas WHERE nas.name = $hostname.scope
+ON CONFLICT (address, scope_id) DO NOTHING`, input)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	if err := tx.Query(ctx, insert, input).Run(); err != nil {
+		return errors.Errorf("inserting service hostname: %w", err)
+	}
+	link, err := st.Prepare(`
+INSERT INTO net_node_fqdn_address (net_node_uuid, address_uuid)
+SELECT $hostname.net_node_uuid, fa.uuid
+FROM fqdn_address AS fa
+JOIN network_address_scope AS nas ON nas.id = fa.scope_id
+WHERE fa.address = $hostname.address AND nas.name = $hostname.scope
+ON CONFLICT DO NOTHING`, input)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	// Verify the scope lookup succeeded before linking the hostname.
+	check, err := st.Prepare(`
+SELECT fa.uuid AS &hostname.uuid
+FROM fqdn_address AS fa
+JOIN network_address_scope AS nas ON nas.id = fa.scope_id
+WHERE fa.address = $hostname.address AND nas.name = $hostname.scope`, input)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	var found hostname
+	if err := tx.Query(ctx, check, input).Get(&found); errors.Is(err, sqlair.ErrNoRows) {
+		return errors.New("service hostname has an invalid scope")
+	} else if err != nil {
+		return errors.Capture(err)
+	}
+	return errors.Capture(tx.Query(ctx, link, input).Run())
 }
