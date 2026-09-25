@@ -1505,6 +1505,13 @@ func (a *app) Watch(ctx context.Context) (watcher.NotifyWatcher, error) {
 			o.FieldSelector = a.fieldSelector()
 		}),
 	)
+	serviceName := utils.ServiceAddressName(a.name, a.modelName)
+	serviceFactory := informers.NewSharedInformerFactoryWithOptions(a.client, 0,
+		informers.WithNamespace(a.namespace),
+		informers.WithTweakListOptions(func(o *metav1.ListOptions) {
+			o.FieldSelector = fields.OneTermEqualSelector("metadata.name", serviceName).String()
+		}),
+	)
 	pvcFactory := informers.NewSharedInformerFactoryWithOptions(a.client, 0,
 		informers.WithNamespace(a.namespace),
 		informers.WithTweakListOptions(func(o *metav1.ListOptions) {
@@ -1526,7 +1533,7 @@ func (a *app) Watch(ctx context.Context) (watcher.NotifyWatcher, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	w2, err := a.newWatcher(factory.Core().V1().Services().Informer(), a.name, a.clock)
+	w2, err := a.newWatcher(serviceFactory.Core().V1().Services().Informer(), serviceName, a.clock)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -1603,8 +1610,12 @@ func (a *app) State() (caas.ApplicationState, error) {
 
 // Service returns the service associated with the application.
 func (a *app) Service() (*caas.Service, error) {
-	svc, err := a.getService()
-	if err != nil {
+	serviceName := utils.ServiceAddressName(a.name, a.modelName)
+	svc := resources.NewService(a.client.CoreV1().Services(a.namespace), a.namespace, serviceName, nil)
+	if err := svc.Get(context.TODO()); err != nil {
+		if errors.Is(err, errors.NotFound) {
+			return nil, internalerrors.Errorf("%w", err).Add(caas.ServiceNotFound)
+		}
 		return nil, errors.Trace(err)
 	}
 	ctx := context.TODO()
@@ -1615,7 +1626,7 @@ func (a *app) Service() (*caas.Service, error) {
 	}
 	return &caas.Service{
 		Id:        string(svc.GetUID()),
-		Addresses: utils.GetSvcAddresses(&svc.Service, false),
+		Addresses: utils.GetSvcAddresses(&svc.Service, serviceName != a.name),
 		Status: status.StatusInfo{
 			Status:  svcStatus,
 			Message: statusMessage,

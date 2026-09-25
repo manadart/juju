@@ -79,6 +79,9 @@ const (
 	// JujuControllerModelName is the name of the juju controller model.
 	JujuControllerModelName = "controller"
 
+	// ControllerServiceName is the normal Service for the controller API.
+	ControllerServiceName = JujuControllerStackName + "-service"
+
 	// ControllerServiceFQDNTemplate is the FQDN of the controller service using the cluster DNS.
 	ControllerServiceFQDNTemplate = "controller-service.controller-%s.svc.cluster.local"
 
