@@ -50,6 +50,10 @@ type HookContext interface {
 	ContextVersion
 	ContextSecrets
 
+	// RequestHookDeferral schedules the current hook again after a successful
+	// exit and commit, without advancing its lifecycle.
+	RequestHookDeferral() error
+
 	// GetLogger returns a juju logger Logger for the supplied module that is
 	// correctly wired up for the given context
 	GetLoggerByName(module string) corelogger.Logger

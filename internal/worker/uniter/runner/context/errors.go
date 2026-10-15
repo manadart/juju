@@ -9,3 +9,7 @@ import (
 
 var ErrRequeueAndReboot = errors.New("reboot now")
 var ErrReboot = errors.New("reboot after hook")
+
+// ErrHookDeferred indicates that the hook committed successfully and must run
+// again before its lifecycle can advance.
+var ErrHookDeferred = errors.New("hook deferred after commit")

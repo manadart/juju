@@ -74,6 +74,24 @@ func (s *uniterResolver) NextOp(
 	}
 	log := s.config.Logger
 
+	// Native deferral takes precedence over other hooks and actions. Agent
+	// shutdown and resolver restart retain their normal handling.
+	if localState.Kind == operation.RunHook && localState.Hook != nil &&
+		localState.Hook.Reissued && !remoteState.Shutdown && !localState.Restart {
+		step := localState.Step
+		if localState.HookStep != nil {
+			step = *localState.HookStep
+		}
+		if step == operation.Queued {
+			if s.retryHookTimerStarted {
+				s.config.StopRetryHookTimer()
+				s.retryHookTimerStarted = false
+			}
+			badge = "deferred hook"
+			return opFactory.NewRunHook(*localState.Hook)
+		}
+	}
+
 	// Check if we need to notify the charms because a reboot was detected.
 	badge = "reboot"
 	op, err := s.config.Reboot.NextOp(ctx, localState, remoteState, opFactory)

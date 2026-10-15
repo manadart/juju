@@ -182,6 +182,12 @@ type HookContext struct {
 
 	hookName string
 
+	// hookReissued identifies an invocation following native hook deferral.
+	hookReissued bool
+
+	// hookDeferred is protected by mu and applies only to this invocation.
+	hookDeferred bool
+
 	// actionData contains the values relevant to the run of an Action:
 	// its tag, its parameters, and its results.
 	actionData *ActionData
@@ -446,7 +452,13 @@ func (c *HookContext) RequestReboot(priority jujuc.RebootPriority) error {
 	// Must set reboot priority first, because killing the hook
 	// process will trigger the completion of the hook. If killing
 	// the hook fails, then we can reset the priority.
-	c.setRebootPriority(priority)
+	c.mu.Lock()
+	if c.hookDeferred {
+		c.mu.Unlock()
+		return errors.New("cannot request a reboot after hook-defer")
+	}
+	c.rebootPriority = priority
+	c.mu.Unlock()
 
 	var err error
 	if priority == jujuc.RebootNow {
@@ -473,6 +485,20 @@ func (c *HookContext) setRebootPriority(priority jujuc.RebootPriority) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.rebootPriority = priority
+}
+
+// RequestHookDeferral implements jujuc.HookContext.
+func (c *HookContext) RequestHookDeferral() error {
+	if c.hookName == "" {
+		return errors.New("hook-defer is only supported while running a hook")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.rebootPriority != jujuc.RebootSkip {
+		return errors.New("cannot defer a hook after requesting a reboot")
+	}
+	c.hookDeferred = true
+	return nil
 }
 
 func (c *HookContext) GetProcess() HookProcess {
@@ -1440,6 +1466,9 @@ func (c *HookContext) HookVars(
 		"JUJU_CHARM_TRACE_CONFIG_GRPC="+c.charmTracingConfig.GRPCEndpoint,
 		"JUJU_CHARM_TRACE_CONFIG_CA_CERT="+c.charmTracingConfig.CACertificate,
 	)
+	if c.hookReissued {
+		vars = append(vars, "JUJU_HOOK_REISSUED=1")
+	}
 	if r, err := c.HookRelation(); err == nil {
 		vars = append(vars,
 			"JUJU_RELATION="+r.Name(),
@@ -1581,6 +1610,14 @@ func (c *HookContext) Flush(ctx context.Context, process string, ctxErr error) e
 	// TODO(gsamfira): Just for now, reboot will not be supported in actions.
 	if ctxErr == nil {
 		ctxErr = flushErr
+	}
+	if ctxErr == nil {
+		c.mu.Lock()
+		deferred := c.hookDeferred
+		c.mu.Unlock()
+		if deferred {
+			return ErrHookDeferred
+		}
 	}
 	return c.handleReboot(ctx, ctxErr)
 }

@@ -72,6 +72,7 @@ type MockContextMockRecorder struct {
 	remoteApplicationNameExpects       []*gomock.Call0_2[string, error]
 	remoteUnitNameExpects              []*gomock.Call0_2[string, error]
 	removeSecretExpects                []*gomock.Call3_1[context.Context, *secrets.URI, *int, error]
+	requestHookDeferralExpects         []*gomock.Call0_1[error]
 	requestRebootExpects               []*gomock.Call1_1[jujuc.RebootPriority, error]
 	resetExecutionSetUnitStatusExpects []*gomock.Call0_0
 	revokeSecretExpects                []*gomock.Call3_1[context.Context, *secrets.URI, *jujuc.SecretGrantRevokeArgs, error]
@@ -770,6 +771,24 @@ func (mr *MockContextMockRecorder) RemoveSecret(arg0, arg1, arg2 any) *MockConte
 
 // MockContextRemoveSecretCall is the typed call wrapper for RemoveSecret.
 type MockContextRemoveSecretCall = gomock.Call3_1[context.Context, *secrets.URI, *int, error]
+
+// RequestHookDeferral mocks base method.
+func (m *MockContext) RequestHookDeferral() error {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch0_1(&m.recorder.requestHookDeferralExpects, m.ctrl, m, "RequestHookDeferral")
+}
+
+// RequestHookDeferral indicates an expected call of RequestHookDeferral.
+func (mr *MockContextMockRecorder) RequestHookDeferral() *MockContextRequestHookDeferralCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall0_1[error](mr.mock.ctrl.T, mr.mock, "RequestHookDeferral")
+	mr.requestHookDeferralExpects = append(mr.requestHookDeferralExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockContextRequestHookDeferralCall is the typed call wrapper for RequestHookDeferral.
+type MockContextRequestHookDeferralCall = gomock.Call0_1[error]
 
 // RequestReboot mocks base method.
 func (m *MockContext) RequestReboot(prio jujuc.RebootPriority) error {

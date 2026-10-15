@@ -130,6 +130,10 @@ func (s *resolverOpFactory) wrapHookOp(op operation.Operation, info hook.Info) o
 		trustHash := s.RemoteState.TrustHash
 		addressesHash := s.RemoteState.AddressesHash
 		op = onCommitWrapper{op, func(state *operation.State) {
+			if state != nil && state.Step == operation.Queued &&
+				state.Hook != nil && state.Hook.Reissued {
+				return
+			}
 			if state != nil {
 				// Assign these on the operation.State so it gets
 				// written into the state file on disk.
@@ -142,7 +146,11 @@ func (s *resolverOpFactory) wrapHookOp(op operation.Operation, info hook.Info) o
 
 	charmModifiedVersion := s.RemoteState.CharmModifiedVersion
 	updateStatusVersion := s.RemoteState.UpdateStatusVersion
-	op = onCommitWrapper{op, func(*operation.State) {
+	op = onCommitWrapper{op, func(state *operation.State) {
+		if state != nil && state.Step == operation.Queued &&
+			state.Hook != nil && state.Hook.Reissued {
+			return
+		}
 		// Update UpdateStatusVersion so that the update-status
 		// hook only fires after the next timer.
 		s.LocalState.UpdateStatusVersion = updateStatusVersion

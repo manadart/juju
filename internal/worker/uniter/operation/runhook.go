@@ -32,7 +32,8 @@ type runHook struct {
 	runner runner.Runner
 	logger logger.Logger
 
-	hookFound bool
+	hookFound    bool
+	hookDeferred bool
 
 	RequiresMachineLock
 }
@@ -154,6 +155,20 @@ func (rh *runHook) Execute(ctx stdcontext.Context, state State) (*State, error) 
 	handlerType, err := rh.runner.RunHook(ctx, rh.name)
 	cause := errors.Cause(err)
 	switch {
+	case cause == context.ErrHookDeferred:
+		// Flush has committed the writes, but lifecycle completion must wait
+		// for an invocation that does not request deferral.
+		rh.hookDeferred = true
+		rh.info.Reissued = true
+		step = Queued
+		rh.logger.Infof(ctx, "deferred %q hook after committing changes", rh.name)
+		return stateChange{
+			Kind:            RunHook,
+			Step:            step,
+			Hook:            &rh.info,
+			HookStep:        &step,
+			HasRunStatusSet: rh.runner.Context().HasExecutionSetUnitStatus(),
+		}.apply(state), nil
 	case charmrunner.IsMissingHookError(cause):
 		rh.hookFound = false
 		err = nil
@@ -285,6 +300,11 @@ func (rh *runHook) afterHook(stdCtx stdcontext.Context, state State) (_ bool, er
 // config-changed hooks to directly follow install and upgrade-charm hooks.
 // Commit is part of the Operation interface.
 func (rh *runHook) Commit(ctx stdcontext.Context, state State) (*State, error) {
+	if rh.hookDeferred {
+		// Preserve the queued invocation without acknowledging lifecycle
+		// completion to relation, storage, or other hook trackers.
+		return &state, nil
+	}
 	var err error
 	err = rh.callbacks.CommitHook(ctx, rh.info)
 	if err != nil {

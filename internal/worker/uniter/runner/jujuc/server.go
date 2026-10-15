@@ -39,6 +39,7 @@ type creator func(Context) (cmd.Command, error)
 var baseCommands = map[string]creator{
 	"close-port":              NewClosePortCommand,
 	"config-get":              NewConfigGetCommand,
+	"hook-defer":              NewHookDeferCommand,
 	"juju-log":                NewJujuLogCommand,
 	"open-port":               NewOpenPortCommand,
 	"opened-ports":            NewOpenedPortsCommand,

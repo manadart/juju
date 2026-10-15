@@ -236,10 +236,16 @@ func (f *contextFactory) ActionContext(stdCtx context.Context, actionData *Actio
 
 // HookContext is part of the ContextFactory interface.
 func (f *contextFactory) HookContext(stdCtx context.Context, hookInfo hook.Info) (*HookContext, error) {
+	if hookInfo.Reissued {
+		// Relation hooks cannot interleave with native redispatch. Refresh all
+		// known relations so peer responses are visible without those hooks.
+		clear(f.relationCaches)
+	}
 	ctx, err := f.coreContext(stdCtx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	ctx.hookReissued = hookInfo.Reissued
 	hookName := string(hookInfo.Kind)
 	if hookInfo.Kind.IsRelation() {
 		ctx.relationId = hookInfo.RelationId

@@ -353,7 +353,7 @@ func (runner *runner) runCharmHookWithLocation(ctx stdcontext.Context, hookName,
 			span.RecordError(hookErr)
 		}
 		err = runner.context.Flush(ctx, hookName, err)
-		if err != nil {
+		if err != nil && err != context.ErrHookDeferred {
 			span.RecordError(err)
 		}
 	}()

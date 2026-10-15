@@ -18,6 +18,10 @@ import (
 type Info struct {
 	Kind hooks.Kind `yaml:"kind"`
 
+	// Reissued indicates that this hook previously committed its changes and
+	// requested another invocation without completing its lifecycle.
+	Reissued bool `yaml:"reissued,omitempty"`
+
 	// RelationId identifies the relation associated with the hook.
 	// It is only set when Kind indicates a relation hook.
 	RelationId int `yaml:"relation-id,omitempty"`

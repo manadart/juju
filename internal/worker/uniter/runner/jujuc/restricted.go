@@ -24,6 +24,11 @@ var ErrRestrictedContext = errors.NotImplementedf("not implemented for restricte
 // implemented.
 type RestrictedContext struct{}
 
+// RequestHookDeferral implements jujuc.HookContext.
+func (*RestrictedContext) RequestHookDeferral() error {
+	return ErrRestrictedContext
+}
+
 // ConfigSettings implements hooks.Context.
 func (*RestrictedContext) ConfigSettings(context.Context) (charm.Config, error) {
 	return nil, ErrRestrictedContext

@@ -97,6 +97,15 @@ func Loop(ctx context.Context, cfg LoopConfig, localState *LocalState) error {
 
 		op, err := cfg.Resolver.NextOp(ctx, *rf.LocalState, rf.RemoteState, rf)
 		for err == nil {
+			// A hook can repeatedly defer without ever reaching the idle
+			// select below. Keep teardown responsive between invocations.
+			select {
+			case <-ctx.Done():
+				return ErrLoopAborted
+			case <-cfg.Abort:
+				return ErrLoopAborted
+			default:
+			}
 			// Send remote state changes to running operations.
 			remoteStateChanged := make(chan remotestate.Snapshot)
 			done := make(chan struct{})

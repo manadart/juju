@@ -74,6 +74,12 @@ type Context struct {
 	ContextSecrets
 }
 
+// RequestHookDeferral implements jujuc.HookContext.
+func (c *Context) RequestHookDeferral() error {
+	c.ContextUnit.stub.AddCall("RequestHookDeferral")
+	return c.ContextUnit.stub.NextErr()
+}
+
 // NewContext builds a jujuc.Context test double.
 func NewContext(stub *testhelpers.Stub, info *ContextInfo) *Context {
 	var ctx Context
