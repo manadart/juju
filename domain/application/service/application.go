@@ -204,6 +204,10 @@ type ApplicationState interface {
 	// different status, it's ignored.
 	GetApplicationsWithPendingCharmsFromUUIDs(ctx context.Context, uuids []coreapplication.UUID) ([]coreapplication.UUID, error)
 
+	// GetApplicationsWithPendingCharmsForCharmUUIDs returns applications that
+	// reference any of the supplied pending charm UUIDs.
+	GetApplicationsWithPendingCharmsForCharmUUIDs(ctx context.Context, charmUUIDs []string) ([]coreapplication.UUID, error)
+
 	// GetAsyncCharmDownloadInfo reserves the charm download for the specified
 	// application, returning an error satisfying
 	// [applicationerrors.AlreadyDownloadingCharm] if the application is already
@@ -213,6 +217,10 @@ type ApplicationState interface {
 	// ResolveCharmDownload resolves the charm download for the specified
 	// application, updating the charm with the specified charm information.
 	ResolveCharmDownload(ctx context.Context, charmID corecharm.ID, info application.ResolvedCharmDownload) error
+
+	// UpdatePendingCharmResolution replaces a subordinate charm's provisional
+	// Charmhub resolution after its architecture is known.
+	UpdatePendingCharmResolution(ctx context.Context, appUUID string, info application.PendingCharmResolution) error
 
 	// GetApplicationsForRevisionUpdater returns all the applications for the
 	// revision updater. This will only return charmhub charms, for applications
@@ -1219,6 +1227,26 @@ func (s *Service) GetAsyncCharmDownloadInfo(ctx context.Context, appUUID coreapp
 	}
 
 	return s.st.GetAsyncCharmDownloadInfo(ctx, appUUID)
+}
+
+// UpdatePendingCharmResolution replaces a subordinate charm's provisional
+// Charmhub resolution after its architecture is known.
+func (s *Service) UpdatePendingCharmResolution(
+	ctx context.Context,
+	appUUID coreapplication.UUID,
+	info application.PendingCharmResolution,
+) error {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	if err := appUUID.Validate(); err != nil {
+		return errors.Errorf("application UUID: %w", err)
+	}
+	if info.Revision < 0 || info.SHA256 == "" || info.DownloadURL == "" {
+		return errors.Errorf("invalid pending charm resolution")
+	}
+
+	return s.st.UpdatePendingCharmResolution(ctx, appUUID.String(), info)
 }
 
 // ResolveCharmDownload resolves the charm download slot for the specified

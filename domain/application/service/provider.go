@@ -29,6 +29,8 @@ import (
 	"github.com/juju/juju/core/trace"
 	coreunit "github.com/juju/juju/core/unit"
 	"github.com/juju/juju/domain/application"
+	"github.com/juju/juju/domain/application/architecture"
+	applicationcharm "github.com/juju/juju/domain/application/charm"
 	applicationerrors "github.com/juju/juju/domain/application/errors"
 	applicationinternal "github.com/juju/juju/domain/application/internal"
 	"github.com/juju/juju/domain/application/service/storage"
@@ -1051,12 +1053,25 @@ func makeCreateApplicationArgs(
 	ch.ArchivePath = args.CharmStoragePath
 	ch.ObjectStoreUUID = args.CharmObjectStoreUUID
 	ch.Architecture = encodeArchitecture(origin.Platform.Architecture)
+	if ch.Metadata.Subordinate && ch.Source == applicationcharm.CharmHubSource {
+		// A subordinate's effective architecture comes from its principal. Keep
+		// the deployment-time resolution only as a provisional value until its
+		// first container relation is established.
+		ch.Architecture = architecture.Unknown
+		ch.ResolutionPending = true
+		ch.ApplicationOwned = true
+	}
 
 	// If we have a storage path, then we know the charm is available.
 	// This is passive for now, but once we update the application, the presence
 	// of the object store UUID will be used to determine if the charm is
 	// available.
 	ch.Available = args.CharmStoragePath != ""
+	if ch.ResolutionPending {
+		ch.ArchivePath = ""
+		ch.ObjectStoreUUID = ""
+		ch.Available = false
+	}
 
 	channelArg, platformArg, err := encodeChannelAndPlatform(origin)
 	if err != nil {

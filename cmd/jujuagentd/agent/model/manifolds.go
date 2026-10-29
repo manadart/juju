@@ -373,6 +373,7 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 			DomainServicesName:     domainServicesName,
 			HTTPClientName:         httpClientName,
 			NewDownloader:          asynccharmdownloader.NewDownloader,
+			NewCharmResolver:       asynccharmdownloader.NewCharmResolver,
 			NewHTTPClient:          asynccharmdownloader.NewHTTPClient,
 			NewAsyncDownloadWorker: asynccharmdownloader.NewAsyncDownloadWorker,
 			Logger:                 config.LoggingContext.GetLogger("juju.worker.asynccharmdownloader"),

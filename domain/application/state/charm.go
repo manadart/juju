@@ -47,7 +47,8 @@ FROM charm
 WHERE reference_name = $charmReferenceNameRevisionSource.reference_name
 AND revision = $charmReferenceNameRevisionSource.revision
 AND source_id = $charmReferenceNameRevisionSource.source_id
-AND source_id < 2;
+AND source_id < 2
+AND application_owned = FALSE;
 `
 	stmt, err := s.Prepare(query, ident, charmRef)
 	if err != nil {

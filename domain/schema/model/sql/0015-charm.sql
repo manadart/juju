@@ -39,6 +39,15 @@ CREATE TABLE charm (
 
     available BOOLEAN DEFAULT FALSE,
 
+    -- Subordinate charms are initially resolved using the model's default
+    -- architecture. If this is true, that provisional resolution must be
+    -- replaced once the first container relation supplies an architecture.
+    resolution_pending BOOLEAN NOT NULL DEFAULT FALSE,
+
+    -- Architecture-less subordinate placeholders are owned by one
+    -- application and must never be de-duplicated with shared charm rows.
+    application_owned BOOLEAN NOT NULL DEFAULT FALSE,
+
     version TEXT,
     lxd_profile TEXT,
 
@@ -54,8 +63,8 @@ CREATE TABLE charm (
     source_id INT NOT NULL DEFAULT 1,
     revision INT NOT NULL DEFAULT -1,
 
-    -- architecture_id may be null for local charms, but must be NULL for
-    -- CMR charms as they are architecture agnostic.
+    -- architecture_id is null for CMR charms and for Charmhub subordinate
+    -- placeholders until their first container relation establishes it.
     architecture_id INT,
 
     -- reference_name is the name of the charm that was originally supplied.
@@ -82,21 +91,17 @@ CREATE TABLE charm (
     FOREIGN KEY (object_store_uuid)
     REFERENCES object_store_metadata (uuid),
 
-    -- Ensure we have an architecture if the source is local or charmhub.
-    CONSTRAINT chk_charm_architecture
-    CHECK (((source_id = 0 OR source_id = 1) AND architecture_id >= 0) OR (source_id = 2 AND architecture_id IS NULL)),
-
     -- Ensure we don't have an empty reference
     CONSTRAINT chk_charm_reference_name
     CHECK (reference_name <> '')
 );
 
--- This ensures that the reference name and revision are unique. This is to
--- ensure that we don't have two charms with the same reference name and
--- revision. If this happens, we can just link the application to the existing
--- charm.
+-- Shared charm rows are de-duplicated. Application-owned subordinate rows are
+-- intentionally private because different principals may bind them to
+-- different architectures.
 CREATE UNIQUE INDEX idx_charm_reference_name_revision
-ON charm (source_id, reference_name, revision);
+ON charm (source_id, reference_name, revision)
+WHERE application_owned = FALSE;
 
 CREATE INDEX idx_charm_reference_revision
 ON charm (reference_name, revision);
@@ -145,6 +150,7 @@ SELECT
     c.uuid AS charm_uuid,
     c.reference_name AS name,
     c.available,
+    c.resolution_pending,
     cs.id AS source_id,
     cp.name AS provenance,
     cdi.charmhub_identifier,

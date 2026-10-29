@@ -47,6 +47,7 @@ type NewAsyncDownloadWorkerFunc func(
 	appID application.UUID,
 	applicationService ApplicationService,
 	downloader Downloader,
+	resolver CharmResolver,
 	clock clock.Clock,
 	logger logger.Logger,
 ) worker.Worker
@@ -56,6 +57,7 @@ type ManifoldConfig struct {
 	DomainServicesName     string
 	HTTPClientName         string
 	NewDownloader          NewDownloaderFunc
+	NewCharmResolver       NewCharmResolverFunc
 	NewHTTPClient          NewHTTPClientFunc
 	NewAsyncDownloadWorker NewAsyncDownloadWorkerFunc
 	Logger                 logger.Logger
@@ -84,6 +86,9 @@ func (cfg ManifoldConfig) Validate() error {
 	}
 	if cfg.NewDownloader == nil {
 		return jujuerrors.NotValidf("nil NewDownloader")
+	}
+	if cfg.NewCharmResolver == nil {
+		return jujuerrors.NotValidf("nil NewCharmResolver")
 	}
 	if cfg.NewHTTPClient == nil {
 		return jujuerrors.NotValidf("nil NewHTTPClient")
@@ -118,9 +123,11 @@ func (cfg ManifoldConfig) start(ctx context.Context, getter dependency.Getter) (
 
 	w, err := NewWorker(Config{
 		ApplicationService:     domainServices.Application(),
+		ModelConfigService:     domainServices.Config(),
 		HTTPClientGetter:       httpClientGetter,
 		NewHTTPClient:          cfg.NewHTTPClient,
 		NewDownloader:          cfg.NewDownloader,
+		NewCharmResolver:       cfg.NewCharmResolver,
 		NewAsyncDownloadWorker: cfg.NewAsyncDownloadWorker,
 		Logger:                 cfg.Logger,
 		Clock:                  cfg.Clock,

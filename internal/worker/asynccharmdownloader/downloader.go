@@ -15,9 +15,11 @@ import (
 	"gopkg.in/tomb.v2"
 
 	"github.com/juju/juju/core/application"
+	corecharm "github.com/juju/juju/core/charm"
 	"github.com/juju/juju/core/logger"
 	domainapplication "github.com/juju/juju/domain/application"
 	applicationerrors "github.com/juju/juju/domain/application/errors"
+	deploymentcharm "github.com/juju/juju/domain/deployment/charm"
 	"github.com/juju/juju/domain/deployment/charm/charmdownloader"
 	"github.com/juju/juju/internal/errors"
 )
@@ -38,6 +40,7 @@ type asyncDownloadWorker struct {
 	appID              application.UUID
 	applicationService ApplicationService
 	downloader         Downloader
+	resolver           CharmResolver
 
 	clock  clock.Clock
 	logger logger.Logger
@@ -49,6 +52,7 @@ func NewAsyncDownloadWorker(
 	appID application.UUID,
 	applicationService ApplicationService,
 	downloader Downloader,
+	resolver CharmResolver,
 	clock clock.Clock,
 	logger logger.Logger,
 ) worker.Worker {
@@ -56,6 +60,7 @@ func NewAsyncDownloadWorker(
 		appID:              appID,
 		applicationService: applicationService,
 		downloader:         downloader,
+		resolver:           resolver,
 		clock:              clock,
 		logger:             logger,
 	}
@@ -87,6 +92,13 @@ func (w *asyncDownloadWorker) loop() error {
 		return nil
 	} else if err != nil {
 		return errors.Capture(err)
+	}
+
+	if info.ResolutionPending {
+		info, err = w.resolvePendingCharm(ctx, info)
+		if err != nil {
+			return errors.Capture(err)
+		}
 	}
 
 	// Ensure we've got a valid URL.
@@ -147,6 +159,56 @@ func (w *asyncDownloadWorker) loop() error {
 	// Exit cleanly, so the worker doesn't get restarted.
 	w.logger.Infof(ctx, "downloaded and resolved charm for application %q", w.appID)
 	return nil
+}
+
+func (w *asyncDownloadWorker) resolvePendingCharm(
+	ctx context.Context,
+	info domainapplication.CharmDownloadInfo,
+) (domainapplication.CharmDownloadInfo, error) {
+	appName, err := w.applicationService.GetApplicationName(ctx, w.appID)
+	if err != nil {
+		return domainapplication.CharmDownloadInfo{}, errors.Errorf("getting application name: %w", err)
+	}
+	origin, err := w.applicationService.GetApplicationCharmOrigin(ctx, appName)
+	if err != nil {
+		return domainapplication.CharmDownloadInfo{}, errors.Errorf("getting charm origin: %w", err)
+	}
+
+	// The stored revision, ID and hash came from the provisional architecture.
+	// Resolve the application's channel afresh using the architecture bound by
+	// the relation transaction.
+	origin.ID = ""
+	origin.Hash = ""
+	origin.Revision = nil
+	charmURL, err := deploymentcharm.ParseURL(info.Name)
+	if err != nil {
+		return domainapplication.CharmDownloadInfo{}, errors.Errorf("parsing charm name %q: %w", info.Name, err)
+	}
+	resolved, err := w.resolver.ResolveForDeploy(ctx, corecharm.CharmID{
+		URL:    charmURL,
+		Origin: origin,
+	})
+	if err != nil {
+		return domainapplication.CharmDownloadInfo{}, errors.Errorf("resolving charm for bound architecture: %w", err)
+	}
+
+	resolvedOrigin := resolved.EssentialMetadata.ResolvedOrigin
+	downloadInfo := resolved.EssentialMetadata.DownloadInfo
+	if err := w.applicationService.UpdatePendingCharmResolution(
+		ctx,
+		w.appID,
+		domainapplication.PendingCharmResolution{
+			Revision:           resolved.URL.Revision,
+			SHA256:             resolvedOrigin.Hash,
+			CharmhubIdentifier: downloadInfo.CharmhubIdentifier,
+			DownloadURL:        downloadInfo.DownloadURL,
+			DownloadSize:       downloadInfo.DownloadSize,
+		},
+	); err != nil {
+		return domainapplication.CharmDownloadInfo{}, errors.Errorf("saving charm resolution: %w", err)
+	}
+
+	return w.applicationService.GetAsyncCharmDownloadInfo(ctx, w.appID)
 }
 
 func (w *asyncDownloadWorker) scopedContext() (context.Context, context.CancelFunc) {

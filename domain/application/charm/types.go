@@ -206,6 +206,12 @@ type Charm struct {
 	Architecture architecture.Architecture
 	// Available indicates whether the charm is available and ready to use.
 	Available bool
+	// ResolutionPending indicates that the download information was resolved
+	// before the charm's architecture was known and must be replaced.
+	ResolutionPending bool
+	// ApplicationOwned indicates that this charm row is private to the
+	// application that references it and must not be de-duplicated.
+	ApplicationOwned bool
 }
 
 // CharmLocator represents the parts of a charm that are needed to locate it

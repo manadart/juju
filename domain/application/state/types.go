@@ -331,27 +331,31 @@ type charmNameAndArchitecture struct {
 }
 
 type charmState struct {
-	ReferenceName   string          `db:"reference_name"`
-	Revision        int             `db:"revision"`
-	ArchivePath     string          `db:"archive_path"`
-	ObjectStoreUUID sql.NullString  `db:"object_store_uuid"`
-	Available       bool            `db:"available"`
-	Source          string          `db:"source"`
-	ArchitectureID  sql.Null[int64] `db:"architecture_id"`
-	Version         string          `db:"version"`
+	ReferenceName     string          `db:"reference_name"`
+	Revision          int             `db:"revision"`
+	ArchivePath       string          `db:"archive_path"`
+	ObjectStoreUUID   sql.NullString  `db:"object_store_uuid"`
+	Available         bool            `db:"available"`
+	ResolutionPending bool            `db:"resolution_pending"`
+	ApplicationOwned  bool            `db:"application_owned"`
+	Source            string          `db:"source"`
+	ArchitectureID    sql.Null[int64] `db:"architecture_id"`
+	Version           string          `db:"version"`
 }
 
 // setCharmState is used to set the charm.
 type setCharmState struct {
-	UUID            string          `db:"uuid"`
-	ReferenceName   string          `db:"reference_name"`
-	Revision        int             `db:"revision"`
-	ArchivePath     string          `db:"archive_path"`
-	ObjectStoreUUID sql.NullString  `db:"object_store_uuid"`
-	Available       bool            `db:"available"`
-	SourceID        int             `db:"source_id"`
-	ArchitectureID  sql.Null[int64] `db:"architecture_id"`
-	Version         string          `db:"version"`
+	UUID              string          `db:"uuid"`
+	ReferenceName     string          `db:"reference_name"`
+	Revision          int             `db:"revision"`
+	ArchivePath       string          `db:"archive_path"`
+	ObjectStoreUUID   sql.NullString  `db:"object_store_uuid"`
+	Available         bool            `db:"available"`
+	ResolutionPending bool            `db:"resolution_pending"`
+	ApplicationOwned  bool            `db:"application_owned"`
+	SourceID          int             `db:"source_id"`
+	ArchitectureID    sql.Null[int64] `db:"architecture_id"`
+	Version           string          `db:"version"`
 }
 
 // resolveCharmState is used to resolve the charm state. This will make the
@@ -731,6 +735,7 @@ type applicationCharmDownloadInfo struct {
 	CharmUUID          string `db:"charm_uuid"`
 	Name               string `db:"name"`
 	Available          bool   `db:"available"`
+	ResolutionPending  bool   `db:"resolution_pending"`
 	Hash               string `db:"hash"`
 	Provenance         string `db:"provenance"`
 	CharmhubIdentifier string `db:"charmhub_identifier"`

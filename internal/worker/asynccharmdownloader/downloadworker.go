@@ -14,6 +14,7 @@ import (
 	"github.com/juju/worker/v5/catacomb"
 
 	"github.com/juju/juju/core/application"
+	corecharm "github.com/juju/juju/core/charm"
 	corehttp "github.com/juju/juju/core/http"
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/watcher"
@@ -45,6 +46,16 @@ type ApplicationService interface {
 	// digest.
 	GetAsyncCharmDownloadInfo(ctx context.Context, appID application.UUID) (domainapplication.CharmDownloadInfo, error)
 
+	// GetApplicationName returns the name of the specified application.
+	GetApplicationName(context.Context, application.UUID) (string, error)
+
+	// GetApplicationCharmOrigin returns the application's current charm origin.
+	GetApplicationCharmOrigin(context.Context, string) (corecharm.Origin, error)
+
+	// UpdatePendingCharmResolution replaces a subordinate charm's provisional
+	// resolution once its architecture is known.
+	UpdatePendingCharmResolution(context.Context, application.UUID, domainapplication.PendingCharmResolution) error
+
 	// ResolveCharmDownload resolves the charm download slot for the specified
 	// application. The method will update the charm with the specified charm
 	// information.
@@ -54,9 +65,11 @@ type ApplicationService interface {
 // Config defines the operation of a Worker.
 type Config struct {
 	ApplicationService     ApplicationService
+	ModelConfigService     ModelConfigService
 	HTTPClientGetter       corehttp.HTTPClientGetter
 	NewHTTPClient          NewHTTPClientFunc
 	NewDownloader          NewDownloaderFunc
+	NewCharmResolver       NewCharmResolverFunc
 	NewAsyncDownloadWorker NewAsyncDownloadWorkerFunc
 	Logger                 logger.Logger
 	Clock                  clock.Clock
@@ -67,6 +80,9 @@ func (cfg Config) Validate() error {
 	if cfg.ApplicationService == nil {
 		return jujuerrors.NotValidf("nil ApplicationService")
 	}
+	if cfg.ModelConfigService == nil {
+		return jujuerrors.NotValidf("nil ModelConfigService")
+	}
 	if cfg.HTTPClientGetter == nil {
 		return jujuerrors.NotValidf("nil HTTPClientGetter")
 	}
@@ -75,6 +91,9 @@ func (cfg Config) Validate() error {
 	}
 	if cfg.NewDownloader == nil {
 		return jujuerrors.NotValidf("nil NewDownloader")
+	}
+	if cfg.NewCharmResolver == nil {
+		return jujuerrors.NotValidf("nil NewCharmResolver")
 	}
 	if cfg.NewAsyncDownloadWorker == nil {
 		return jujuerrors.NotValidf("nil NewAsyncDownloadWorker")
@@ -192,6 +211,7 @@ func (w *Worker) loop() error {
 			logger.Debugf(ctx, "triggering asynchronous download of charms for the following applications: %v", strings.Join(changes, ", "))
 
 			var downloader Downloader
+			var resolver CharmResolver
 
 			// Start up a series of workers to download the charms for the
 			// applications asynchronously. We do not want to block the any
@@ -221,10 +241,16 @@ func (w *Worker) loop() error {
 						return errors.Capture(err)
 					}
 					downloader = w.config.NewDownloader(httpClient, logger)
+					resolver, err = w.config.NewCharmResolver(
+						ctx, httpClient, w.config.ModelConfigService, logger,
+					)
+					if err != nil {
+						return errors.Capture(err)
+					}
 				}
 
 				// Kick off the async download worker for the application.
-				if err := w.initAsyncDownloadWorker(ctx, appID, downloader); err != nil {
+				if err := w.initAsyncDownloadWorker(ctx, appID, downloader, resolver); err != nil {
 					return errors.Capture(err)
 				}
 			}
@@ -254,12 +280,18 @@ func (w *Worker) workerFromCache(appID application.UUID) (bool, error) {
 	return false, nil
 }
 
-func (w *Worker) initAsyncDownloadWorker(ctx context.Context, appID application.UUID, downloader Downloader) error {
+func (w *Worker) initAsyncDownloadWorker(
+	ctx context.Context,
+	appID application.UUID,
+	downloader Downloader,
+	resolver CharmResolver,
+) error {
 	err := w.runner.StartWorker(ctx, appID.String(), func(ctx context.Context) (worker.Worker, error) {
 		wrk := w.config.NewAsyncDownloadWorker(
 			appID,
 			w.config.ApplicationService,
 			downloader,
+			resolver,
 			w.config.Clock,
 			w.config.Logger,
 		)

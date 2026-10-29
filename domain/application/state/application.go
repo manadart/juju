@@ -310,16 +310,19 @@ func (st *State) insertApplication(
 
 	shouldInsertCharm := true
 
-	// Check if the charm already exists.
-	existingCharmID, err := st.checkCharmReferenceExists(ctx, tx, referenceName, revision)
-	if err != nil && !errors.Is(err, applicationerrors.CharmAlreadyExists) {
-		return errors.Errorf("checking if charm %q exists: %w", charmName, err)
-	} else if errors.Is(err, applicationerrors.CharmAlreadyExists) {
-		// We already have an existing charm, in this case we just want
-		// to point the application to the existing charm.
-		appDetails.CharmUUID = existingCharmID
+	// Architecture-less subordinate placeholders must remain private to the
+	// application: their architecture is fixed later by their first principal.
+	if !args.Charm.ApplicationOwned {
+		existingCharmID, err := st.checkCharmReferenceExists(ctx, tx, referenceName, revision)
+		if err != nil && !errors.Is(err, applicationerrors.CharmAlreadyExists) {
+			return errors.Errorf("checking if charm %q exists: %w", charmName, err)
+		} else if errors.Is(err, applicationerrors.CharmAlreadyExists) {
+			// We already have an existing charm, in this case we just want
+			// to point the application to the existing charm.
+			appDetails.CharmUUID = existingCharmID
 
-		shouldInsertCharm = false
+			shouldInsertCharm = false
+		}
 	}
 
 	if shouldInsertCharm {
@@ -1138,7 +1141,9 @@ func (st *State) InitialWatchStatementApplicationsWithPendingCharms() (string, e
 SELECT a.uuid AS &entityUUID.uuid
 FROM   application a
 JOIN   charm c ON a.charm_uuid = c.uuid
-WHERE  c.available = FALSE AND c.source_id < 2;
+WHERE  c.available = FALSE
+AND    c.source_id < 2
+AND    c.architecture_id IS NOT NULL;
 `, entityUUID{})
 		if err != nil {
 			return nil, errors.Capture(err)
@@ -1434,6 +1439,7 @@ JOIN   charm AS c ON a.charm_uuid = c.uuid
 WHERE  a.uuid IN ($applicationIDs[:])
 AND c.available = FALSE
 AND c.source_id < 2
+AND c.architecture_id IS NOT NULL
 `, entityUUID{}, applicationIDs{})
 	if err != nil {
 		return nil, errors.Capture(err)
@@ -1449,6 +1455,52 @@ AND c.source_id < 2
 	})
 	if err != nil {
 		return nil, errors.Errorf("querying requested applications that have pending charms: %w", err)
+	}
+
+	return transform.Slice(results, func(r entityUUID) coreapplication.UUID {
+		return coreapplication.UUID(r.UUID)
+	}), nil
+}
+
+// GetApplicationsWithPendingCharmsForCharmUUIDs returns applications that
+// reference any of the supplied pending charm UUIDs.
+func (st *State) GetApplicationsWithPendingCharmsForCharmUUIDs(
+	ctx context.Context,
+	charmUUIDs []string,
+) ([]coreapplication.UUID, error) {
+	if len(charmUUIDs) == 0 {
+		return nil, nil
+	}
+	db, err := st.DB(ctx)
+	if err != nil {
+		return nil, errors.Capture(err)
+	}
+
+	type charmIDs []string
+	stmt, err := st.Prepare(`
+SELECT a.uuid AS &entityUUID.uuid
+FROM   application AS a
+JOIN   charm AS c ON c.uuid = a.charm_uuid
+WHERE  c.uuid IN ($charmIDs[:])
+AND    c.available = FALSE
+AND    c.source_id < 2
+AND    c.architecture_id IS NOT NULL
+ORDER BY a.uuid
+`, entityUUID{}, charmIDs{})
+	if err != nil {
+		return nil, errors.Capture(err)
+	}
+
+	var results []entityUUID
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		err := tx.Query(ctx, stmt, charmIDs(charmUUIDs)).GetAll(&results)
+		if errors.Is(err, sqlair.ErrNoRows) {
+			return nil
+		}
+		return errors.Capture(err)
+	})
+	if err != nil {
+		return nil, errors.Errorf("querying applications for pending charms: %w", err)
 	}
 
 	return transform.Slice(results, func(r entityUUID) coreapplication.UUID {
@@ -1884,6 +1936,7 @@ SELECT
     v.charm_uuid AS &applicationCharmDownloadInfo.charm_uuid,
     v.name AS &applicationCharmDownloadInfo.name,
     v.available AS &applicationCharmDownloadInfo.available,
+    v.resolution_pending AS &applicationCharmDownloadInfo.resolution_pending,
     v.hash AS &applicationCharmDownloadInfo.hash,
     v.provenance AS &applicationCharmDownloadInfo.provenance,
     v.charmhub_identifier AS &applicationCharmDownloadInfo.charmhub_identifier,
@@ -1931,9 +1984,10 @@ WHERE v.application_uuid = $entityUUID.uuid
 	}
 
 	return application.CharmDownloadInfo{
-		CharmUUID: charmUUID,
-		Name:      info.Name,
-		SHA256:    info.Hash,
+		CharmUUID:         charmUUID,
+		Name:              info.Name,
+		SHA256:            info.Hash,
+		ResolutionPending: info.ResolutionPending,
 		DownloadInfo: charm.DownloadInfo{
 			Provenance:         provenance,
 			DownloadURL:        info.DownloadURL,
@@ -1941,6 +1995,111 @@ WHERE v.application_uuid = $entityUUID.uuid
 			DownloadSize:       info.DownloadSize,
 		},
 	}, nil
+}
+
+// UpdatePendingCharmResolution replaces the provisional Charmhub resolution
+// for an architecture-less subordinate after its first relation binds it.
+func (st *State) UpdatePendingCharmResolution(
+	ctx context.Context,
+	appUUID string,
+	info application.PendingCharmResolution,
+) error {
+	db, err := st.DB(ctx)
+	if err != nil {
+		return errors.Capture(err)
+	}
+
+	type pendingCharm struct {
+		UUID              string          `db:"uuid"`
+		ArchitectureID    sql.Null[int64] `db:"architecture_id"`
+		ResolutionPending bool            `db:"resolution_pending"`
+	}
+	type resolution struct {
+		UUID               string `db:"uuid"`
+		Revision           int    `db:"revision"`
+		Hash               string `db:"hash"`
+		CharmhubIdentifier string `db:"charmhub_identifier"`
+		DownloadURL        string `db:"download_url"`
+		DownloadSize       int64  `db:"download_size"`
+	}
+
+	appIdent := entityUUID{UUID: appUUID}
+	getStmt, err := st.Prepare(`
+SELECT c.uuid AS &pendingCharm.uuid,
+       c.architecture_id AS &pendingCharm.architecture_id,
+       c.resolution_pending AS &pendingCharm.resolution_pending
+FROM   application AS a
+JOIN   charm AS c ON c.uuid = a.charm_uuid
+WHERE  a.uuid = $entityUUID.uuid
+AND    c.source_id = 1
+`, pendingCharm{}, appIdent)
+	if err != nil {
+		return errors.Capture(err)
+	}
+
+	resolved := resolution{
+		Revision:           info.Revision,
+		Hash:               info.SHA256,
+		CharmhubIdentifier: info.CharmhubIdentifier,
+		DownloadURL:        info.DownloadURL,
+		DownloadSize:       info.DownloadSize,
+	}
+	updateCharmStmt, err := st.Prepare(`
+UPDATE charm
+SET    revision = $resolution.revision,
+       resolution_pending = FALSE
+WHERE  uuid = $resolution.uuid
+`, resolved)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	updateHashStmt, err := st.Prepare(`
+UPDATE charm_hash
+SET    hash = $resolution.hash
+WHERE  charm_uuid = $resolution.uuid
+AND    hash_kind_id = 0
+`, resolved)
+	if err != nil {
+		return errors.Capture(err)
+	}
+	updateDownloadStmt, err := st.Prepare(`
+UPDATE charm_download_info
+SET    charmhub_identifier = $resolution.charmhub_identifier,
+       download_url = $resolution.download_url,
+       download_size = $resolution.download_size
+WHERE  charm_uuid = $resolution.uuid
+`, resolved)
+	if err != nil {
+		return errors.Capture(err)
+	}
+
+	return db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		var pending pendingCharm
+		if err := tx.Query(ctx, getStmt, appIdent).Get(&pending); err != nil {
+			if errors.Is(err, sqlair.ErrNoRows) {
+				return applicationerrors.ApplicationNotFound
+			}
+			return errors.Capture(err)
+		}
+		if !pending.ResolutionPending {
+			return nil
+		}
+		if !pending.ArchitectureID.Valid {
+			return errors.Errorf("subordinate charm architecture is not bound")
+		}
+
+		resolved.UUID = pending.UUID
+		if err := tx.Query(ctx, updateCharmStmt, resolved).Run(); err != nil {
+			return errors.Errorf("updating charm resolution: %w", err)
+		}
+		if err := tx.Query(ctx, updateHashStmt, resolved).Run(); err != nil {
+			return errors.Errorf("updating charm hash: %w", err)
+		}
+		if err := tx.Query(ctx, updateDownloadStmt, resolved).Run(); err != nil {
+			return errors.Errorf("updating charm download information: %w", err)
+		}
+		return nil
+	})
 }
 
 // ResolveCharmDownload resolves the charm download for the specified

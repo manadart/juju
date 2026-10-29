@@ -80,7 +80,8 @@ SELECT &entityUUID.*
 FROM charm
 WHERE reference_name = $charmReferenceNameRevisionSource.reference_name
 AND revision = $charmReferenceNameRevisionSource.revision
-	`
+AND application_owned = FALSE
+`
 	ref := charmReferenceNameRevisionSource{
 		ReferenceName: referenceName,
 		Revision:      revision,
@@ -217,15 +218,17 @@ func (s *State) addCharmState(
 	}
 
 	chState := setCharmState{
-		UUID:            id.String(),
-		ReferenceName:   ch.ReferenceName,
-		Revision:        ch.Revision,
-		ArchivePath:     ch.ArchivePath,
-		ObjectStoreUUID: nullableObjectStoreUUID,
-		Available:       ch.Available,
-		Version:         ch.Version,
-		SourceID:        sourceID,
-		ArchitectureID:  nullableArchitectureID,
+		UUID:              id.String(),
+		ReferenceName:     ch.ReferenceName,
+		Revision:          ch.Revision,
+		ArchivePath:       ch.ArchivePath,
+		ObjectStoreUUID:   nullableObjectStoreUUID,
+		Available:         ch.Available,
+		ResolutionPending: ch.ResolutionPending,
+		ApplicationOwned:  ch.ApplicationOwned,
+		Version:           ch.Version,
+		SourceID:          sourceID,
+		ArchitectureID:    nullableArchitectureID,
 	}
 
 	charmQuery := `INSERT INTO charm (*) VALUES ($setCharmState.*);`
@@ -671,6 +674,8 @@ SELECT
     c.archive_path AS &charmState.archive_path,
     c.object_store_uuid AS &charmState.object_store_uuid,
     c.available AS &charmState.available,
+    c.resolution_pending AS &charmState.resolution_pending,
+    c.application_owned AS &charmState.application_owned,
     cs.name AS &charmState.source,
     c.architecture_id AS &charmState.architecture_id,
     c.version AS &charmState.version
@@ -1417,14 +1422,16 @@ func decodeCharmState(state charmState) (charm.Charm, error) {
 	}
 
 	return charm.Charm{
-		ReferenceName:   state.ReferenceName,
-		Revision:        state.Revision,
-		ArchivePath:     state.ArchivePath,
-		ObjectStoreUUID: objectStoreUUID,
-		Available:       state.Available,
-		Version:         state.Version,
-		Architecture:    arch,
-		Source:          source,
+		ReferenceName:     state.ReferenceName,
+		Revision:          state.Revision,
+		ArchivePath:       state.ArchivePath,
+		ObjectStoreUUID:   objectStoreUUID,
+		Available:         state.Available,
+		ResolutionPending: state.ResolutionPending,
+		ApplicationOwned:  state.ApplicationOwned,
+		Version:           state.Version,
+		Architecture:      arch,
+		Source:            source,
 	}, nil
 
 }

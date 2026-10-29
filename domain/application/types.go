@@ -326,10 +326,21 @@ type K8sPodParams struct {
 
 // CharmDownloadInfo contains parameters for downloading a charm.
 type CharmDownloadInfo struct {
-	CharmUUID    charm.ID
-	Name         string
-	SHA256       string
-	DownloadInfo domaincharm.DownloadInfo
+	CharmUUID         charm.ID
+	Name              string
+	SHA256            string
+	ResolutionPending bool
+	DownloadInfo      domaincharm.DownloadInfo
+}
+
+// PendingCharmResolution contains the architecture-specific Charmhub data
+// used to replace a subordinate charm's provisional resolution.
+type PendingCharmResolution struct {
+	Revision           int
+	SHA256             string
+	CharmhubIdentifier string
+	DownloadURL        string
+	DownloadSize       int64
 }
 
 // ResolveCharmDownload contains parameters for resolving a charm download.

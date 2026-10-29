@@ -6,7 +6,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"sort"
 
 	"github.com/juju/clock"
 	"github.com/juju/collections/transform"
@@ -363,6 +362,7 @@ func (s *WatchableService) WatchApplicationsWithPendingCharms(ctx context.Contex
 	defer span.End()
 
 	table, query := s.st.InitialWatchStatementApplicationsWithPendingCharms()
+	charmTable := s.st.NamespaceForWatchCharm()
 	return s.watcherFactory.NewNamespaceMapperWatcher(
 		ctx,
 		query,
@@ -371,66 +371,75 @@ func (s *WatchableService) WatchApplicationsWithPendingCharms(ctx context.Contex
 			return s.watchApplicationsWithPendingCharmsMapper(ctx, changes)
 		},
 		eventsource.NamespaceFilter(table, changestream.Changed),
+		eventsource.NamespaceFilter(charmTable, changestream.Changed),
 	)
 }
 
 // watchApplicationsWithPendingCharmsMapper removes any applications that do not
 // have pending charms.
 func (s *WatchableService) watchApplicationsWithPendingCharmsMapper(ctx context.Context, changes []changestream.ChangeEvent) ([]string, error) {
-	// Preserve the ordering of the changes, as this is a strings watcher
-	// and we want to return the changes in the order they were received.
-
-	appChanges := make(map[coreapplication.UUID][]indexedChanged)
-	uuids := make([]coreapplication.UUID, 0)
-	for i, change := range changes {
-		appID, err := coreapplication.ParseUUID(change.Changed())
-		if err != nil {
-			return nil, err
-		}
-
-		if _, ok := appChanges[appID]; !ok {
-			uuids = append(uuids, appID)
-		}
-
-		appChanges[appID] = append(appChanges[appID], indexedChanged{
-			change: change,
-			index:  i,
-		})
+	applicationNamespace := s.st.NamespaceForWatchApplication()
+	charmNamespace := s.st.NamespaceForWatchCharm()
+	type candidate struct {
+		appUUID   coreapplication.UUID
+		fromCharm bool
 	}
 
-	// Get all the applications with pending charms using the uuids.
+	var candidates []candidate
+	directApplications := make(map[coreapplication.UUID]struct{})
+	for _, change := range changes {
+		switch change.Namespace() {
+		case applicationNamespace:
+			appID, err := coreapplication.ParseUUID(change.Changed())
+			if err != nil {
+				return nil, err
+			}
+			candidates = append(candidates, candidate{appUUID: appID})
+			directApplications[appID] = struct{}{}
+		case charmNamespace:
+			apps, err := s.st.GetApplicationsWithPendingCharmsForCharmUUIDs(ctx, []string{change.Changed()})
+			if err != nil {
+				return nil, err
+			}
+			for _, appID := range apps {
+				candidates = append(candidates, candidate{appUUID: appID, fromCharm: true})
+			}
+		default:
+			s.logger.Warningf(ctx, "watching pending charms: unexpected namespace %q", change.Namespace())
+		}
+	}
+
+	seen := make(map[coreapplication.UUID]struct{})
+	uuids := make([]coreapplication.UUID, 0, len(candidates))
+	for _, candidate := range candidates {
+		if _, ok := seen[candidate.appUUID]; ok {
+			continue
+		}
+		seen[candidate.appUUID] = struct{}{}
+		uuids = append(uuids, candidate.appUUID)
+	}
 	apps, err := s.GetApplicationsWithPendingCharmsFromUUIDs(ctx, uuids)
 	if err != nil {
 		return nil, err
 	}
-
-	// If any applications have no pending charms, then return no changes.
-	if len(apps) == 0 {
-		return nil, nil
+	pending := make(map[coreapplication.UUID]struct{}, len(apps))
+	for _, appID := range apps {
+		pending[appID] = struct{}{}
 	}
 
-	// Grab all the changes for the applications with pending charms,
-	// ensuring they're indexed so we can sort them later.
-	var indexed []indexedChanged
-	for _, appID := range apps {
-		events, ok := appChanges[appID]
-		if !ok {
-			s.logger.Errorf(ctx, "application %q has pending charms but no change events", appID)
+	result := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if _, ok := pending[candidate.appUUID]; !ok {
 			continue
 		}
-
-		indexed = append(indexed, events...)
+		if candidate.fromCharm {
+			if _, ok := directApplications[candidate.appUUID]; ok {
+				continue
+			}
+		}
+		result = append(result, candidate.appUUID.String())
 	}
-
-	// Sort the index so they're preserved
-	sort.Slice(indexed, func(i, j int) bool {
-		return indexed[i].index < indexed[j].index
-	})
-
-	// Grab the changes in the order they were received.
-	return transform.Slice(indexed, func(c indexedChanged) string {
-		return c.change.Changed()
-	}), nil
+	return result, nil
 }
 
 type indexedChanged struct {

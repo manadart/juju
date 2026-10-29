@@ -280,6 +280,9 @@ func (st *State) addRelation(
 	if err := st.checkCompatibleBases(ctx, tx, ep1, ep2); err != nil {
 		return relUUID, errors.Errorf("relation %s %s: %w", ep1, ep2, err)
 	}
+	if err := st.bindSubordinateArchitecture(ctx, tx, ep1, ep2); err != nil {
+		return relUUID, errors.Errorf("relation %s %s: %w", ep1, ep2, err)
+	}
 
 	// Check that adding a relation won't exceed any endpoint limit
 	if err := st.checkEndpointCapacity(ctx, tx, ep1); err != nil {
@@ -3205,6 +3208,158 @@ func (st *State) checkCompatibleBases(ctx context.Context, tx *sqlair.TX, ep1 En
 
 	return errors.Errorf("no compatible bases found for application %q and %q", ep1.ApplicationName,
 		ep2.ApplicationName).Add(relationerrors.CompatibleEndpointsNotFound)
+}
+
+// bindSubordinateArchitecture fills an architecture-less subordinate charm
+// from its first container-scoped relation. A later relation must agree with
+// the architecture already chosen.
+func (st *State) bindSubordinateArchitecture(
+	ctx context.Context,
+	tx *sqlair.TX,
+	ep1, ep2 Endpoint,
+) error {
+	if ep1.Scope != charm.ScopeContainer && ep2.Scope != charm.ScopeContainer {
+		return nil
+	}
+
+	subordinate1, err := st.isSubordinate(ctx, tx, ep1.ApplicationUUID.String())
+	if err != nil {
+		return errors.Errorf("checking whether application %q is subordinate: %w", ep1.ApplicationName, err)
+	}
+	subordinate2, err := st.isSubordinate(ctx, tx, ep2.ApplicationUUID.String())
+	if err != nil {
+		return errors.Errorf("checking whether application %q is subordinate: %w", ep2.ApplicationName, err)
+	}
+	if !subordinate1 && !subordinate2 {
+		return nil
+	}
+
+	type applicationArchitecture struct {
+		ApplicationUUID        string          `db:"application_uuid"`
+		CharmUUID              string          `db:"charm_uuid"`
+		PlatformArchitectureID int             `db:"platform_architecture_id"`
+		CharmArchitectureID    sql.Null[int64] `db:"charm_architecture_id"`
+		CharmSourceID          int             `db:"charm_source_id"`
+	}
+	getArchitecture := func(ep Endpoint) (applicationArchitecture, error) {
+		ident := applicationUUID{UUID: ep.ApplicationUUID.String()}
+		stmt, err := st.Prepare(`
+SELECT a.uuid AS &applicationArchitecture.application_uuid,
+       c.uuid AS &applicationArchitecture.charm_uuid,
+       ap.architecture_id AS &applicationArchitecture.platform_architecture_id,
+       c.architecture_id AS &applicationArchitecture.charm_architecture_id,
+       c.source_id AS &applicationArchitecture.charm_source_id
+FROM   application AS a
+JOIN   application_platform AS ap ON ap.application_uuid = a.uuid
+JOIN   charm AS c ON c.uuid = a.charm_uuid
+WHERE  a.uuid = $applicationUUID.application_uuid
+`, applicationArchitecture{}, ident)
+		if err != nil {
+			return applicationArchitecture{}, errors.Capture(err)
+		}
+
+		var result applicationArchitecture
+		if err := tx.Query(ctx, stmt, ident).Get(&result); err != nil {
+			return applicationArchitecture{}, errors.Capture(err)
+		}
+		return result, nil
+	}
+
+	architecture1, err := getArchitecture(ep1)
+	if err != nil {
+		return errors.Errorf("getting architecture for application %q: %w", ep1.ApplicationName, err)
+	}
+	architecture2, err := getArchitecture(ep2)
+	if err != nil {
+		return errors.Errorf("getting architecture for application %q: %w", ep2.ApplicationName, err)
+	}
+
+	var target int
+	switch {
+	case subordinate1 && !subordinate2:
+		target = architecture2.PlatformArchitectureID
+	case !subordinate1 && subordinate2:
+		target = architecture1.PlatformArchitectureID
+	case architecture1.CharmArchitectureID.Valid:
+		target = int(architecture1.CharmArchitectureID.V)
+	case architecture2.CharmArchitectureID.Valid:
+		target = int(architecture2.CharmArchitectureID.V)
+	default:
+		// There is no principal from which to infer an architecture yet.
+		return nil
+	}
+
+	bind := func(ep Endpoint, current applicationArchitecture) error {
+		if current.CharmArchitectureID.Valid && int(current.CharmArchitectureID.V) != target {
+			return errors.Errorf(
+				"subordinate application %q has architecture %d, not %d",
+				ep.ApplicationName, current.CharmArchitectureID.V, target,
+			).Add(relationerrors.CompatibleEndpointsNotFound)
+		}
+		if current.CharmArchitectureID.Valid {
+			return nil
+		}
+		if current.CharmSourceID == 2 {
+			// Cross-model charm records are architecture agnostic and are not
+			// download placeholders in this model.
+			return nil
+		}
+		if current.CharmSourceID != 1 {
+			return errors.Errorf(
+				"subordinate application %q has no architecture and is not from Charmhub",
+				ep.ApplicationName,
+			).Add(relationerrors.CompatibleEndpointsNotFound)
+		}
+
+		type architectureBinding struct {
+			ApplicationUUID string `db:"application_uuid"`
+			CharmUUID       string `db:"charm_uuid"`
+			ArchitectureID  int    `db:"architecture_id"`
+		}
+		binding := architectureBinding{
+			ApplicationUUID: ep.ApplicationUUID.String(),
+			CharmUUID:       current.CharmUUID,
+			ArchitectureID:  target,
+		}
+		charmStmt, err := st.Prepare(`
+UPDATE charm
+SET    architecture_id = $architectureBinding.architecture_id
+WHERE  uuid = $architectureBinding.charm_uuid
+AND    architecture_id IS NULL
+AND    source_id = 1
+AND    application_owned = TRUE
+`, binding)
+		if err != nil {
+			return errors.Capture(err)
+		}
+		platformStmt, err := st.Prepare(`
+UPDATE application_platform
+SET    architecture_id = $architectureBinding.architecture_id
+WHERE  application_uuid = $architectureBinding.application_uuid
+`, binding)
+		if err != nil {
+			return errors.Capture(err)
+		}
+		if err := tx.Query(ctx, charmStmt, binding).Run(); err != nil {
+			return errors.Errorf("binding charm architecture: %w", err)
+		}
+		if err := tx.Query(ctx, platformStmt, binding).Run(); err != nil {
+			return errors.Errorf("binding application architecture: %w", err)
+		}
+		return nil
+	}
+
+	if subordinate1 {
+		if err := bind(ep1, architecture1); err != nil {
+			return errors.Capture(err)
+		}
+	}
+	if subordinate2 {
+		if err := bind(ep2, architecture2); err != nil {
+			return errors.Capture(err)
+		}
+	}
+	return nil
 }
 
 // checkApplicationExists checks if the application with the specified UUID
