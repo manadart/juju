@@ -70,7 +70,7 @@ func (i *environInstance) Addresses(ctx context.Context) (network.ProviderAddres
 	}
 	forwardAddresses, err := ovnForwardAddresses(ctx, srv, i.container.Name)
 	if err != nil {
-		return nil, errors.Annotatef(err, "retrieving OVN forward addresses for instance %q", i.container.Name)
+		return nil, errors.Annotatef(err, "retrieving network forward addresses for instance %q", i.container.Name)
 	}
 	for _, iface := range slices.Sorted(maps.Keys(forwardAddresses)) {
 		addrs = append(addrs, forwardAddresses[iface]...)

@@ -18,10 +18,15 @@ var configSchema = configschema.Fields{
 		Description: "The LXD project name to use for Juju's resources.",
 		Type:        configschema.Tstring,
 	},
+	"bridge-forward-addresses": {
+		Description: "External address pools for managed bridge forwards, as JSON mapping network names to cluster member names to lists of IP addresses or inclusive IP ranges. Use an empty member name for standalone LXD. Addresses must be routed to their member, and pools must not overlap. Empty disables bridge forward creation.",
+		Type:        configschema.Tstring,
+	},
 }
 
 var configDefaults = schema.Defaults{
-	"project": "default",
+	"project":                  "default",
+	"bridge-forward-addresses": "",
 }
 
 var configFields = func() schema.Fields {
@@ -72,8 +77,8 @@ func (c *environConfig) validate() error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	// There are currently no known extra fields for LXD
-	return nil
+	_, err = c.bridgeForwardPools()
+	return errors.Trace(err)
 }
 
 func (c *environConfig) project() string {

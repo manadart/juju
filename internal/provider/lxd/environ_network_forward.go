@@ -25,6 +25,18 @@ const (
 	jujuDeviceForwardKey   = lxd.UserNamespacePrefix + "juju-device"
 )
 
+// ensureNetworkForwards creates ingress addresses before provisioning returns.
+func (env *environ) ensureNetworkForwards(ctx context.Context, srv Server, container *lxd.Container) error {
+	pools, err := newConfig(env.Config()).bridgeForwardPools()
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if err := ensureOVNNetworkForwards(ctx, srv, container, env.clock); err != nil {
+		return errors.Trace(err)
+	}
+	return ensureBridgeNetworkForwards(ctx, srv, container, pools, env.clock)
+}
+
 // ensureOVNNetworkForwards allocates external addresses for each OVN
 // interface. Ownership tags allow repeated starts to reuse or replace forwards.
 // Only families enabled on the guest network and permitted for external
@@ -82,42 +94,7 @@ func ensureOVNNetworkForwards(ctx context.Context, srv Server, container *lxd.Co
 
 	// Wait for all guest addresses before allocating any external addresses.
 	logger.Debugf(ctx, "Waiting for OVN network addresses for instance %q", container.Name)
-	var state *api.InstanceState
-	err = retry.Call(retry.CallArgs{
-		Clock:    clk,
-		Stop:     ctx.Done(),
-		Delay:    time.Second,
-		Attempts: 60,
-		IsFatalError: func(err error) bool {
-			return !errors.Is(err, errors.NotAssigned)
-		},
-		Func: func() error {
-			// Stop only interrupts retry's wait; Func can still be invoked
-			// after cancellation. Avoid starting another LXD request.
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			var err error
-			state, _, err = srv.GetInstanceState(container.Name)
-			if err != nil {
-				return errors.Trace(err)
-			}
-			for name, device := range nics {
-				iface := ovnInterfaceName(name, device)
-				for _, family := range families[lxd.NetworkName(device)] {
-					if interfaceForwardAddress(state.Network[iface], family) == "" {
-						return errors.NotAssignedf("IPv%d address for OVN interface %q", family.version, iface)
-					}
-				}
-			}
-			return nil
-		},
-	})
-	// retry.Call returns its own stopped error when Stop closes. Preserve the
-	// context's cancellation or deadline error for provisioning callers.
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
+	state, err := waitForForwardAddresses(ctx, srv, container.Name, nics, families, "OVN", clk)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -145,6 +122,43 @@ func ensureOVNNetworkForwards(ctx context.Context, srv Server, container *lxd.Co
 		}
 	}
 	return nil
+}
+
+func waitForForwardAddresses(ctx context.Context, srv Server, instanceName string, nics map[string]map[string]string, families map[string][]ovnForwardFamily, networkType string, clk clock.Clock) (*api.InstanceState, error) {
+	var state *api.InstanceState
+	err := retry.Call(retry.CallArgs{
+		Clock:    clk,
+		Stop:     ctx.Done(),
+		Delay:    time.Second,
+		Attempts: 60,
+		IsFatalError: func(err error) bool {
+			return !errors.Is(err, errors.NotAssigned)
+		},
+		Func: func() error {
+			// Stop only interrupts retry's wait, not the next invocation.
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			var err error
+			state, _, err = srv.GetInstanceState(instanceName)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			for name, device := range nics {
+				iface := ovnInterfaceName(name, device)
+				for _, family := range families[lxd.NetworkName(device)] {
+					if interfaceForwardAddress(state.Network[iface], family) == "" {
+						return errors.NotAssignedf("IPv%d address for %s interface %q", family.version, networkType, iface)
+					}
+				}
+			}
+			return nil
+		},
+	})
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	return state, errors.Trace(err)
 }
 
 func ovnInterfaceName(name string, device map[string]string) string {
@@ -205,6 +219,14 @@ func ensureOVNNetworkForward(ctx context.Context, srv Server, networkName, insta
 	if isIPv4 {
 		listenAddress = "0.0.0.0"
 	}
+	err := createInstanceNetworkForward(ctx, srv, networkName, instanceName, iface, listenAddress, address)
+	return errors.Annotatef(err, "creating forward for OVN interface %q on network %q", iface, networkName)
+}
+
+func createInstanceNetworkForward(ctx context.Context, srv Server, networkName, instanceName, iface, listenAddress, address string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	forward := api.NetworkForwardsPost{
 		ListenAddress: listenAddress,
 		NetworkForwardPut: api.NetworkForwardPut{
@@ -220,7 +242,7 @@ func ensureOVNNetworkForward(ctx context.Context, srv Server, networkName, insta
 	if err == nil {
 		err = op.WaitContext(ctx)
 	}
-	return errors.Annotatef(err, "creating forward for OVN interface %q on network %q", iface, networkName)
+	return errors.Trace(err)
 }
 
 // removeInstances cleans up owned forwards before deleting provider instances.
@@ -253,7 +275,7 @@ func removeInstanceNetworkForwards(ctx context.Context, srv Server, names []stri
 		return errors.Annotate(err, "retrieving networks")
 	}
 	for _, network := range networks {
-		if network.Type != networkTypeOVN {
+		if network.Type != networkTypeOVN && !(network.Type == "bridge" && network.Managed) {
 			continue
 		}
 		if err := ctx.Err(); err != nil {
@@ -274,14 +296,36 @@ func removeInstanceNetworkForwards(ctx context.Context, srv Server, names []stri
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			op, err := srv.DeleteNetworkForward(network.Name, forward.ListenAddress)
-			if err == nil {
-				err = op.WaitContext(ctx)
-			}
-			if err != nil && !lxd.IsLXDNotFound(errors.Cause(err)) {
+			if err := deleteInstanceNetworkForward(ctx, srv, network.Name, forward); err != nil {
 				return errors.Annotatef(err, "deleting forward %q for instance %q on network %q", forward.ListenAddress, owner, network.Name)
 			}
 		}
 	}
 	return nil
+}
+
+func deleteInstanceNetworkForward(ctx context.Context, srv Server, networkName string, forward api.NetworkForward) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// OVN forwards have no location. Bridge forwards must be removed from
+	// their owning member even if the instance has moved or disappeared.
+	if forward.Location != "" && srv.IsClustered() {
+		target, err := srv.UseTargetServer(ctx, forward.Location)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		srv = &providerServer{target}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	op, err := srv.DeleteNetworkForward(networkName, forward.ListenAddress)
+	if err == nil {
+		err = op.WaitContext(ctx)
+	}
+	if lxd.IsLXDNotFound(errors.Cause(err)) {
+		return nil
+	}
+	return errors.Trace(err)
 }

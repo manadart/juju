@@ -141,13 +141,13 @@ func (env *environ) newContainer(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	if err := ensureOVNNetworkForwards(ctx, target, container, env.clock); err != nil {
+	if err := env.ensureNetworkForwards(ctx, target, container); err != nil {
 		// Rollback must still run if provisioning was cancelled.
 		cleanupCtx := context.WithoutCancel(ctx)
 		if removeErr := removeInstances(cleanupCtx, target, []string{container.Name}); removeErr != nil {
-			logger.Errorf(cleanupCtx, "removing container %q after OVN forward setup failed: %v", container.Name, removeErr)
+			logger.Errorf(cleanupCtx, "removing container %q after network forward setup failed: %v", container.Name, removeErr)
 		}
-		return nil, errors.Annotatef(err, "ensuring OVN network forwards for container %q", container.Name)
+		return nil, errors.Annotatef(err, "ensuring network forwards for container %q", container.Name)
 	}
 	_ = statusCallback(ctx, status.Running, "Container started", nil)
 	return container, nil
