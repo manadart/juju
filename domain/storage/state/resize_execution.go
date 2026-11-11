@@ -32,7 +32,10 @@ LEFT JOIN storage_volume_attachment AS va ON va.storage_volume_uuid = iv.storage
 LEFT JOIN storage_instance_filesystem AS ifs ON ifs.storage_instance_uuid = r.storage_instance_uuid
 LEFT JOIN storage_filesystem_attachment AS fa ON fa.storage_filesystem_uuid = ifs.storage_filesystem_uuid
 LEFT JOIN machine AS m ON m.net_node_uuid = COALESCE(va.net_node_uuid, fa.net_node_uuid)
-WHERE r.status = 'pending'
+LEFT JOIN storage_resize_plan AS rp ON rp.request_uuid = r.uuid
+LEFT JOIN storage_instance AS si ON si.uuid = r.storage_instance_uuid
+LEFT JOIN storage_pool AS sp ON sp.uuid = si.storage_pool_uuid
+WHERE r.status = 'pending' AND rp.request_uuid IS NULL AND sp.type = 'loop'
 AND (r.executor_machine_uuid = $resizeExecutionKey.machine_uuid
      OR (r.executor_machine_uuid IS NULL AND m.uuid = $resizeExecutionKey.machine_uuid))
 ORDER BY r.uuid
@@ -42,7 +45,11 @@ ORDER BY r.uuid
 	}
 	var rows []entityUUID
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		return tx.Query(ctx, stmt, key).GetAll(&rows)
+		err := tx.Query(ctx, stmt, key).GetAll(&rows)
+		if errors.Is(err, sqlair.ErrNoRows) {
+			return nil
+		}
+		return err
 	})
 	if err != nil {
 		return nil, errors.Capture(err)
@@ -73,6 +80,9 @@ WHERE uuid = $resizeExecutionKey.uuid
 	}
 	var work resizeExecutionRow
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		if err := s.rejectStagedResize(ctx, tx, uuid); err != nil {
+			return err
+		}
 		record, err := s.getResizeExecutionRecord(ctx, tx, key)
 		if err != nil {
 			return err
@@ -149,6 +159,9 @@ WHERE uuid = $resizeExecutionResult.uuid
 		return errors.Capture(err)
 	}
 	return errors.Capture(db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		if err := s.rejectStagedResize(ctx, tx, uuid); err != nil {
+			return err
+		}
 		record, err := s.getResizeExecutionRecord(ctx, tx, key)
 		if err != nil {
 			return err
@@ -244,14 +257,20 @@ FROM storage_resize_request AS r WHERE r.uuid = $resizeExecutionKey.uuid
 func (s *State) getResizeExecutionWork(ctx context.Context, tx *sqlair.TX, key resizeExecutionKey) (resizeExecutionRow, error) {
 	stmt, err := s.Prepare(`
 WITH fs_counts AS (
-    SELECT storage_filesystem_uuid AS filesystem_uuid, COUNT(*) AS count
-    FROM storage_filesystem_attachment AS fa GROUP BY storage_filesystem_uuid
+    SELECT fa.storage_filesystem_uuid AS filesystem_uuid, COUNT(*) AS count
+    FROM storage_filesystem_attachment AS fa GROUP BY fa.storage_filesystem_uuid
+), device_links AS (
+    SELECT d.block_device_uuid AS block_device_uuid, MIN(d.name) AS name
+    FROM block_device_link_device AS d
+    WHERE d.name LIKE '/dev/disk/by-id/%' GROUP BY d.block_device_uuid
 )
 SELECT COALESCE(m.uuid, '') AS &resizeExecutionRow.machine_uuid,
        r.storage_instance_uuid AS &resizeExecutionRow.instance_uuid,
        r.requested_size_mib AS &resizeExecutionRow.requested_size_mib,
        COALESCE(p.uuid, '') AS &resizeExecutionRow.pool_uuid,
        COALESCE(p.type, '') AS &resizeExecutionRow.provider_type,
+       COALESCE(p.name, '') AS &resizeExecutionRow.pool_name,
+       COALESCE(mc.instance_id, '') AS &resizeExecutionRow.instance_id,
        COALESCE(v.uuid, '') AS &resizeExecutionRow.volume_uuid,
        COALESCE(v.volume_id, '') AS &resizeExecutionRow.volume_id,
        COALESCE(v.provider_id, '') AS &resizeExecutionRow.volume_provider_id,
@@ -259,14 +278,17 @@ SELECT COALESCE(m.uuid, '') AS &resizeExecutionRow.machine_uuid,
        COALESCE(va.uuid, '') AS &resizeExecutionRow.volume_attachment_uuid,
        COALESCE(b.uuid, '') AS &resizeExecutionRow.block_device_uuid,
        COALESCE(b.name, '') AS &resizeExecutionRow.device_name,
+       COALESCE(b.host_filesystem_uuid, '') AS &resizeExecutionRow.host_filesystem_uuid,
+       COALESCE(dl.name, '') AS &resizeExecutionRow.device_link,
        COALESCE(f.uuid, '') AS &resizeExecutionRow.filesystem_uuid,
        COALESCE(f.filesystem_id, '') AS &resizeExecutionRow.filesystem_id,
+       COALESCE(f.provider_id, '') AS &resizeExecutionRow.filesystem_provider_id,
        COALESCE(fa.uuid, '') AS &resizeExecutionRow.filesystem_attachment_uuid,
        COALESCE(fa.mount_point, '') AS &resizeExecutionRow.mount_point,
        COALESCE(va.read_only, 0) OR COALESCE(fa.read_only, 0) AS &resizeExecutionRow.read_only,
        COALESCE(fc.count, 0) > 1 AS &resizeExecutionRow.shared,
-       COALESCE(v.provision_scope_id = 1, 0) AS &resizeExecutionRow.machine_scoped,
-       COALESCE(si.life_id = 0 AND m.life_id = 0
+       COALESCE(v.provision_scope_id, f.provision_scope_id, 0) = 1 AS &resizeExecutionRow.machine_scoped,
+       COALESCE(si.life_id = 0 AND COALESCE(m.life_id, 0) = 0
            AND (v.uuid IS NULL OR v.life_id = 0)
            AND (va.uuid IS NULL OR va.life_id = 0)
            AND (f.uuid IS NULL OR f.life_id = 0)
@@ -278,14 +300,17 @@ LEFT JOIN storage_instance_volume AS iv ON iv.storage_instance_uuid = si.uuid
 LEFT JOIN storage_volume AS v ON v.uuid = iv.storage_volume_uuid
 LEFT JOIN storage_volume_attachment AS va ON va.storage_volume_uuid = v.uuid
 LEFT JOIN block_device AS b ON b.uuid = va.block_device_uuid
+LEFT JOIN device_links AS dl ON dl.block_device_uuid = b.uuid
 LEFT JOIN storage_instance_filesystem AS ifs ON ifs.storage_instance_uuid = si.uuid
 LEFT JOIN storage_filesystem AS f ON f.uuid = ifs.storage_filesystem_uuid
 LEFT JOIN storage_filesystem_attachment AS fa ON fa.storage_filesystem_uuid = f.uuid
     AND (va.net_node_uuid IS NULL OR fa.net_node_uuid = va.net_node_uuid)
 LEFT JOIN fs_counts AS fc ON fc.filesystem_uuid = f.uuid
 LEFT JOIN machine AS m ON m.net_node_uuid = COALESCE(va.net_node_uuid, fa.net_node_uuid)
+LEFT JOIN machine_cloud_instance AS mc ON mc.machine_uuid = m.uuid
 WHERE r.uuid = $resizeExecutionKey.uuid
-AND (m.uuid = $resizeExecutionKey.machine_uuid OR m.uuid IS NULL)
+AND ($resizeExecutionKey.machine_uuid = '' OR m.uuid = $resizeExecutionKey.machine_uuid OR m.uuid IS NULL)
+ORDER BY m.uuid LIMIT 1
 `, key, resizeExecutionRow{})
 	if err != nil {
 		return resizeExecutionRow{}, errors.Capture(err)
@@ -321,6 +346,11 @@ type resizeExecutionResult struct {
 }
 
 type resizeExecutionRow struct {
+	PoolName                 string `db:"pool_name"`
+	InstanceID               string `db:"instance_id"`
+	DeviceLink               string `db:"device_link"`
+	HostFilesystemUUID       string `db:"host_filesystem_uuid"`
+	FilesystemProviderID     string `db:"filesystem_provider_id"`
 	MachineUUID              string `db:"machine_uuid"`
 	InstanceUUID             string `db:"instance_uuid"`
 	RequestedSizeMiB         uint64 `db:"requested_size_mib"`
