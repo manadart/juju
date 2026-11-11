@@ -29,3 +29,28 @@ type StorageResizeResult struct {
 	Message     string
 	CompletedAt time.Time
 }
+
+// StorageResizeWork is the current machine-local view of a resize target.
+type StorageResizeWork struct {
+	UUID             string
+	RequestedSizeMiB uint64
+	ProviderType     string
+	VolumeID         string
+	VolumeProviderID string
+	DeviceName       string
+	FilesystemID     string
+	MountPoint       string
+	VolumeSizeMiB    uint64
+	Alive            bool
+	ReadOnly         bool
+	Shared           bool
+	MachineScoped    bool
+}
+
+// StorageResizeReport records an execution outcome and measured capacities.
+// Zero capacities mean no observation was made at that layer.
+type StorageResizeReport struct {
+	StorageResizeResult
+	VolumeSizeMiB     uint64
+	FilesystemSizeMiB uint64
+}

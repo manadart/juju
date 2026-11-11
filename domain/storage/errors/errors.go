@@ -33,6 +33,13 @@ const (
 	// StorageResizeResultAlreadyRecorded prevents changing a terminal result.
 	StorageResizeResultAlreadyRecorded = errors.ConstError("storage resize result already recorded")
 
+	// StorageResizeNotAssigned prevents another machine from executing work.
+	StorageResizeNotAssigned = errors.ConstError("resize request is not assigned to this machine")
+	// StorageResizeTargetChanged prevents execution against replaced storage.
+	StorageResizeTargetChanged = errors.ConstError("resize target or attachment changed")
+	// StorageResizeNotReady indicates that provisioning has not finished yet.
+	StorageResizeNotReady = errors.ConstError("resize target is not ready")
+
 	// FilesystemNotFound describes an error that occurs when the filesystem being operated
 	// on does not exist.
 	FilesystemNotFound = errors.ConstError("filesystem not found")
