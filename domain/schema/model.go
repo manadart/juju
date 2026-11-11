@@ -140,7 +140,10 @@ var modelPostPatchFilesByVersion = []struct {
 }{
 	{
 		version: semversion.MustParse("4.1-beta3"),
-		files:   []string{"0038-storage-resize-intent.PATCH.sql"},
+		files: []string{
+			"0038-storage-resize-intent.PATCH.sql",
+			"0039-storage-resize-results.PATCH.sql",
+		},
 	},
 }
 

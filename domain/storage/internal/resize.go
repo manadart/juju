@@ -13,3 +13,19 @@ type StorageResizeIntent struct {
 	RequestedSizeMiB    uint64
 	CreatedAt           time.Time
 }
+
+// StorageResizeRequest includes the retained identity and result of a request.
+type StorageResizeRequest struct {
+	StorageResizeIntent
+	StorageID   string
+	Status      string
+	Message     string
+	CompletedAt *time.Time
+}
+
+// StorageResizeResult is a terminal result reported by the resize executor.
+type StorageResizeResult struct {
+	Status      string
+	Message     string
+	CompletedAt time.Time
+}

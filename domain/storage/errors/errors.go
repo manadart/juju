@@ -30,6 +30,9 @@ const (
 	// StorageResizeIntentNotFound indicates that no pending request exists.
 	StorageResizeIntentNotFound = errors.ConstError("storage resize intent not found")
 
+	// StorageResizeResultAlreadyRecorded prevents changing a terminal result.
+	StorageResizeResultAlreadyRecorded = errors.ConstError("storage resize result already recorded")
+
 	// FilesystemNotFound describes an error that occurs when the filesystem being operated
 	// on does not exist.
 	FilesystemNotFound = errors.ConstError("filesystem not found")
