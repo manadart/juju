@@ -14258,7 +14258,7 @@
     {
         "Name": "Storage",
         "Description": "",
-        "Version": 7,
+        "Version": 8,
         "Schema": {
             "type": "object",
             "properties": {
@@ -14380,6 +14380,17 @@
                         },
                         "Result": {
                             "$ref": "#/definitions/ErrorResults"
+                        }
+                    }
+                },
+                "ResizeStorage": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/StorageResizeResult"
                         }
                     }
                 },
@@ -15164,6 +15175,34 @@
                         }
                     },
                     "additionalProperties": false
+                },
+                "StorageResizeArgs": {
+                    "type": "object",
+                    "properties": {
+                        "size-mib": {
+                            "type": "integer"
+                        },
+                        "storage-tag": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "storage-tag",
+                        "size-mib"
+                    ]
+                },
+                "StorageResizeResult": {
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid"
+                    ]
                 },
                 "StoragesAddParams": {
                     "type": "object",

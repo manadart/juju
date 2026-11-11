@@ -75,6 +75,11 @@ type StorageService interface {
 	StoragePoolService
 	StorageAdoptionService
 
+	// RequestStorageResize records a target capacity for a storage instance.
+	RequestStorageResize(
+		context.Context, corestorage.ID, uint64,
+	) (domainstorage.StorageResizeUUID, error)
+
 	// GetStorageAttachmentUUIDForStorageInstanceAndUnit returns the
 	// [storage.StorageAttachmentUUID] associated with the given storage
 	// instance id and unit name.
@@ -274,7 +279,12 @@ type StorageAPIv6 struct {
 	*StorageAPI
 }
 
-// StorageAPI implements the latest version (v7) of the Storage API.
+// StorageAPIv7 provides the Storage API facade for version 7.
+type StorageAPIv7 struct {
+	*StorageAPI
+}
+
+// StorageAPI implements the latest version (v8) of the Storage API.
 type StorageAPI struct {
 	blockChecker       BlockChecker
 	applicationService ApplicationService

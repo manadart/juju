@@ -20,7 +20,15 @@ func Register(registry facade.FacadeRegistry) {
 	}, reflect.TypeFor[*StorageAPIv6]())
 
 	registry.MustRegister("Storage", 7, func(stdCtx context.Context, ctx facade.ModelContext) (facade.Facade, error) {
-		return newStorageAPI(stdCtx, ctx) // support force option on import-fileystem.
+		api, err := newStorageAPI(stdCtx, ctx)
+		if err != nil {
+			return nil, errors.Capture(err)
+		}
+		return &StorageAPIv7{api}, nil
+	}, reflect.TypeFor[*StorageAPIv7]())
+
+	registry.MustRegister("Storage", 8, func(stdCtx context.Context, ctx facade.ModelContext) (facade.Facade, error) {
+		return newStorageAPI(stdCtx, ctx)
 	}, reflect.TypeFor[*StorageAPI]())
 }
 
