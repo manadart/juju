@@ -18,15 +18,19 @@ func (d *Datastore) MaxTypesPerAuthorizationModel() int {
 	return storage.DefaultMaxTypesPerAuthorizationModel
 }
 
+// WriteAuthorizationModel persists an immutable model under its supplied ID.
 func (d *Datastore) WriteAuthorizationModel(ctx context.Context, store string, model *openfgav1.AuthorizationModel) error {
+	if len(model.GetTypeDefinitions()) == 0 {
+		return nil
+	}
 	data, err := protojson.Marshal(model)
 	if err != nil {
 		return err
 	}
-	return d.transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `INSERT INTO openfga_authorization_model (store_id, model_id, model) VALUES (?, ?, ?) ON CONFLICT (store_id, model_id) DO UPDATE SET model = excluded.model`, store, model.Id, string(data))
+	return collision(d.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `INSERT INTO openfga_authorization_model (store_id, model_id, model) VALUES (?, ?, ?)`, store, model.Id, string(data))
 		return err
-	})
+	}))
 }
 
 func (d *Datastore) ReadAuthorizationModel(ctx context.Context, store, id string) (*openfgav1.AuthorizationModel, error) {
@@ -112,7 +116,7 @@ func (d *Datastore) WriteAssertions(ctx context.Context, store, model string, as
 	if err != nil {
 		return err
 	}
-	return d.transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+	return d.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO openfga_assertion (store_id, model_id, assertions) VALUES (?, ?, ?) ON CONFLICT (store_id, model_id) DO UPDATE SET assertions = excluded.assertions`, store, model, string(b))
 		return err
 	})

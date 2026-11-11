@@ -20,7 +20,7 @@ func (d *Datastore) CreateStore(ctx context.Context, store *openfgav1.Store) (*o
 		return nil, fmt.Errorf("store ID and name are required")
 	}
 	now := time.Now().UTC()
-	err := d.transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+	err := d.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		_, err := tx.ExecContext(ctx, `INSERT INTO openfga_store (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`, store.Id, store.Name, timestamp(now), timestamp(now))
 		return err
 	})
@@ -31,8 +31,9 @@ func (d *Datastore) CreateStore(ctx context.Context, store *openfgav1.Store) (*o
 }
 
 func (d *Datastore) DeleteStore(ctx context.Context, id string) error {
-	return d.transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, "UPDATE openfga_store SET deleted_at = ? WHERE id = ?", timestamp(time.Now()), id)
+	now := timestamp(time.Now())
+	return d.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "UPDATE openfga_store SET deleted_at = ? WHERE id = ?", now, id)
 		return err
 	})
 }

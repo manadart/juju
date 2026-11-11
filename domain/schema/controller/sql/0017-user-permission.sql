@@ -89,7 +89,7 @@ INSERT INTO openfga_authorization_model (store_id, model_id, model)
 VALUES ('01J00000000000000000000000', '01J00000000000000000000001', '{"id":"01J00000000000000000000001","schema_version":"1.1","type_definitions":[{"type":"user"},{"type":"external"},{"type":"controller","relations":{"login":{"this":{}},"can_login":{"union":{"child":[{"computedUserset":{"relation":"login"}},{"computedUserset":{"relation":"superuser"}}]}},"superuser":{"this":{}},"can_superuser":{"computedUserset":{"relation":"superuser"}}},"metadata":{"relations":{"login":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]},"superuser":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]}}}},{"type":"cloud","relations":{"add_model":{"this":{}},"can_add_model":{"union":{"child":[{"computedUserset":{"relation":"add_model"}},{"computedUserset":{"relation":"admin"}}]}},"admin":{"this":{}},"can_admin":{"computedUserset":{"relation":"admin"}}},"metadata":{"relations":{"add_model":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]},"admin":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]}}}},{"type":"model","relations":{"read":{"this":{}},"can_read":{"union":{"child":[{"computedUserset":{"relation":"read"}},{"computedUserset":{"relation":"write"}},{"computedUserset":{"relation":"admin"}}]}},"write":{"this":{}},"can_write":{"union":{"child":[{"computedUserset":{"relation":"write"}},{"computedUserset":{"relation":"admin"}}]}},"admin":{"this":{}},"can_admin":{"computedUserset":{"relation":"admin"}}},"metadata":{"relations":{"read":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]},"write":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]},"admin":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]}}}},{"type":"offer","relations":{"read":{"this":{}},"can_read":{"union":{"child":[{"computedUserset":{"relation":"read"}},{"computedUserset":{"relation":"consume"}},{"computedUserset":{"relation":"admin"}}]}},"consume":{"this":{}},"can_consume":{"union":{"child":[{"computedUserset":{"relation":"consume"}},{"computedUserset":{"relation":"admin"}}]}},"admin":{"this":{}},"can_admin":{"computedUserset":{"relation":"admin"}}},"metadata":{"relations":{"read":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]},"consume":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]},"admin":{"directly_related_user_types":[{"type":"user"},{"type":"external"},{"type":"external","wildcard":{}}]}}}}]}');
 
 -- Every tuple writer, including domain transactions, records its changes.
--- The timestamp prefix and random suffix form a Crockford-base32 ULID.
+-- The timestamp prefix and sequence suffix form a Crockford-base32 ULID.
 -- Updates are represented as a deletion followed by an insertion.
 CREATE TRIGGER trg_openfga_tuple_insert
 AFTER INSERT ON openfga_tuple
@@ -137,7 +137,7 @@ BEGIN
            substr('0123456789ABCDEFGHJKMNPQRSTVWXYZ', ((millis >> 0) & 31) + 1, 1) ||
            printf('%016X', counter),
            OLD.store_id, OLD.object_type, OLD.object_id,
-           OLD.relation, OLD.user, OLD.condition, 1
+           OLD.relation, OLD.user, '', 1
     FROM openfga_sequence WHERE id = 0;
 END;
 
@@ -162,7 +162,7 @@ BEGIN
            substr('0123456789ABCDEFGHJKMNPQRSTVWXYZ', ((millis >> 0) & 31) + 1, 1) ||
            printf('%016X', counter),
            OLD.store_id, OLD.object_type, OLD.object_id,
-           OLD.relation, OLD.user, OLD.condition, 1
+           OLD.relation, OLD.user, '', 1
     FROM openfga_sequence WHERE id = 0;
     UPDATE openfga_sequence
     SET counter = counter + 1,

@@ -200,21 +200,12 @@ func (d *Datastore) MaxTuplesPerWrite() int { return storage.DefaultMaxTuplesPer
 // An ambiguous commit can therefore be retried without duplicating the write.
 func (d *Datastore) Write(ctx context.Context, store string, deletes storage.Deletes, writes storage.Writes, options ...storage.TupleWriteOption) error {
 	opts := storage.NewTupleWriteOptions(options...)
-	operation := ulid.Make().String()
 	now := timestamp(time.Now())
-	ids := make([]string, len(deletes)+len(writes))
+	ids := make([]string, len(writes))
 	for i := range ids {
 		ids[i] = ulid.Make().String()
 	}
-	err := d.transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
-		var found string
-		err := tx.QueryRowContext(ctx, "SELECT ulid FROM openfga_operation WHERE ulid = ?", operation).Scan(&found)
-		if err == nil {
-			return nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
+	err := d.write(ctx, func(ctx context.Context, tx *sql.Tx) error {
 		for _, key := range deletes {
 			typ, id := tuple.SplitObject(key.Object)
 			res, err := tx.ExecContext(ctx, `DELETE FROM openfga_tuple WHERE store_id = ? AND object_type = ? AND object_id = ? AND relation = ? AND user = ?`, store, typ, id, key.Relation, key.User)
@@ -264,14 +255,13 @@ func (d *Datastore) Write(ctx context.Context, store string, deletes storage.Del
 				}
 				condition = string(b)
 			}
-			uid := ids[len(deletes)+i]
+			uid := ids[i]
 			if _, err := tx.ExecContext(ctx, `INSERT INTO openfga_tuple (store_id, ulid, object_type, object_id, relation, user, condition, inserted_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, store, uid, typ, id, key.Relation, key.User, condition, now); err != nil {
 				return err
 			}
 
 		}
-		_, err = tx.ExecContext(ctx, "INSERT INTO openfga_operation (ulid) VALUES (?)", operation)
-		return err
+		return nil
 	})
 	if internaldatabase.IsErrConstraintUnique(err) || internaldatabase.IsErrConstraintPrimaryKey(err) {
 		return fmt.Errorf("%w: %w", storage.ErrTransactionalWriteFailed, err)

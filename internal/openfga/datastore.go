@@ -1,8 +1,6 @@
 // Copyright 2026 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-// Package openfga embeds OpenFGA using Juju's database transaction boundary.
-// The storage contract is pinned to github.com/openfga/openfga v1.22.1.
 package openfga
 
 import (
@@ -12,6 +10,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	"github.com/openfga/openfga/pkg/storage"
 
 	"github.com/juju/juju/core/database"
@@ -49,6 +48,27 @@ func (d *Datastore) transact(ctx context.Context, fn func(context.Context, *sql.
 		return storage.ErrNotFound
 	}
 	return err
+}
+
+// write distinguishes an accessor replay after commit from a new request.
+// The marker commits atomically with the operation and outlives reconnects.
+func (d *Datastore) write(ctx context.Context, fn func(context.Context, *sql.Tx) error) error {
+	operation := ulid.Make().String()
+	return d.transact(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		var found string
+		err := tx.QueryRowContext(ctx, "SELECT ulid FROM openfga_operation WHERE ulid = ?", operation).Scan(&found)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if err := fn(ctx, tx); err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO openfga_operation (ulid) VALUES (?)", operation)
+		return err
+	})
 }
 
 // Close leaves the accessor-owned database open.
