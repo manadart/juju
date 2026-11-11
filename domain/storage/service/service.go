@@ -23,6 +23,7 @@ import (
 type State interface {
 	AdoptState
 	FilesystemState
+	ResizeState
 	StoragePoolState
 	VolumeState
 
