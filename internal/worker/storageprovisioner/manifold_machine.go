@@ -16,10 +16,12 @@ import (
 	"github.com/juju/juju/agent"
 	"github.com/juju/juju/agent/engine"
 	"github.com/juju/juju/api/agent/storageprovisioner"
+	"github.com/juju/juju/api/agent/storageresizer"
 	"github.com/juju/juju/api/base"
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/internal/storage"
 	"github.com/juju/juju/internal/storage/provider"
+	storageresize "github.com/juju/juju/internal/storage/resize"
 )
 
 // MachineManifoldConfig defines a storage provisioner's configuration and dependencies.
@@ -49,6 +51,12 @@ func (config MachineManifoldConfig) newWorker(_ context.Context, a agent.Agent, 
 	}
 
 	storageDir := filepath.Join(cfg.DataDir(), "storage")
+	var resizes ResizeAccessor
+	var resizeExecutor ResizeExecutor
+	if client := storageresizer.NewClient(apiCaller); client.Supported() {
+		resizes = client
+		resizeExecutor = storageresize.NewExecutor(storageDir)
+	}
 	w, err := NewStorageProvisioner(Config{
 		Scope:       tag,
 		StorageDir:  storageDir,
@@ -62,10 +70,12 @@ func (config MachineManifoldConfig) newWorker(_ context.Context, a agent.Agent, 
 				provider.TmpfsProviderType:  provider.NewTmpfsProvider(provider.LogAndExec),
 			},
 		},
-		Machines: api,
-		Status:   api,
-		Clock:    config.Clock,
-		Logger:   config.Logger,
+		Machines:       api,
+		Status:         api,
+		Clock:          config.Clock,
+		Logger:         config.Logger,
+		Resizes:        resizes,
+		ResizeExecutor: resizeExecutor,
 	})
 	if err != nil {
 		return nil, errors.Trace(err)

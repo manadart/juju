@@ -14,17 +14,19 @@ import (
 
 // Config holds configuration and dependencies for a storageprovisioner worker.
 type Config struct {
-	Model       names.ModelTag
-	Scope       names.Tag
-	StorageDir  string
-	Volumes     VolumeAccessor
-	Filesystems FilesystemAccessor
-	Life        LifecycleManager
-	Registry    storage.ProviderRegistry
-	Machines    MachineAccessor
-	Status      StatusSetter
-	Clock       clock.Clock
-	Logger      logger.Logger
+	Model          names.ModelTag
+	Scope          names.Tag
+	StorageDir     string
+	Volumes        VolumeAccessor
+	Filesystems    FilesystemAccessor
+	Life           LifecycleManager
+	Registry       storage.ProviderRegistry
+	Machines       MachineAccessor
+	Status         StatusSetter
+	Resizes        ResizeAccessor
+	ResizeExecutor ResizeExecutor
+	Clock          clock.Clock
+	Logger         logger.Logger
 }
 
 // Validate returns an error if the config cannot be relied upon to start a worker.
@@ -70,6 +72,16 @@ func (config Config) Validate() error {
 	}
 	if config.Logger == nil {
 		return errors.NotValidf("nil Logger")
+	}
+	if config.Resizes != nil {
+		if _, ok := config.Scope.(names.MachineTag); !ok {
+			return errors.NotValidf("resize execution outside machine scope")
+		}
+		if config.ResizeExecutor == nil {
+			return errors.NotValidf("nil ResizeExecutor")
+		}
+	} else if config.ResizeExecutor != nil {
+		return errors.NotValidf("ResizeExecutor without Resizes")
 	}
 	return nil
 }

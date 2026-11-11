@@ -7,6 +7,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/names/v6"
 	"github.com/juju/worker/v5"
@@ -297,6 +298,17 @@ func (w *storageProvisioner) loop() error {
 	}
 	filesystemAttachmentsChanges = filesystemAttachmentsWatcher.Changes()
 
+	// Execute resizes in this loop to serialize them with local attachment and
+	// removal operations. Poll authoritative state so restarts recover work.
+	var resizeTimer clock.Timer
+	var resizeChanges <-chan time.Time
+	resizeResults := make(map[string]resizeOutcome)
+	if w.config.Resizes != nil {
+		resizeTimer = w.config.Clock.NewTimer(0)
+		defer resizeTimer.Stop()
+		resizeChanges = resizeTimer.Chan()
+	}
+
 	for {
 		// Check if block devices need to be refreshed.
 		if err := processPendingVolumeBlockDevices(ctx, &deps); err != nil {
@@ -312,6 +324,11 @@ func (w *storageProvisioner) loop() error {
 		select {
 		case <-w.catacomb.Dying():
 			return w.catacomb.ErrDying()
+		case <-resizeChanges:
+			if err := processStorageResizes(ctx, &deps, resizeResults); err != nil {
+				w.config.Logger.Warningf(ctx, "processing storage resizes: %v", err)
+			}
+			resizeTimer.Reset(5 * time.Second)
 		case changes, ok := <-volumesChanges:
 			if !ok {
 				return errors.New("volumes watcher closed")
