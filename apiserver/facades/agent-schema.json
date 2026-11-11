@@ -10315,6 +10315,163 @@
         }
     },
     {
+        "Name": "StorageResizer",
+        "Description": "",
+        "Version": 1,
+        "Schema": {
+            "type": "object",
+            "properties": {
+                "Prepare": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeRequestArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/StorageResizeWork"
+                        }
+                    }
+                },
+                "Report": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeReport"
+                        }
+                    }
+                },
+                "Requests": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/StringsResult"
+                        }
+                    }
+                }
+            },
+            "definitions": {
+                "Error": {
+                    "type": "object",
+                    "properties": {
+                        "code": {
+                            "type": "string"
+                        },
+                        "info": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "object",
+                                    "additionalProperties": true
+                                }
+                            }
+                        },
+                        "message": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "message",
+                        "code"
+                    ]
+                },
+                "StorageResizeReport": {
+                    "type": "object",
+                    "properties": {
+                        "filesystem-size-mib": {
+                            "type": "integer"
+                        },
+                        "message": {
+                            "type": "string"
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "uuid": {
+                            "type": "string"
+                        },
+                        "volume-size-mib": {
+                            "type": "integer"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid",
+                        "status",
+                        "message",
+                        "volume-size-mib",
+                        "filesystem-size-mib"
+                    ]
+                },
+                "StorageResizeRequestArgs": {
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid"
+                    ]
+                },
+                "StorageResizeWork": {
+                    "type": "object",
+                    "properties": {
+                        "device-name": {
+                            "type": "string"
+                        },
+                        "filesystem-id": {
+                            "type": "string"
+                        },
+                        "mount-point": {
+                            "type": "string"
+                        },
+                        "provider-type": {
+                            "type": "string"
+                        },
+                        "requested-size-mib": {
+                            "type": "integer"
+                        },
+                        "uuid": {
+                            "type": "string"
+                        },
+                        "volume-id": {
+                            "type": "string"
+                        },
+                        "volume-provider-id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid",
+                        "requested-size-mib",
+                        "provider-type",
+                        "volume-id",
+                        "volume-provider-id",
+                        "device-name"
+                    ]
+                },
+                "StringsResult": {
+                    "type": "object",
+                    "properties": {
+                        "error": {
+                            "$ref": "#/definitions/Error"
+                        },
+                        "result": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "additionalProperties": false
+                }
+            }
+        }
+    },
+    {
         "Name": "Tracer",
         "Description": "",
         "Version": 1,

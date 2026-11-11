@@ -34,6 +34,7 @@ import (
 	"github.com/juju/juju/apiserver/facades/agent/secretsmanager"
 	"github.com/juju/juju/apiserver/facades/agent/sshsession"
 	"github.com/juju/juju/apiserver/facades/agent/storageprovisioner"
+	"github.com/juju/juju/apiserver/facades/agent/storageresizer"
 	"github.com/juju/juju/apiserver/facades/agent/tracer"
 	"github.com/juju/juju/apiserver/facades/agent/uniter"
 	"github.com/juju/juju/apiserver/facades/agent/upgrader"
@@ -123,6 +124,7 @@ func requiredMigrationFacadeVersions() facades.FacadeVersions {
 	secretsdrain.Register(registry)
 	secretsmanager.Register(registry)
 	storageprovisioner.Register(registry)
+	storageresizer.Register(registry)
 	uniter.Register(registry)
 	upgrader.Register(registry)
 
@@ -209,6 +211,7 @@ func AllFacades() *facade.Registry {
 	spaces.Register(registry)
 	storage.Register(registry)
 	storageprovisioner.Register(registry)
+	storageresizer.Register(registry)
 	subnets.Register(registry)
 	uniter.Register(registry)
 	upgrader.Register(registry)
