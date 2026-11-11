@@ -24,6 +24,12 @@ type StoragePoolAttributeInvalid struct {
 }
 
 const (
+	// StorageResizeIntentAlreadyExists indicates an existing pending request.
+	StorageResizeIntentAlreadyExists = errors.ConstError("storage resize intent already exists")
+
+	// StorageResizeIntentNotFound indicates that no pending request exists.
+	StorageResizeIntentNotFound = errors.ConstError("storage resize intent not found")
+
 	// FilesystemNotFound describes an error that occurs when the filesystem being operated
 	// on does not exist.
 	FilesystemNotFound = errors.ConstError("filesystem not found")
