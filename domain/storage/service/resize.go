@@ -7,6 +7,7 @@ import (
 	"context"
 	"math"
 	"strings"
+	"time"
 
 	coreerrors "github.com/juju/juju/core/errors"
 	corestorage "github.com/juju/juju/core/storage"
@@ -18,6 +19,13 @@ import (
 
 // ResizeState describes persistence of storage resize requests and results.
 type ResizeState interface {
+	// Staged execution keeps backend and attachment observations separate.
+	GetStorageResizeStageRequests(context.Context, string) ([]string, error)
+	GetStorageResizePlan(context.Context, string) (domainstorage.ResizePlan, error)
+	CreateStorageResizePlan(context.Context, domainstorage.ResizePlan) error
+	SetStorageResizeStage(context.Context, string, domainstorage.ResizeStageReport, time.Time) error
+	FailStorageResizePlan(context.Context, string, string, string, time.Time) error
+
 	// CreateStorageResizeIntent records intent for a live storage instance.
 	// It returns StorageInstanceNotFound, StorageInstanceNotAlive, or
 	// StorageResizeIntentAlreadyExists if the request cannot be recorded.
