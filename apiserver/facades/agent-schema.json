@@ -10317,7 +10317,7 @@
     {
         "Name": "StorageResizer",
         "Description": "",
-        "Version": 1,
+        "Version": 2,
         "Schema": {
             "type": "object",
             "properties": {
@@ -10332,6 +10332,17 @@
                         }
                     }
                 },
+                "PrepareStage": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeRequestArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/StorageResizeStageWork"
+                        }
+                    }
+                },
                 "Report": {
                     "type": "object",
                     "properties": {
@@ -10340,7 +10351,23 @@
                         }
                     }
                 },
+                "ReportStage": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeStageReport"
+                        }
+                    }
+                },
                 "Requests": {
+                    "type": "object",
+                    "properties": {
+                        "Result": {
+                            "$ref": "#/definitions/StringsResult"
+                        }
+                    }
+                },
+                "StageRequests": {
                     "type": "object",
                     "properties": {
                         "Result": {
@@ -10413,6 +10440,181 @@
                     "additionalProperties": false,
                     "required": [
                         "uuid"
+                    ]
+                },
+                "StorageResizeStageReport": {
+                    "type": "object",
+                    "properties": {
+                        "filesystem-size-mib": {
+                            "type": "integer"
+                        },
+                        "follow-up": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "identity": {
+                            "type": "string"
+                        },
+                        "message": {
+                            "type": "string"
+                        },
+                        "observed-size-mib": {
+                            "type": "integer"
+                        },
+                        "phase": {
+                            "type": "string"
+                        },
+                        "prerequisites": {
+                            "type": "array",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "stage": {
+                            "type": "string"
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid",
+                        "identity",
+                        "stage",
+                        "phase",
+                        "status",
+                        "message",
+                        "prerequisites",
+                        "follow-up",
+                        "observed-size-mib",
+                        "filesystem-size-mib"
+                    ]
+                },
+                "StorageResizeStageTarget": {
+                    "type": "object",
+                    "properties": {
+                        "alive": {
+                            "type": "boolean"
+                        },
+                        "attachment-id": {
+                            "type": "string"
+                        },
+                        "device-link": {
+                            "type": "string"
+                        },
+                        "device-name": {
+                            "type": "string"
+                        },
+                        "filesystem-id": {
+                            "type": "string"
+                        },
+                        "filesystem-uuid": {
+                            "type": "string"
+                        },
+                        "identity": {
+                            "type": "string"
+                        },
+                        "instance-id": {
+                            "type": "string"
+                        },
+                        "kind": {
+                            "type": "string"
+                        },
+                        "machine-scoped": {
+                            "type": "boolean"
+                        },
+                        "machine-uuid": {
+                            "type": "string"
+                        },
+                        "mount-point": {
+                            "type": "string"
+                        },
+                        "pool-attributes": {
+                            "type": "object",
+                            "patternProperties": {
+                                ".*": {
+                                    "type": "string"
+                                }
+                            }
+                        },
+                        "pool-name": {
+                            "type": "string"
+                        },
+                        "provider-id": {
+                            "type": "string"
+                        },
+                        "provider-type": {
+                            "type": "string"
+                        },
+                        "read-only": {
+                            "type": "boolean"
+                        },
+                        "shared": {
+                            "type": "boolean"
+                        },
+                        "size-mib": {
+                            "type": "integer"
+                        },
+                        "volume-id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "identity",
+                        "size-mib",
+                        "provider-type",
+                        "pool-name",
+                        "pool-attributes",
+                        "kind",
+                        "machine-scoped",
+                        "machine-uuid",
+                        "instance-id",
+                        "attachment-id",
+                        "volume-id",
+                        "provider-id",
+                        "device-name",
+                        "device-link",
+                        "filesystem-id",
+                        "filesystem-uuid",
+                        "mount-point",
+                        "alive",
+                        "read-only",
+                        "shared"
+                    ]
+                },
+                "StorageResizeStageWork": {
+                    "type": "object",
+                    "properties": {
+                        "identity": {
+                            "type": "string"
+                        },
+                        "phase": {
+                            "type": "string"
+                        },
+                        "stage": {
+                            "type": "string"
+                        },
+                        "target": {
+                            "$ref": "#/definitions/StorageResizeStageTarget"
+                        },
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid",
+                        "identity",
+                        "stage",
+                        "phase",
+                        "target"
                     ]
                 },
                 "StorageResizeWork": {

@@ -22,12 +22,12 @@ func NewClient(caller base.APICaller) *Client {
 }
 
 // Supported reports whether the controller exposes this facade.
-func (c *Client) Supported() bool { return c.facade.BestAPIVersion() >= 1 }
+func (c *Client) Supported() bool { return c.facade.BestAPIVersion() >= 2 }
 
 // Requests returns pending request IDs for this machine.
 func (c *Client) Requests(ctx context.Context) ([]string, error) {
 	var result params.StringsResult
-	err := c.facade.FacadeCall(ctx, "Requests", nil, &result)
+	err := c.facade.FacadeCall(ctx, "StageRequests", nil, &result)
 	return result.Result, err
 }
 
@@ -41,4 +41,16 @@ func (c *Client) Prepare(ctx context.Context, uuid string) (params.StorageResize
 // Report persists the outcome and any observed capacities.
 func (c *Client) Report(ctx context.Context, result params.StorageResizeReport) error {
 	return c.facade.FacadeCall(ctx, "Report", result, nil)
+}
+
+// PrepareStage returns the next checked stage for this machine.
+func (c *Client) PrepareStage(ctx context.Context, uuid string) (params.StorageResizeStageWork, error) {
+	var result params.StorageResizeStageWork
+	err := c.facade.FacadeCall(ctx, "PrepareStage", params.StorageResizeRequestArgs{UUID: uuid}, &result)
+	return result, err
+}
+
+// ReportStage records one bounded reconciliation.
+func (c *Client) ReportStage(ctx context.Context, result params.StorageResizeStageReport) error {
+	return c.facade.FacadeCall(ctx, "ReportStage", result, nil)
 }
