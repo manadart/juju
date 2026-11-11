@@ -22,6 +22,7 @@ import (
 	"github.com/juju/juju/core/storage"
 	domainservices "github.com/juju/juju/domain/services"
 	internalerrors "github.com/juju/juju/internal/errors"
+	"github.com/juju/juju/internal/openfga"
 	"github.com/juju/juju/internal/services"
 	internalstorage "github.com/juju/juju/internal/storage"
 )
@@ -130,6 +131,13 @@ func NewWorker(config Config) (worker.Worker, error) {
 		return nil, errors.Trace(err)
 	}
 
+	w := &domainServicesWorker{}
+	factory := coredatabase.NewTxnRunnerFactoryForNamespace(config.DBGetter.GetWatchableDB, coredatabase.ControllerNS)
+	authorizer, err := openfga.NewAuthorizer(w.tomb.Context(context.Background()), factory)
+	if err != nil {
+		return nil, internalerrors.Errorf("starting authorisation engine: %w", err)
+	}
+
 	controllerObjectStoreGetter := controllerObjectStoreGetter{
 		objectStoreGetter: config.ObjectStoreGetter,
 	}
@@ -139,26 +147,26 @@ func NewWorker(config Config) (worker.Worker, error) {
 		config.Clock,
 		config.Logger,
 		config.LoggerContextGetter,
+		authorizer,
 	)
-	w := &domainServicesWorker{
-		ctrlFactory: ctrlFactory,
-		servicesGetter: config.NewDomainServicesGetter(
-			ctrlFactory,
-			config.DBGetter,
-			config.NewModelDomainServices,
-			config.ProviderFactory,
-			config.ObjectStoreGetter,
-			config.StorageRegistryGetter,
-			config.PublicKeyImporter,
-			config.LeaseManager,
-			config.ClusterDescriber,
-			config.SimpleStreamsClient,
-			config.LogDir,
-			config.Clock,
-			config.LoggerContextGetter,
-		),
-	}
+	w.ctrlFactory = ctrlFactory
+	w.servicesGetter = config.NewDomainServicesGetter(
+		ctrlFactory,
+		config.DBGetter,
+		config.NewModelDomainServices,
+		config.ProviderFactory,
+		config.ObjectStoreGetter,
+		config.StorageRegistryGetter,
+		config.PublicKeyImporter,
+		config.LeaseManager,
+		config.ClusterDescriber,
+		config.SimpleStreamsClient,
+		config.LogDir,
+		config.Clock,
+		config.LoggerContextGetter,
+	)
 	w.tomb.Go(func() error {
+		defer authorizer.Close()
 		<-w.tomb.Dying()
 		return w.tomb.Err()
 	})

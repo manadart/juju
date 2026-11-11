@@ -161,7 +161,7 @@ func (i *importModelOperation) Setup(scope modelmigration.Scope) error {
 	)
 
 	i.modelDetailServiceFunc = modelDetailServiceGetter(scope, i.logger)
-	i.userService = accessservice.NewService(accessstate.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
+	i.userService = accessservice.NewMigrationService(accessstate.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
 	return nil
 }
 

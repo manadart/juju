@@ -162,8 +162,8 @@ func (st *PermissionState) DeletePermissionsByGrantOnUUID(ctx context.Context, p
 
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		deletePermissionStmt, err := st.Prepare(`
-DELETE FROM permission WHERE grant_on IN ($uuids[:])
-`, uuids{})
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_on IN ($uuids[:]))`, uuids{})
 		if err != nil {
 			return errors.Capture(err)
 		}
@@ -281,92 +281,53 @@ AND     u.removed = false
 	return userAccess, err
 }
 
-// ReadUserAccessLevelForTarget returns the subject's (user) access level
-// for the given user on the given target.
-// If the access level of a user cannot be found then
-// accesserrors.AccessNotFound is returned.
-// Removed or disabled users always receive accesserrors.AccessNotFound
-// and are never allowed to fall through to the everyone@external
-// inheritance path.
-func (st *PermissionState) ReadUserAccessLevelForTarget(ctx context.Context, subject user.Name, target corepermission.ID) (corepermission.Access, error) {
-	userAccess := corepermission.NoAccess
+// GetPermissionSubject resolves an active user to an OpenFGA subject.
+// Unknown external users can inherit external wildcard grants. Removed or
+// disabled users cannot inherit those grants.
+func (st *PermissionState) GetPermissionSubject(ctx context.Context, subject user.Name) (string, error) {
 	db, err := st.DB(ctx)
 	if err != nil {
-		return userAccess, errors.Capture(err)
+		return "", errors.Capture(err)
 	}
-
-	user := dbPermissionUser{
-		Name: subject.Name(),
-	}
-	perm := dbPermission{
-		GrantOn: target.Key,
-	}
-
-	readQuery := `
-SELECT  (p.access_type, p.uuid) AS (&dbPermission.*),
-        (u.disabled, u.removed) AS (&dbUserActive.*)
-FROM    v_user_auth u
-        LEFT JOIN v_permission p ON u.uuid = p.grant_to AND p.grant_on = $dbPermission.grant_on
-WHERE   u.name = $dbPermissionUser.name
-`
-
-	readStmt, err := st.Prepare(readQuery, user, perm, dbUserActive{})
+	in := dbPermissionUser{Name: subject.Name()}
+	stmt, err := st.Prepare(`
+SELECT (u.uuid, u.name) AS (&dbPermissionUser.*),
+       (u.disabled, u.removed) AS (&dbUserActive.*)
+FROM v_user_auth AS u
+WHERE u.name = $dbPermissionUser.name
+ORDER BY u.removed ASC
+LIMIT 1
+`, in, dbUserActive{})
 	if err != nil {
-		return userAccess, errors.Errorf("preparing select user access level for target statement: %w", err)
+		return "", errors.Capture(err)
 	}
-
-	var baseExternalPerms dbPermission
+	var result string
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		// Reset perm and baseExternalPerms for every txn retry. This is so
-		// we don't accidentally cache the result between txn retries where
-		// a value may have changed.
-		baseExternalPerms = dbPermission{}
-		perm = dbPermission{
-			GrantOn: target.Key,
+		result = ""
+		var found dbPermissionUser
+		var active dbUserActive
+		err := tx.Query(ctx, stmt, in).Get(&found, &active)
+		if errors.Is(err, sqlair.ErrNoRows) && !subject.IsLocal() {
+			result = "external:" + subject.Name()
+			return nil
 		}
-
-		var userActive dbUserActive
-		err = tx.Query(ctx, readStmt, user, perm).Get(&perm, &userActive)
-		if errors.Is(err, sqlair.ErrNoRows) && subject.IsLocal() {
-			return errors.Errorf("%w for %q on %q", accesserrors.AccessNotFound, subject, target.Key)
-		} else if errors.Is(err, sqlair.ErrNoRows) {
-			// External user has no DB record yet. Their access is
-			// determined entirely by everyone@external below.
-		} else if err != nil {
-			return errors.Errorf("reading user access level for target: %w", err)
-		} else if userActive.Removed || userActive.Disabled {
-			// The user exists but has been removed or disabled.
-			// Return AccessNotFound so that disabled/removed external
-			// users cannot fall through to everyone@external
-			// inheritance. We use AccessNotFound (rather than
-			// UserAuthenticationDisabled) because HasPermission and
-			// the delegator layer expect AccessNotFound for any
-			// "no access" situation.
-			return errors.Errorf("%w for %q on %q", accesserrors.AccessNotFound, subject, target.Key)
+		if errors.Is(err, sqlair.ErrNoRows) {
+			return accesserrors.AccessNotFound
 		}
-
-		// For external users, also retrieve the base everyone@external
-		// access so we can return the higher of the two.
-		if !subject.IsLocal() {
-			baseExternalPerms, err = st.baseExternalAccessForTarget(ctx, tx, target)
-			if err != nil {
-				return errors.Capture(err)
-			}
+		if err != nil {
+			return err
+		}
+		if active.Disabled || active.Removed {
+			return accesserrors.AccessNotFound
+		}
+		if subject.IsLocal() {
+			result = "user:" + found.UUID
+		} else {
+			result = "external:" + found.UUID
 		}
 		return nil
 	})
-	if err != nil {
-		return userAccess, errors.Capture(err)
-	}
-
-	userAccess = corepermission.Access(perm.AccessType)
-	if !subject.IsLocal() && baseExternalAccessGreater(baseExternalPerms, userAccess) {
-		userAccess = corepermission.Access(baseExternalPerms.AccessType)
-	}
-	if userAccess != corepermission.NoAccess {
-		return userAccess, nil
-	}
-	return corepermission.NoAccess, errors.Errorf("%w for %q on %q", accesserrors.AccessNotFound, subject, target.Key)
+	return result, errors.Capture(err)
 }
 
 // addExternalUser adds an external user to the database with everyone@external
@@ -978,14 +939,13 @@ func (st *PermissionState) deletePermission(ctx context.Context, tx *sqlair.TX, 
 	// unique, thus it is all that is deleted to select the row to be
 	// deleted.
 	deletePermission := `
-DELETE FROM permission
-WHERE  grant_on = $permInOut.grant_on
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
 AND    grant_to IN (
        SELECT uuid
        FROM   user
        WHERE  name = $permInOut.name
-)
-`
+))`
 	deletePermissionStmt, err := st.Prepare(deletePermission, permInOut{})
 	if err != nil {
 		return errors.Capture(err)
@@ -1004,13 +964,11 @@ AND    grant_to IN (
 
 func (st *PermissionState) updatePermission(ctx context.Context, tx *sqlair.TX, subjectName, grantOn, access string) error {
 	updateQuery := `
-UPDATE permission
-SET    access_type_id = (
-           SELECT id
-           FROM   permission_access_type
-           WHERE  type = $permInOut.access_type
-       )
-WHERE  grant_on = $permInOut.grant_on
+UPDATE openfga_tuple
+SET relation = replace($permInOut.access_type, '-', '_'),
+    inserted_at = strftime('%Y-%m-%dT%H:%M:%f000000Z', 'now')
+WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
 AND    grant_to IN (
            SELECT uuid
            FROM   v_user_auth
@@ -1018,7 +976,7 @@ AND    grant_to IN (
            AND    removed = false
            AND    disabled = false
        )
-`
+)`
 	updateQueryStmt, err := st.Prepare(updateQuery, permInOut{})
 	if err != nil {
 		return errors.Errorf("preparing updatePermission query: %w", err)
@@ -1166,20 +1124,17 @@ func insertPermission(ctx context.Context, tx *sqlair.TX, perm dbPermission) err
 	// * uuid of the user (spec.User) as grant_to
 	// * spec.Target.Key as grant_on
 	newPermission := `
-INSERT INTO permission (uuid, access_type_id, object_type_id, grant_to, grant_on)
-SELECT $dbPermission.uuid,
-       at.id,
-       ot.id,
-       u.uuid,
-       $dbPermission.grant_on
-FROM   v_user_auth u,
-       permission_access_type at,
-       permission_object_type ot
-WHERE  u.uuid = $dbPermission.grant_to
-AND    u.disabled = false
-AND    u.removed = false
-AND    at.type = $dbPermission.access_type
-AND    ot.type = $dbPermission.object_type
+INSERT INTO openfga_tuple
+    (permission_uuid, store_id, object_type, object_id, relation, user)
+SELECT $dbPermission.uuid, '01J00000000000000000000000',
+       $dbPermission.object_type, $dbPermission.grant_on,
+       replace($dbPermission.access_type, '-', '_'),
+       CASE WHEN u.name = 'everyone@external' THEN 'external:*'
+            WHEN u.external THEN 'external:' || u.uuid
+            ELSE 'user:' || u.uuid END
+FROM v_user_auth AS u
+WHERE u.uuid = $dbPermission.grant_to
+AND u.disabled = false AND u.removed = false
 `
 
 	insertPermissionStmt, err := sqlair.Prepare(newPermission, dbPermission{})

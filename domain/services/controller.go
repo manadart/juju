@@ -62,6 +62,7 @@ import (
 type ControllerServices struct {
 	serviceFactoryBase
 
+	permissionChecker     accessservice.PermissionChecker
 	controllerObjectStore objectstore.NamespacedObjectStoreGetter
 	clock                 clock.Clock
 	loggerContextGetter   logger.LoggerContextGetter
@@ -75,12 +76,14 @@ func NewControllerServices(
 	clock clock.Clock,
 	logger logger.Logger,
 	loggerContextGetter logger.LoggerContextGetter,
+	permissionChecker accessservice.PermissionChecker,
 ) *ControllerServices {
 	return &ControllerServices{
 		serviceFactoryBase: serviceFactoryBase{
 			controllerDB: controllerDB,
 			logger:       logger,
 		},
+		permissionChecker:     permissionChecker,
 		controllerObjectStore: controllerObjectStoreGetter,
 		clock:                 clock,
 		loggerContextGetter:   loggerContextGetter,
@@ -204,7 +207,7 @@ func (s *ControllerServices) Flag() *flagservice.Service {
 // Access returns the access service, this includes users and permissions.
 func (s *ControllerServices) Access() *accessservice.Service {
 	return accessservice.NewService(accessstate.NewState(changestream.NewTxnRunnerFactory(s.controllerDB),
-		s.clock, s.logger.Child("access")), s.clock)
+		s.clock, s.logger.Child("access")), s.clock, s.permissionChecker)
 }
 
 func (s *ControllerServices) SecretBackend() *secretbackendservice.WatchableService {

@@ -267,9 +267,8 @@ WHERE namespace = $entityUUID.uuid;
 	}
 
 	deletePermissionsStmt, err := st.Prepare(`
-DELETE FROM permission
-WHERE grant_on = $entityUUID.uuid;
-`, modelUUIDParam)
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_on = $entityUUID.uuid)`, modelUUIDParam)
 	if err != nil {
 		return errors.Capture(err)
 	}

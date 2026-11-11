@@ -581,20 +581,17 @@ func insertPermission(ctx context.Context, tx *sqlair.TX, ownerName user.Name, c
 		return nil
 	}
 	newPermission := `
-INSERT INTO permission (uuid, access_type_id, object_type_id, grant_to, grant_on)
-SELECT $dbAddUserPermission.uuid,
-       at.id,
-       ot.id,
-       u.uuid,
-       $dbAddUserPermission.grant_on
-FROM   v_user_auth u,
-       permission_access_type at,
-       permission_object_type ot
-WHERE  u.name = $dbAddUserPermission.name
-AND    u.disabled = false
-AND    u.removed = false
-AND    at.type = $dbAddUserPermission.access_type
-AND    ot.type = $dbAddUserPermission.object_type
+INSERT INTO openfga_tuple
+    (permission_uuid, store_id, object_type, object_id, relation, user)
+SELECT $dbAddUserPermission.uuid, '01J00000000000000000000000',
+       $dbAddUserPermission.object_type, $dbAddUserPermission.grant_on,
+       replace($dbAddUserPermission.access_type, '-', '_'),
+       CASE WHEN u.name = 'everyone@external' THEN 'external:*'
+            WHEN u.external THEN 'external:' || u.uuid
+            ELSE 'user:' || u.uuid END
+FROM v_user_auth AS u
+WHERE u.name = $dbAddUserPermission.name
+AND u.disabled = false AND u.removed = false
 `
 	insertPermissionStmt, err := sqlair.Prepare(newPermission, dbAddUserPermission{})
 	if err != nil {
@@ -743,9 +740,8 @@ WHERE cloud_uuid IN (SELECT uuid FROM target_cloud)
 	}
 
 	permissionsStmt, err := st.Prepare(`
-DELETE FROM permission
-WHERE  grant_on = $dbCloudName.name
-`, dbCloudName{})
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $dbCloudName.name)`, dbCloudName{})
 	if err != nil {
 		return errors.Errorf("preparing delete cloud from permissions statement: %w", err)
 	}

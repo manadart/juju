@@ -20,9 +20,8 @@ func (st *State) DeleteOfferAccess(ctx context.Context, oUUID string) error {
 
 	offerUUID := entityUUID{UUID: oUUID}
 	stmt, err := st.Prepare(`
-DELETE FROM permission
-WHERE grant_on = $entityUUID.uuid
-`, offerUUID)
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_on = $entityUUID.uuid)`, offerUUID)
 	if err != nil {
 		return errors.Capture(err)
 	}

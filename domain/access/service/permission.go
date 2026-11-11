@@ -19,15 +19,22 @@ import (
 )
 
 // PermissionService provides the API for working with permissions.
+// PermissionChecker evaluates relationships using the persisted model.
+type PermissionChecker interface {
+	Check(context.Context, string, corepermission.ID, corepermission.Access) (bool, error)
+}
+
 type PermissionService struct {
-	st PermissionState
+	st      PermissionState
+	checker PermissionChecker
 }
 
 // NewPermissionService returns a new PermissionService for interacting with the underlying
 // permission state.
-func NewPermissionService(st PermissionState) *PermissionService {
+func NewPermissionService(st PermissionState, checker PermissionChecker) *PermissionService {
 	return &PermissionService{
-		st: st,
+		st:      st,
+		checker: checker,
 	}
 }
 
@@ -126,8 +133,31 @@ func (s *PermissionService) ReadUserAccessLevelForTarget(ctx context.Context, su
 	if err := target.Validate(); err != nil {
 		return "", errors.Capture(err)
 	}
-	access, err := s.st.ReadUserAccessLevelForTarget(ctx, subject, target)
-	return access, errors.Capture(err)
+	principal, err := s.st.GetPermissionSubject(ctx, subject)
+	if err != nil {
+		return corepermission.NoAccess, errors.Capture(err)
+	}
+	var levels []corepermission.Access
+	switch target.ObjectType {
+	case corepermission.Controller:
+		levels = []corepermission.Access{corepermission.SuperuserAccess, corepermission.LoginAccess}
+	case corepermission.Cloud:
+		levels = []corepermission.Access{corepermission.AdminAccess, corepermission.AddModelAccess}
+	case corepermission.Model:
+		levels = []corepermission.Access{corepermission.AdminAccess, corepermission.WriteAccess, corepermission.ReadAccess}
+	case corepermission.Offer:
+		levels = []corepermission.Access{corepermission.AdminAccess, corepermission.ConsumeAccess, corepermission.ReadAccess}
+	}
+	for _, level := range levels {
+		allowed, err := s.checker.Check(ctx, principal, target, level)
+		if err != nil {
+			return corepermission.NoAccess, errors.Capture(err)
+		}
+		if allowed {
+			return level, nil
+		}
+	}
+	return corepermission.NoAccess, accesserrors.AccessNotFound
 }
 
 // HasSSHAccessToModel returns whether the user can access the model over SSH. Model
@@ -151,7 +181,7 @@ func (s *PermissionService) HasSSHAccessToModel(
 		return false, errors.Capture(err)
 	}
 
-	modelAccess, err := s.st.ReadUserAccessLevelForTarget(ctx, subject, corepermission.ID{
+	modelAccess, err := s.ReadUserAccessLevelForTarget(ctx, subject, corepermission.ID{
 		ObjectType: corepermission.Model,
 		Key:        modelUUID.String(),
 	})
@@ -162,7 +192,7 @@ func (s *PermissionService) HasSSHAccessToModel(
 		return false, errors.Capture(err)
 	}
 
-	controllerAccess, err := s.st.ReadUserAccessLevelForTarget(ctx, subject, corepermission.ID{
+	controllerAccess, err := s.ReadUserAccessLevelForTarget(ctx, subject, corepermission.ID{
 		ObjectType: corepermission.Controller,
 		Key:        controllerUUID.String(),
 	})

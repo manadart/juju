@@ -108,7 +108,7 @@ func (i *importExternalUsersOperation) Name() string {
 
 // Setup implements Operation.
 func (i *importExternalUsersOperation) Setup(scope modelmigration.Scope) error {
-	i.service = service.NewService(state.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
+	i.service = service.NewMigrationService(state.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
 	return nil
 }
 
@@ -198,7 +198,7 @@ func (i *importOperation) Name() string {
 
 // Setup implements Operation.
 func (i *importOperation) Setup(scope modelmigration.Scope) error {
-	i.service = service.NewService(state.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
+	i.service = service.NewMigrationService(state.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
 	return nil
 }
 
@@ -295,7 +295,7 @@ func (i *offerAccessImportOperation) Name() string {
 
 // Setup implements Operation.
 func (i *offerAccessImportOperation) Setup(scope modelmigration.Scope) error {
-	i.service = service.NewService(state.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
+	i.service = service.NewMigrationService(state.NewState(scope.ControllerDB(), i.clock, i.logger), i.clock)
 	return nil
 }
 

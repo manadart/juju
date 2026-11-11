@@ -2105,20 +2105,18 @@ WITH offer_uuids AS (
     SELECT offer_uuid FROM model_migration_export_offer
     WHERE migration_uuid = $migrationUUIDArg.migration_uuid
 )
-DELETE FROM permission
-WHERE object_type_id = (SELECT id FROM permission_object_type WHERE type = 'offer')
-AND   grant_on IN (SELECT offer_uuid FROM offer_uuids)
-`, migrationUUIDArg{})
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE object_type_id = (SELECT id FROM permission_object_type WHERE type = 'offer')
+AND   grant_on IN (SELECT offer_uuid FROM offer_uuids))`, migrationUUIDArg{})
 	if err != nil {
 		return errors.Capture(err)
 	}
 
 	// Delete model permission rows.
 	deleteModelPermsStmt, err := s.Prepare(`
-DELETE FROM permission
-WHERE object_type_id = (SELECT id FROM permission_object_type WHERE type = 'model')
-AND   grant_on = $modelUUIDArg.model_uuid
-`, modelUUIDArg{})
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE object_type_id = (SELECT id FROM permission_object_type WHERE type = 'model')
+AND   grant_on = $modelUUIDArg.model_uuid)`, modelUUIDArg{})
 	if err != nil {
 		return errors.Capture(err)
 	}

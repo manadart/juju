@@ -641,7 +641,7 @@ func (i *ModelImporter) newImportServices(controllerDB database.TxnRunnerFactory
 		claim: migrationclaimservice.NewImportService(
 			migrationclaimstate.New(controllerDB, i.clock), i.clock, i.logger,
 		),
-		access: accessservice.NewService(
+		access: accessservice.NewMigrationService(
 			accessstate.NewState(controllerDB, i.clock, i.logger), i.clock,
 		),
 		credential: credentialservice.NewService(

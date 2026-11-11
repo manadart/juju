@@ -20,6 +20,7 @@ import (
 	"github.com/juju/juju/core/objectstore"
 	"github.com/juju/juju/core/providertracker"
 	"github.com/juju/juju/core/storage"
+	accessservice "github.com/juju/juju/domain/access/service"
 	domainservices "github.com/juju/juju/domain/services"
 	"github.com/juju/juju/internal/services"
 	sshimporter "github.com/juju/juju/internal/ssh/importer"
@@ -71,6 +72,7 @@ type ControllerDomainServicesFn func(
 	clock.Clock,
 	logger.Logger,
 	logger.LoggerContextGetter,
+	accessservice.PermissionChecker,
 ) services.ControllerDomainServices
 
 // ModelDomainServicesFn is a function that returns a model domain services.
@@ -263,6 +265,7 @@ func NewControllerDomainServices(
 	clock clock.Clock,
 	logger logger.Logger,
 	loggerContextGetter logger.LoggerContextGetter,
+	permissionChecker accessservice.PermissionChecker,
 ) services.ControllerDomainServices {
 	return domainservices.NewControllerServices(
 		changestream.NewWatchableDBFactoryForNamespace(dbGetter.GetWatchableDB, coredatabase.ControllerNS),
@@ -270,6 +273,7 @@ func NewControllerDomainServices(
 		clock,
 		logger,
 		loggerContextGetter,
+		permissionChecker,
 	)
 }
 

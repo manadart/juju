@@ -946,7 +946,8 @@ func (s *State) Delete(
 		`DELETE FROM model_secret_backend WHERE model_uuid = $dbUUID.uuid`,
 		`DELETE FROM secret_backend_reference WHERE model_uuid = $dbUUID.uuid`,
 		`DELETE FROM model_authorized_keys WHERE model_uuid = $dbUUID.uuid`,
-		`DELETE FROM permission WHERE grant_on = $dbUUID.uuid`,
+		`DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_on = $dbUUID.uuid)`,
 		`DELETE FROM model_last_login WHERE model_uuid = $dbUUID.uuid`,
 	}
 
@@ -2207,12 +2208,17 @@ func addAdminPermissions(
 	}
 
 	permStmt, err := preparer.Prepare(`
-INSERT INTO permission (uuid, access_type_id, object_type_id, grant_to, grant_on)
-SELECT $dbPermission.uuid, at.id, ot.id, $dbPermission.grant_to, $dbPermission.grant_on
-FROM   permission_access_type at,
-       permission_object_type ot
-WHERE  at.type = $dbPermission.access_type
-AND    ot.type = $dbPermission.object_type
+INSERT INTO openfga_tuple
+    (permission_uuid, store_id, object_type, object_id, relation, user)
+SELECT $dbPermission.uuid, '01J00000000000000000000000',
+       $dbPermission.object_type, $dbPermission.grant_on,
+       replace($dbPermission.access_type, '-', '_'),
+       CASE WHEN u.name = 'everyone@external' THEN 'external:*'
+            WHEN u.external THEN 'external:' || u.uuid
+            ELSE 'user:' || u.uuid END
+FROM user AS u
+WHERE u.uuid = $dbPermission.grant_to
+
 `, adminPermission)
 	if err != nil {
 		return errors.Capture(err)

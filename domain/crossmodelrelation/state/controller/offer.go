@@ -85,20 +85,17 @@ func insertPermission(ctx context.Context, tx *sqlair.TX, perm permission) error
 	// * uuid of the user (spec.User) as grant_to
 	// * spec.Target.Key as grant_on
 	newPermission := `
-INSERT INTO permission (uuid, access_type_id, object_type_id, grant_to, grant_on)
-SELECT $permission.uuid,
-       at.id,
-       ot.id,
-       u.uuid,
-       $permission.grant_on
-FROM   v_user_auth u,
-       permission_access_type at,
-       permission_object_type ot
-WHERE  u.uuid = $permission.grant_to
-AND    u.disabled = false
-AND    u.removed = false
-AND    at.type = $permission.access_type
-AND    ot.type = $permission.object_type
+INSERT INTO openfga_tuple
+    (permission_uuid, store_id, object_type, object_id, relation, user)
+SELECT $permission.uuid, '01J00000000000000000000000',
+       $permission.object_type, $permission.grant_on,
+       replace($permission.access_type, '-', '_'),
+       CASE WHEN u.name = 'everyone@external' THEN 'external:*'
+            WHEN u.external THEN 'external:' || u.uuid
+            ELSE 'user:' || u.uuid END
+FROM v_user_auth AS u
+WHERE u.uuid = $permission.grant_to
+AND u.disabled = false AND u.removed = false
 `
 	insertPermissionStmt, err := sqlair.Prepare(newPermission, permission{})
 	if err != nil {
@@ -278,13 +275,11 @@ func (st *State) updateOfferPermission(
 	}
 
 	updateStmt, err := st.Prepare(`
-UPDATE permission
-SET    access_type_id = (
-           SELECT id
-           FROM   permission_access_type
-           WHERE  type = $permInOut.access_type
-       )
-WHERE  grant_on = $permInOut.grant_on
+UPDATE openfga_tuple
+SET relation = replace($permInOut.access_type, '-', '_'),
+    inserted_at = strftime('%Y-%m-%dT%H:%M:%f000000Z', 'now')
+WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
 AND    grant_to IN (
            SELECT uuid
            FROM   v_user_auth
@@ -292,7 +287,7 @@ AND    grant_to IN (
            AND    removed = false
            AND    disabled = false
        )
-`, inOut)
+)`, inOut)
 	if err != nil {
 		return errors.Errorf("preparing update offer permission: %w", err)
 	}
@@ -314,16 +309,15 @@ func (st *State) deleteOfferPermission(
 	}
 
 	deleteStmt, err := st.Prepare(`
-DELETE FROM permission
-WHERE  grant_on = $permInOut.grant_on
+DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
+AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
 AND    grant_to IN (
            SELECT uuid
            FROM   v_user_auth
            WHERE  name = $permInOut.name
            AND    removed = false
            AND    disabled = false
-       )
-`, inOut)
+       ))`, inOut)
 	if err != nil {
 		return errors.Errorf("preparing delete offer permission: %w", err)
 	}

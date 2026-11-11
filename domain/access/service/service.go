@@ -14,6 +14,7 @@ import (
 	"github.com/juju/juju/core/user"
 	"github.com/juju/juju/domain/access"
 	"github.com/juju/juju/internal/auth"
+	"github.com/juju/juju/internal/errors"
 	"github.com/juju/juju/internal/uuid"
 )
 
@@ -192,14 +193,9 @@ type PermissionState interface {
 	// given user on the given target.
 	ReadUserAccessForTarget(ctx context.Context, subject user.Name, target permission.ID) (permission.UserAccess, error)
 
-	// ReadUserAccessLevelForTarget returns the subject's (user) access level
-	// for the given user on the given target.
-	// For external users, this transparently resolves inheritance from
-	// everyone@external and returns the higher of the user's own access and
-	// the base external access.
-	// If the access level of a user cannot be found then
-	// accesserrors.AccessNotFound is returned.
-	ReadUserAccessLevelForTarget(ctx context.Context, subject user.Name, target permission.ID) (permission.Access, error)
+	// GetPermissionSubject resolves a user, rejecting disabled or removed
+	// users before evaluating external wildcard permissions.
+	GetPermissionSubject(context.Context, user.Name) (string, error)
 
 	// ReadAllUserAccessForUser returns a slice of the user access the given
 	// subject's (user) has for any access type.
@@ -227,9 +223,21 @@ type Service struct {
 
 // NewService returns a new Service for interacting with the underlying access
 // state.
-func NewService(st State, clock clock.Clock) *Service {
+func NewService(st State, clock clock.Clock, checker PermissionChecker) *Service {
 	return &Service{
 		UserService:       NewUserService(st, clock),
-		PermissionService: NewPermissionService(st),
+		PermissionService: NewPermissionService(st, checker),
 	}
+}
+
+// NewMigrationService supplies access mutations and listings during import.
+// Permission evaluation is unavailable until the controller runtime starts.
+func NewMigrationService(st State, clock clock.Clock) *Service {
+	return NewService(st, clock, migrationPermissionChecker{})
+}
+
+type migrationPermissionChecker struct{}
+
+func (migrationPermissionChecker) Check(context.Context, string, permission.ID, permission.Access) (bool, error) {
+	return false, errors.New("permission evaluation is unavailable during migration")
 }
