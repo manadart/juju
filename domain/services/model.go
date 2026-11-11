@@ -131,6 +131,7 @@ type PublicKeyImporter interface {
 
 // ModelServices provides access to the services required by the apiserver.
 type ModelServices struct {
+	permissions crossmodelrelationservice.UserPermissions
 	modelServiceFactoryBase
 
 	modelUUID                   model.UUID
@@ -163,8 +164,10 @@ func NewModelServices(
 	logDir string,
 	clock clock.Clock,
 	logger logger.Logger,
+	permissions crossmodelrelationservice.UserPermissions,
 ) *ModelServices {
 	return &ModelServices{
+		permissions: permissions,
 		modelServiceFactoryBase: modelServiceFactoryBase{
 			serviceFactoryBase: serviceFactoryBase{
 				controllerDB: controllerDB,
@@ -684,6 +687,7 @@ func (s *ModelServices) CrossModelRelation() *crossmodelrelationservice.Watchabl
 		s.modelWatcherFactory("crossmodelrelation"),
 		s.clock,
 		log,
+		s.permissions,
 	)
 }
 

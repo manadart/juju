@@ -21,6 +21,7 @@ import (
 	"github.com/juju/juju/core/providertracker"
 	"github.com/juju/juju/core/storage"
 	accessservice "github.com/juju/juju/domain/access/service"
+	crossmodelrelationservice "github.com/juju/juju/domain/crossmodelrelation/service"
 	domainservices "github.com/juju/juju/domain/services"
 	"github.com/juju/juju/internal/services"
 	sshimporter "github.com/juju/juju/internal/ssh/importer"
@@ -90,6 +91,7 @@ type ModelDomainServicesFn func(
 	string,
 	clock.Clock,
 	logger.Logger,
+	crossmodelrelationservice.UserPermissions,
 ) services.ModelDomainServices
 
 // Validate validates the manifold configuration.
@@ -293,6 +295,7 @@ func NewProviderTrackerModelDomainServices(
 	logDir string,
 	clock clock.Clock,
 	logger logger.Logger,
+	permissions crossmodelrelationservice.UserPermissions,
 ) services.ModelDomainServices {
 	return domainservices.NewModelServices(
 		modelUUID,
@@ -309,6 +312,7 @@ func NewProviderTrackerModelDomainServices(
 		logDir,
 		clock,
 		logger,
+		permissions,
 	)
 }
 

@@ -16,6 +16,8 @@ import (
 	"github.com/juju/juju/core/permission"
 	corerelation "github.com/juju/juju/core/relation"
 	"github.com/juju/juju/core/trace"
+	"github.com/juju/juju/core/user"
+	accesserrors "github.com/juju/juju/domain/access/errors"
 	"github.com/juju/juju/domain/application/charm"
 	applicationerrors "github.com/juju/juju/domain/application/errors"
 	"github.com/juju/juju/domain/crossmodelrelation"
@@ -518,7 +520,7 @@ func (s *Service) suspendRelation(ctx context.Context, args crossmodelrelation.U
 		return nil
 	}
 
-	isAdmin, err := s.controllerState.IsUserControllerOrModelAdmin(ctx, args.Username, s.modelState.ModelUUID())
+	isAdmin, err := s.isUserControllerOrModelAdmin(ctx, args.Username)
 	if err != nil {
 		return errors.Errorf("checking admin status for %q: %w", args.Username, err)
 	}
@@ -541,4 +543,29 @@ func (s *Service) suspendRelation(ctx context.Context, args crossmodelrelation.U
 		return errors.Errorf("suspending relations for user %q on offer %q: %w", args.Username, args.OfferUUID, err)
 	}
 	return nil
+}
+
+// isUserControllerOrModelAdmin evaluates both exemptions through OpenFGA.
+func (s *Service) isUserControllerOrModelAdmin(ctx context.Context, subject user.Name) (bool, error) {
+	controllerUUID, err := s.controllerState.GetControllerUUID(ctx)
+	if err != nil {
+		return false, errors.Capture(err)
+	}
+	for _, target := range []permission.ID{
+		{ObjectType: permission.Controller, Key: controllerUUID},
+		{ObjectType: permission.Model, Key: s.modelState.ModelUUID().String()},
+	} {
+		access, err := s.permissions.ReadUserAccessLevelForTarget(ctx, subject, target)
+		if errors.Is(err, accesserrors.AccessNotFound) || errors.Is(err, accesserrors.UserNotFound) {
+			continue
+		}
+		if err != nil {
+			return false, errors.Capture(err)
+		}
+		if (target.ObjectType == permission.Controller && access == permission.SuperuserAccess) ||
+			(target.ObjectType == permission.Model && access == permission.AdminAccess) {
+			return true, nil
+		}
+	}
+	return false, nil
 }

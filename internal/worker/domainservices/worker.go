@@ -267,6 +267,7 @@ func (s *domainServicesGetter) ServicesForModel(ctx context.Context, modelUUID c
 			s.logDir,
 			s.clock,
 			loggerContext.GetLogger("juju.services"),
+			s.ctrlFactory.Access(),
 		),
 	}, nil
 }

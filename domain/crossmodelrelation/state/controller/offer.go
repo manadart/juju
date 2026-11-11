@@ -11,7 +11,6 @@ import (
 	"github.com/juju/collections/set"
 	"github.com/juju/collections/transform"
 
-	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/offer"
 	corepermission "github.com/juju/juju/core/permission"
 	coreuser "github.com/juju/juju/core/user"
@@ -467,44 +466,19 @@ AND    u.removed = false
 	return results, nil
 }
 
-// IsUserControllerOrModelAdmin returns true if the user has superuser
-// access on the controller or admin access on the given model.
-func (st *State) IsUserControllerOrModelAdmin(
-	ctx context.Context,
-	userName coreuser.Name,
-	modelUUIDStr coremodel.UUID,
-) (bool, error) {
+// GetControllerUUID returns the controller's persistent identity.
+func (st *State) GetControllerUUID(ctx context.Context) (string, error) {
 	db, err := st.DB(ctx)
 	if err != nil {
-		return false, errors.Capture(err)
+		return "", errors.Capture(err)
 	}
-
-	user := name{Name: userName.Name()}
-	model := modelUUID{ModelUUID: modelUUIDStr.String()}
-
-	adminStmt, err := st.Prepare(`
-SELECT COUNT(*) AS &countResult.count
-FROM   v_user_auth u
-JOIN   v_permission p ON u.uuid = p.grant_to
-WHERE  u.name = $name.name
-AND    u.disabled = false
-AND    u.removed = false
-AND    (
-           (p.object_type = 'controller' AND p.access_type = 'superuser')
-           OR
-           (p.object_type = 'model' AND p.grant_on = $modelUUID.model_uuid AND p.access_type IN ('admin', 'superuser'))
-       )
-`, countResult{}, name{}, modelUUID{})
+	stmt, err := st.Prepare(`SELECT c.uuid AS &entityUUID.uuid FROM controller AS c`, entityUUID{})
 	if err != nil {
-		return false, errors.Errorf("preparing admin check: %w", err)
+		return "", errors.Capture(err)
 	}
-
-	var result countResult
+	var result entityUUID
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
-		return tx.Query(ctx, adminStmt, user, model).Get(&result)
+		return tx.Query(ctx, stmt).Get(&result)
 	})
-	if err != nil {
-		return false, errors.Capture(err)
-	}
-	return result.Count > 0, nil
+	return result.UUID, errors.Capture(err)
 }

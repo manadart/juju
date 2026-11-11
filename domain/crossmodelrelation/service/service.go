@@ -14,9 +14,9 @@ import (
 	"github.com/juju/juju/core/changestream"
 	"github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/logger"
-	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/network"
 	"github.com/juju/juju/core/offer"
+	"github.com/juju/juju/core/permission"
 	corerelation "github.com/juju/juju/core/relation"
 	corestatus "github.com/juju/juju/core/status"
 	"github.com/juju/juju/core/trace"
@@ -87,9 +87,8 @@ type ControllerState interface {
 		args crossmodelrelation.UpdateOfferPermissionArgs,
 	) error
 
-	// IsUserControllerOrModelAdmin returns true if the user has superuser
-	// access on the controller or admin access on the given model.
-	IsUserControllerOrModelAdmin(ctx context.Context, name user.Name, modelUUID coremodel.UUID) (bool, error)
+	// GetControllerUUID identifies the controller for authorisation checks.
+	GetControllerUUID(context.Context) (string, error)
 }
 
 // WatcherFactory instances return watchers for a given namespace and UUID.
@@ -130,8 +129,14 @@ type WatcherFactory interface {
 	) (watcher.StringsWatcher, error)
 }
 
+// UserPermissions evaluates user permissions with the controller's engine.
+type UserPermissions interface {
+	ReadUserAccessLevelForTarget(context.Context, user.Name, permission.ID) (permission.Access, error)
+}
+
 // Service provides the API for working with cross model relations.
 type Service struct {
+	permissions     UserPermissions
 	controllerState ControllerState
 	modelState      ModelState
 	statusHistory   StatusHistory
@@ -146,8 +151,10 @@ func NewService(
 	statusHistory StatusHistory,
 	clock clock.Clock,
 	logger logger.Logger,
+	permissions UserPermissions,
 ) *Service {
 	return &Service{
+		permissions:     permissions,
 		controllerState: controllerState,
 		modelState:      modelState,
 		statusHistory:   statusHistory,
@@ -170,9 +177,11 @@ func NewWatchableService(
 	watcherFactory WatcherFactory,
 	clock clock.Clock,
 	logger logger.Logger,
+	permissions UserPermissions,
 ) *WatchableService {
 	return &WatchableService{
 		Service: Service{
+			permissions:     permissions,
 			controllerState: controllerState,
 			modelState:      modelState,
 			statusHistory:   statusHistory,
