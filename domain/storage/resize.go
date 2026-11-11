@@ -49,6 +49,27 @@ type StorageResizeResult struct {
 	Message string
 }
 
+// StorageResizeWork describes the approved machine-local execution target.
+// The executor must still verify device identity and filesystem suitability.
+type StorageResizeWork struct {
+	UUID             StorageResizeUUID
+	RequestedSizeMiB uint64
+	ProviderType     string
+	VolumeID         string
+	VolumeProviderID string
+	DeviceName       string
+	FilesystemID     string
+	MountPoint       string
+}
+
+// StorageResizeReport combines an outcome with observed capacities in MiB.
+// A zero capacity means that the executor made no observation at that layer.
+type StorageResizeReport struct {
+	StorageResizeResult
+	VolumeSizeMiB     uint64
+	FilesystemSizeMiB uint64
+}
+
 // NewStorageResizeUUID creates a new storage resize intent identifier.
 func NewStorageResizeUUID() (StorageResizeUUID, error) {
 	u, err := newUUID()

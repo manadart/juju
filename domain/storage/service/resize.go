@@ -36,6 +36,16 @@ type ResizeState interface {
 	// StorageResizeResultAlreadyRecorded. Unknown requests return
 	// StorageResizeIntentNotFound.
 	SetStorageResizeResult(context.Context, string, internal.StorageResizeResult) error
+
+	// GetStorageResizeRequestsForMachine returns attached or assigned requests.
+	GetStorageResizeRequestsForMachine(context.Context, string) ([]string, error)
+
+	// AssignStorageResize binds execution and revalidates resource identities.
+	AssignStorageResize(context.Context, string, string) (internal.StorageResizeWork, error)
+
+	// SetMachineStorageResizeResult validates ownership and records observed
+	// capacities and the result atomically.
+	SetMachineStorageResizeResult(context.Context, string, string, internal.StorageResizeReport) error
 }
 
 // RequestStorageResize records a target capacity in MiB for an existing storage
