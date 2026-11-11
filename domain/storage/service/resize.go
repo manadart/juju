@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"math"
+	"strings"
 
 	coreerrors "github.com/juju/juju/core/errors"
 	corestorage "github.com/juju/juju/core/storage"
@@ -15,7 +16,7 @@ import (
 	"github.com/juju/juju/internal/errors"
 )
 
-// ResizeState describes persistence of pending storage resize intent.
+// ResizeState describes persistence of storage resize requests and results.
 type ResizeState interface {
 	// CreateStorageResizeIntent records intent for a live storage instance.
 	// It returns StorageInstanceNotFound, StorageInstanceNotAlive, or
@@ -25,6 +26,16 @@ type ResizeState interface {
 	// GetStorageResizeIntent returns intent by UUID, or
 	// StorageResizeIntentNotFound if it does not exist.
 	GetStorageResizeIntent(context.Context, string) (internal.StorageResizeIntent, error)
+
+	// GetStorageResizeRequest returns the original request and its result, or
+	// StorageResizeIntentNotFound when the request does not exist.
+	GetStorageResizeRequest(context.Context, string) (internal.StorageResizeRequest, error)
+
+	// SetStorageResizeResult records the first terminal result. Identical
+	// reports are idempotent; a conflicting result returns
+	// StorageResizeResultAlreadyRecorded. Unknown requests return
+	// StorageResizeIntentNotFound.
+	SetStorageResizeResult(context.Context, string, internal.StorageResizeResult) error
 }
 
 // RequestStorageResize records a target capacity in MiB for an existing storage
@@ -66,7 +77,7 @@ func (s *Service) RequestStorageResize(
 	return uuid, nil
 }
 
-// GetStorageResizeIntent returns a pending request. It returns NotValid for an
+// GetStorageResizeIntent returns the original request. It returns NotValid for an
 // invalid UUID, or StorageResizeIntentNotFound if no such request exists.
 func (s *Service) GetStorageResizeIntent(
 	ctx context.Context, uuid domainstorage.StorageResizeUUID,
@@ -87,4 +98,71 @@ func (s *Service) GetStorageResizeIntent(
 		RequestedSizeMiB:    intent.RequestedSizeMiB,
 		CreatedAt:           intent.CreatedAt,
 	}, nil
+}
+
+// GetStorageResizeRequest returns a request and its pending or terminal result.
+// It returns NotValid for an invalid UUID, or StorageResizeIntentNotFound if
+// the request does not exist. Removing storage does not remove its requests.
+func (s *Service) GetStorageResizeRequest(
+	ctx context.Context, uuid domainstorage.StorageResizeUUID,
+) (domainstorage.StorageResizeRequest, error) {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	if err := uuid.Validate(); err != nil {
+		return domainstorage.StorageResizeRequest{}, errors.Errorf("%w", err).Add(coreerrors.NotValid)
+	}
+	request, err := s.st.GetStorageResizeRequest(ctx, uuid.String())
+	if err != nil {
+		return domainstorage.StorageResizeRequest{}, errors.Errorf("getting storage resize request %q: %w", uuid, err)
+	}
+	return domainstorage.StorageResizeRequest{
+		StorageResizeIntent: domainstorage.StorageResizeIntent{
+			UUID:                domainstorage.StorageResizeUUID(request.UUID),
+			StorageInstanceUUID: domainstorage.StorageInstanceUUID(request.StorageInstanceUUID),
+			RequestedSizeMiB:    request.RequestedSizeMiB,
+			CreatedAt:           request.CreatedAt,
+		},
+		StorageID:   corestorage.ID(request.StorageID),
+		Status:      domainstorage.StorageResizeStatus(request.Status),
+		Message:     request.Message,
+		CompletedAt: request.CompletedAt,
+	}, nil
+}
+
+// RecordStorageResizeResult records a completed or failed result and permits
+// another resize request for the storage. A failed result requires a message.
+// Retrying the same report preserves the original result and completion time.
+//
+// It returns NotValid for invalid input, StorageResizeIntentNotFound for an
+// unknown request, or StorageResizeResultAlreadyRecorded for a conflicting
+// terminal report. Recording a result does not update observed capacity.
+func (s *Service) RecordStorageResizeResult(
+	ctx context.Context, uuid domainstorage.StorageResizeUUID,
+	result domainstorage.StorageResizeResult,
+) error {
+	ctx, span := trace.Start(ctx, trace.NameFromFunc())
+	defer span.End()
+
+	if err := uuid.Validate(); err != nil {
+		return errors.Errorf("%w", err).Add(coreerrors.NotValid)
+	}
+	switch result.Status {
+	case domainstorage.StorageResizeCompleted:
+	case domainstorage.StorageResizeFailed:
+		if strings.TrimSpace(result.Message) == "" {
+			return errors.New("failed resize result requires a message").Add(coreerrors.NotValid)
+		}
+	default:
+		return errors.Errorf("resize result status %q is not terminal", result.Status).Add(coreerrors.NotValid)
+	}
+	err := s.st.SetStorageResizeResult(ctx, uuid.String(), internal.StorageResizeResult{
+		Status:      string(result.Status),
+		Message:     result.Message,
+		CompletedAt: s.StorageService.clock.Now().UTC(),
+	})
+	if err != nil {
+		return errors.Errorf("recording result for storage resize request %q: %w", uuid, err)
+	}
+	return nil
 }

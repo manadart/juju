@@ -48,6 +48,7 @@ type MockStateMockRecorder struct {
 	getStoragePoolUUIDExpects                                      []*gomock.Call2_2[context.Context, string, storage.StoragePoolUUID, error]
 	getStoragePoolUUIDsByNameExpects                               []*gomock.Call2_2[context.Context, []string, []storage.StoragePoolNameUUID, error]
 	getStorageResizeIntentExpects                                  []*gomock.Call2_2[context.Context, string, internal.StorageResizeIntent, error]
+	getStorageResizeRequestExpects                                 []*gomock.Call2_2[context.Context, string, internal.StorageResizeRequest, error]
 	getStorageResourceTagInfoForModelExpects                       []*gomock.Call2_2[context.Context, string, storageprovisioning.ModelResourceTagInfo, error]
 	getVolumeUUIDsByMachinesExpects                                []*gomock.Call2_2[context.Context, []machine.UUID, []storage.VolumeUUID, error]
 	listStoragePoolsExpects                                        []*gomock.Call1_2[context.Context, []storage.StoragePool, error]
@@ -55,6 +56,7 @@ type MockStateMockRecorder struct {
 	listStoragePoolsByNamesAndProvidersExpects                     []*gomock.Call3_2[context.Context, []string, []string, []storage.StoragePool, error]
 	listStoragePoolsByProvidersExpects                             []*gomock.Call2_2[context.Context, []string, []storage.StoragePool, error]
 	replaceStoragePoolExpects                                      []*gomock.Call2_1[context.Context, storage.StoragePool, error]
+	setStorageResizeResultExpects                                  []*gomock.Call3_1[context.Context, string, internal.StorageResizeResult, error]
 }
 
 // NewMockState creates a new mock instance.
@@ -375,6 +377,24 @@ func (mr *MockStateMockRecorder) GetStorageResizeIntent(arg0, arg1 any) *MockSta
 // MockStateGetStorageResizeIntentCall is the typed call wrapper for GetStorageResizeIntent.
 type MockStateGetStorageResizeIntentCall = gomock.Call2_2[context.Context, string, internal.StorageResizeIntent, error]
 
+// GetStorageResizeRequest mocks base method.
+func (m *MockState) GetStorageResizeRequest(arg0 context.Context, arg1 string) (internal.StorageResizeRequest, error) {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch2_2(&m.recorder.getStorageResizeRequestExpects, m.ctrl, m, "GetStorageResizeRequest", arg0, arg1)
+}
+
+// GetStorageResizeRequest indicates an expected call of GetStorageResizeRequest.
+func (mr *MockStateMockRecorder) GetStorageResizeRequest(arg0, arg1 any) *MockStateGetStorageResizeRequestCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall2_2[context.Context, string, internal.StorageResizeRequest, error](mr.mock.ctrl.T, mr.mock, "GetStorageResizeRequest", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1))
+	mr.getStorageResizeRequestExpects = append(mr.getStorageResizeRequestExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStateGetStorageResizeRequestCall is the typed call wrapper for GetStorageResizeRequest.
+type MockStateGetStorageResizeRequestCall = gomock.Call2_2[context.Context, string, internal.StorageResizeRequest, error]
+
 // GetStorageResourceTagInfoForModel mocks base method.
 func (m *MockState) GetStorageResourceTagInfoForModel(ctx context.Context, resourceTagModelConfigKey string) (storageprovisioning.ModelResourceTagInfo, error) {
 	m.ctrl.T.Helper()
@@ -500,6 +520,24 @@ func (mr *MockStateMockRecorder) ReplaceStoragePool(ctx, pool any) *MockStateRep
 
 // MockStateReplaceStoragePoolCall is the typed call wrapper for ReplaceStoragePool.
 type MockStateReplaceStoragePoolCall = gomock.Call2_1[context.Context, storage.StoragePool, error]
+
+// SetStorageResizeResult mocks base method.
+func (m *MockState) SetStorageResizeResult(arg0 context.Context, arg1 string, arg2 internal.StorageResizeResult) error {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch3_1(&m.recorder.setStorageResizeResultExpects, m.ctrl, m, "SetStorageResizeResult", arg0, arg1, arg2)
+}
+
+// SetStorageResizeResult indicates an expected call of SetStorageResizeResult.
+func (mr *MockStateMockRecorder) SetStorageResizeResult(arg0, arg1, arg2 any) *MockStateSetStorageResizeResultCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall3_1[context.Context, string, internal.StorageResizeResult, error](mr.mock.ctrl.T, mr.mock, "SetStorageResizeResult", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2))
+	mr.setStorageResizeResultExpects = append(mr.setStorageResizeResultExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStateSetStorageResizeResultCall is the typed call wrapper for SetStorageResizeResult.
+type MockStateSetStorageResizeResultCall = gomock.Call3_1[context.Context, string, internal.StorageResizeResult, error]
 
 // MockStoragePoolState is a mock of StoragePoolState interface.
 type MockStoragePoolState struct {
