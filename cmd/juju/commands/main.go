@@ -463,6 +463,7 @@ func registerCommands(r commandRegistry) {
 	// Manage storage
 	r.Register(storage.NewAddCommand())
 	r.Register(storage.NewResizeCommand())
+	r.Register(storage.NewShowResizeCommand())
 	r.Register(storage.NewListCommand())
 	r.Register(storage.NewPoolCreateCommand())
 	r.Register(storage.NewPoolListCommand())

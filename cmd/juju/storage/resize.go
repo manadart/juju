@@ -5,9 +5,9 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"math"
 
+	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/gnuflag"
 	"github.com/juju/utils/v4"
@@ -15,7 +15,9 @@ import (
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/modelcmd"
+	"github.com/juju/juju/core/output"
 	corestorage "github.com/juju/juju/core/storage"
+	"github.com/juju/juju/rpc/params"
 )
 
 // NewResizeCommand returns a command for requesting a storage resize.
@@ -28,8 +30,9 @@ func NewResizeCommand() cmd.Command {
 }
 
 type storageResizeAPI interface {
-	Close() error
+	storageResizeResultAPI
 	ResizeStorage(context.Context, string, uint64) (string, error)
+	SupportsStorageResizeResults() bool
 }
 
 type resizeCommand struct {
@@ -39,6 +42,8 @@ type resizeCommand struct {
 	storageID  corestorage.ID
 	size       string
 	sizeMiB    uint64
+	wait       bool
+	out        cmd.Output
 	newAPIFunc func(context.Context) (storageResizeAPI, error)
 }
 
@@ -57,11 +62,16 @@ The command prints the UUID of the recorded request. Recording a request does
 not mean the resize has been approved or completed. Only one request can be
 pending for a storage instance.
 
+Use --wait to wait until a completed or failed result is reported. The result
+is printed instead of just the UUID, and a failed resize exits unsuccessfully.
+Stopping the wait does not cancel the request. Use show-storage-resize with the
+request UUID to retrieve the result later.
+
 Run any charm-specific preparation action separately before requesting a resize.
 This command does not pause charm hooks or run preparation actions.
 `,
 		Examples: "juju resize-storage pgdata/0 --size 20G",
-		SeeAlso:  []string{"storage", "show-storage", "add-storage", "run"},
+		SeeAlso:  []string{"show-storage-resize", "storage", "show-storage", "add-storage", "run"},
 	})
 }
 
@@ -69,6 +79,8 @@ This command does not pause charm hooks or run preparation actions.
 func (c *resizeCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.StorageCommandBase.SetFlags(f)
 	f.StringVar(&c.size, "size", "", "Requested total capacity (for example, 20G)")
+	f.BoolVar(&c.wait, "wait", false, "Wait for the resize result")
+	c.out.AddFlags(f, "yaml", output.DefaultFormatters)
 }
 
 // Init implements Command.Init.
@@ -101,10 +113,30 @@ func (c *resizeCommand) Run(ctx *cmd.Context) error {
 		return err
 	}
 	defer api.Close()
+	if c.wait && !api.SupportsStorageResizeResults() {
+		return errors.NotSupportedf("waiting for storage resize results on this version of Juju")
+	}
 	uuid, err := api.ResizeStorage(ctx, c.storageID.String(), c.sizeMiB)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(ctx.Stdout, uuid)
-	return err
+	if !c.wait {
+		return c.out.Write(ctx, uuid)
+	}
+	ctx.Infof("Resize request %s recorded. Waiting for a result.", uuid)
+	result, err := getStorageResizeResult(ctx, api, uuid, true, clock.WallClock)
+	if err != nil {
+		return errors.Annotatef(err, "waiting for resize request %s", uuid)
+	}
+	formatted, err := formatStorageResizeResult(result)
+	if err != nil {
+		return err
+	}
+	if err := c.out.Write(ctx, formatted); err != nil {
+		return err
+	}
+	if result.Status == params.StorageResizeFailed {
+		return cmd.ErrSilent
+	}
+	return nil
 }

@@ -14258,7 +14258,7 @@
     {
         "Name": "Storage",
         "Description": "",
-        "Version": 8,
+        "Version": 9,
         "Schema": {
             "type": "object",
             "properties": {
@@ -14402,6 +14402,17 @@
                         },
                         "Result": {
                             "$ref": "#/definitions/StorageDetailsResults"
+                        }
+                    }
+                },
+                "StorageResizeDetails": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeRequestArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/StorageResizeDetails"
                         }
                     }
                 },
@@ -15190,6 +15201,54 @@
                     "required": [
                         "storage-tag",
                         "size-mib"
+                    ]
+                },
+                "StorageResizeDetails": {
+                    "type": "object",
+                    "properties": {
+                        "completed-at": {
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "created-at": {
+                            "type": "string",
+                            "format": "date-time"
+                        },
+                        "message": {
+                            "type": "string"
+                        },
+                        "requested-size-mib": {
+                            "type": "integer"
+                        },
+                        "status": {
+                            "type": "string"
+                        },
+                        "storage-tag": {
+                            "type": "string"
+                        },
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid",
+                        "storage-tag",
+                        "requested-size-mib",
+                        "status",
+                        "created-at"
+                    ]
+                },
+                "StorageResizeRequestArgs": {
+                    "type": "object",
+                    "properties": {
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "uuid"
                     ]
                 },
                 "StorageResizeResult": {

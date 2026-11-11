@@ -12,6 +12,7 @@ import (
 	coreerrors "github.com/juju/juju/core/errors"
 	coremodel "github.com/juju/juju/core/model"
 	corestorage "github.com/juju/juju/core/storage"
+	domainstorage "github.com/juju/juju/domain/storage"
 	storageerrors "github.com/juju/juju/domain/storage/errors"
 	"github.com/juju/juju/internal/errors"
 	"github.com/juju/juju/rpc/params"
@@ -60,8 +61,46 @@ func (a *StorageAPI) ResizeStorage(
 	return params.StorageResizeResult{UUID: uuid.String()}, nil
 }
 
+// StorageResizeDetails returns a recorded request and its current result.
+// Results remain readable after storage removal and while changes are blocked.
+func (a *StorageAPI) StorageResizeDetails(
+	ctx context.Context, args params.StorageResizeRequestArgs,
+) (params.StorageResizeDetails, error) {
+	if err := a.checkCanRead(ctx); err != nil {
+		return params.StorageResizeDetails{}, err
+	}
+	request, err := a.storageService.GetStorageResizeRequest(
+		ctx, domainstorage.StorageResizeUUID(args.UUID),
+	)
+	if errors.Is(err, storageerrors.StorageResizeIntentNotFound) {
+		return params.StorageResizeDetails{}, apiservererrors.ParamsErrorf(
+			params.CodeNotFound, "%s", err,
+		)
+	} else if err != nil {
+		return params.StorageResizeDetails{}, apiservererrors.ServerError(err)
+	}
+	return params.StorageResizeDetails{
+		UUID:             request.UUID.String(),
+		StorageTag:       names.NewStorageTag(request.StorageID.String()).String(),
+		RequestedSizeMiB: request.RequestedSizeMiB,
+		Status:           string(request.Status),
+		Message:          request.Message,
+		CreatedAt:        request.CreatedAt,
+		CompletedAt:      request.CompletedAt,
+	}, nil
+}
+
 // ResizeStorage is unavailable in version 6.
 func (*StorageAPIv6) ResizeStorage(_, _, _ struct{}) {}
 
 // ResizeStorage is unavailable in version 7.
 func (*StorageAPIv7) ResizeStorage(_, _, _ struct{}) {}
+
+// StorageResizeDetails is unavailable in version 6.
+func (*StorageAPIv6) StorageResizeDetails(_, _, _ struct{}) {}
+
+// StorageResizeDetails is unavailable in version 7.
+func (*StorageAPIv7) StorageResizeDetails(_, _, _ struct{}) {}
+
+// StorageResizeDetails is unavailable in version 8.
+func (*StorageAPIv8) StorageResizeDetails(_, _, _ struct{}) {}
