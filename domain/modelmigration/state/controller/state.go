@@ -2099,24 +2099,29 @@ func (s *State) CompleteModelRedirectAndPurge(
 	doneID := int(modelmigration.PhaseDone)
 	reapID := int(modelmigration.PhaseReap)
 
-	// Delete offer permission rows via a CTE that resolves object_type names.
+	// Delete permissions for the offers exported with this migration.
 	deleteOfferPermsStmt, err := s.Prepare(`
 WITH offer_uuids AS (
-    SELECT offer_uuid FROM model_migration_export_offer
-    WHERE migration_uuid = $migrationUUIDArg.migration_uuid
+    SELECT o.offer_uuid AS offer_uuid
+    FROM model_migration_export_offer AS o
+    WHERE o.migration_uuid = $migrationUUIDArg.migration_uuid
 )
-DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE object_type_id = (SELECT id FROM permission_object_type WHERE type = 'offer')
-AND   grant_on IN (SELECT offer_uuid FROM offer_uuids))`, migrationUUIDArg{})
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND t.object_type = 'offer'
+AND t.object_id IN (SELECT o.offer_uuid FROM offer_uuids AS o)
+`, migrationUUIDArg{})
 	if err != nil {
 		return errors.Capture(err)
 	}
 
 	// Delete model permission rows.
 	deleteModelPermsStmt, err := s.Prepare(`
-DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE object_type_id = (SELECT id FROM permission_object_type WHERE type = 'model')
-AND   grant_on = $modelUUIDArg.model_uuid)`, modelUUIDArg{})
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND t.object_type = 'model'
+AND t.object_id = $modelUUIDArg.model_uuid
+`, modelUUIDArg{})
 	if err != nil {
 		return errors.Capture(err)
 	}

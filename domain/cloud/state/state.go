@@ -740,8 +740,10 @@ WHERE cloud_uuid IN (SELECT uuid FROM target_cloud)
 	}
 
 	permissionsStmt, err := st.Prepare(`
-DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $dbCloudName.name)`, dbCloudName{})
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND t.object_id = $dbCloudName.name
+`, dbCloudName{})
 	if err != nil {
 		return errors.Errorf("preparing delete cloud from permissions statement: %w", err)
 	}

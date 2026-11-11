@@ -540,8 +540,18 @@ WHERE user_public_ssh_key_id IN (SELECT id
 		return errors.Errorf("preparing activation key deletion query: %w", err)
 	}
 
-	deletePermStmt, err := st.Prepare(`DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_to = $userUUID.uuid)`, userUUID{})
+	deletePermStmt, err := st.Prepare(`
+WITH selected_grants AS (
+    SELECT p.uuid AS uuid
+    FROM permission AS p
+    WHERE p.grant_to = $userUUID.uuid
+)
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND COALESCE(t.permission_uuid, t.ulid) IN (
+    SELECT g.uuid FROM selected_grants AS g
+)
+`, userUUID{})
 	if err != nil {
 		return errors.Errorf("preparing permission deletion query: %w", err)
 	}

@@ -946,8 +946,11 @@ func (s *State) Delete(
 		`DELETE FROM model_secret_backend WHERE model_uuid = $dbUUID.uuid`,
 		`DELETE FROM secret_backend_reference WHERE model_uuid = $dbUUID.uuid`,
 		`DELETE FROM model_authorized_keys WHERE model_uuid = $dbUUID.uuid`,
-		`DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_on = $dbUUID.uuid)`,
+		`
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND t.object_id = $dbUUID.uuid
+`,
 		`DELETE FROM model_last_login WHERE model_uuid = $dbUUID.uuid`,
 	}
 

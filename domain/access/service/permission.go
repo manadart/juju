@@ -18,12 +18,12 @@ import (
 	"github.com/juju/juju/internal/uuid"
 )
 
-// PermissionService provides the API for working with permissions.
 // PermissionChecker evaluates relationships using the persisted model.
 type PermissionChecker interface {
 	Check(context.Context, string, corepermission.ID, corepermission.Access) (bool, error)
 }
 
+// PermissionService provides the API for working with permissions.
 type PermissionService struct {
 	st      PermissionState
 	checker PermissionChecker
@@ -123,7 +123,7 @@ func (s *PermissionService) ReadUserAccessForTarget(ctx context.Context, subject
 // If the access level of a user cannot be found then
 // [accesserrors.AccessNotFound] is returned.
 // For external users, inheritance from everyone@external is resolved
-// transparently when the user has no explicit permissions.
+// transparently, taking the greater of explicit and public access.
 func (s *PermissionService) ReadUserAccessLevelForTarget(ctx context.Context, subject user.Name, target corepermission.ID) (corepermission.Access, error) {
 	ctx, span := trace.Start(ctx, trace.NameFromFunc())
 	defer span.End()

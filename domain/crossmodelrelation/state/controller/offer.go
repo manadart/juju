@@ -274,19 +274,23 @@ func (st *State) updateOfferPermission(
 	}
 
 	updateStmt, err := st.Prepare(`
-UPDATE openfga_tuple
+WITH selected_grants AS (
+    SELECT p.uuid AS uuid
+    FROM permission AS p
+    JOIN v_user_auth AS u ON u.uuid = p.grant_to
+    WHERE p.grant_on = $permInOut.grant_on
+    AND u.name = $permInOut.name
+    AND u.disabled = false
+    AND u.removed = false
+)
+UPDATE openfga_tuple AS t
 SET relation = replace($permInOut.access_type, '-', '_'),
     inserted_at = strftime('%Y-%m-%dT%H:%M:%f000000Z', 'now')
-WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
-AND    grant_to IN (
-           SELECT uuid
-           FROM   v_user_auth
-           WHERE  name = $permInOut.name
-           AND    removed = false
-           AND    disabled = false
-       )
-)`, inOut)
+WHERE t.store_id = '01J00000000000000000000000'
+AND COALESCE(t.permission_uuid, t.ulid) IN (
+    SELECT g.uuid FROM selected_grants AS g
+)
+`, inOut)
 	if err != nil {
 		return errors.Errorf("preparing update offer permission: %w", err)
 	}
@@ -308,15 +312,21 @@ func (st *State) deleteOfferPermission(
 	}
 
 	deleteStmt, err := st.Prepare(`
-DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
-AND    grant_to IN (
-           SELECT uuid
-           FROM   v_user_auth
-           WHERE  name = $permInOut.name
-           AND    removed = false
-           AND    disabled = false
-       ))`, inOut)
+WITH selected_grants AS (
+    SELECT p.uuid AS uuid
+    FROM permission AS p
+    JOIN v_user_auth AS u ON u.uuid = p.grant_to
+    WHERE p.grant_on = $permInOut.grant_on
+    AND u.name = $permInOut.name
+    AND u.disabled = false
+    AND u.removed = false
+)
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND COALESCE(t.permission_uuid, t.ulid) IN (
+    SELECT g.uuid FROM selected_grants AS g
+)
+`, inOut)
 	if err != nil {
 		return errors.Errorf("preparing delete offer permission: %w", err)
 	}

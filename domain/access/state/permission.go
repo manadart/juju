@@ -162,8 +162,10 @@ func (st *PermissionState) DeletePermissionsByGrantOnUUID(ctx context.Context, p
 
 	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
 		deletePermissionStmt, err := st.Prepare(`
-DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE grant_on IN ($uuids[:]))`, uuids{})
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND t.object_id IN ($uuids[:])
+`, uuids{})
 		if err != nil {
 			return errors.Capture(err)
 		}
@@ -939,13 +941,19 @@ func (st *PermissionState) deletePermission(ctx context.Context, tx *sqlair.TX, 
 	// unique, thus it is all that is deleted to select the row to be
 	// deleted.
 	deletePermission := `
-DELETE FROM openfga_tuple WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
-AND    grant_to IN (
-       SELECT uuid
-       FROM   user
-       WHERE  name = $permInOut.name
-))`
+WITH selected_grants AS (
+    SELECT p.uuid AS uuid
+    FROM permission AS p
+    JOIN user AS u ON u.uuid = p.grant_to
+    WHERE p.grant_on = $permInOut.grant_on
+    AND u.name = $permInOut.name
+)
+DELETE FROM openfga_tuple AS t
+WHERE t.store_id = '01J00000000000000000000000'
+AND COALESCE(t.permission_uuid, t.ulid) IN (
+    SELECT g.uuid FROM selected_grants AS g
+)
+`
 	deletePermissionStmt, err := st.Prepare(deletePermission, permInOut{})
 	if err != nil {
 		return errors.Capture(err)
@@ -964,19 +972,23 @@ AND    grant_to IN (
 
 func (st *PermissionState) updatePermission(ctx context.Context, tx *sqlair.TX, subjectName, grantOn, access string) error {
 	updateQuery := `
-UPDATE openfga_tuple
+WITH selected_grants AS (
+    SELECT p.uuid AS uuid
+    FROM permission AS p
+    JOIN v_user_auth AS u ON u.uuid = p.grant_to
+    WHERE p.grant_on = $permInOut.grant_on
+    AND u.name = $permInOut.name
+    AND u.disabled = false
+    AND u.removed = false
+)
+UPDATE openfga_tuple AS t
 SET relation = replace($permInOut.access_type, '-', '_'),
     inserted_at = strftime('%Y-%m-%dT%H:%M:%f000000Z', 'now')
-WHERE store_id = '01J00000000000000000000000'
-AND COALESCE(permission_uuid, ulid) IN (SELECT uuid FROM permission WHERE  grant_on = $permInOut.grant_on
-AND    grant_to IN (
-           SELECT uuid
-           FROM   v_user_auth
-           WHERE  name = $permInOut.name
-           AND    removed = false
-           AND    disabled = false
-       )
-)`
+WHERE t.store_id = '01J00000000000000000000000'
+AND COALESCE(t.permission_uuid, t.ulid) IN (
+    SELECT g.uuid FROM selected_grants AS g
+)
+`
 	updateQueryStmt, err := st.Prepare(updateQuery, permInOut{})
 	if err != nil {
 		return errors.Errorf("preparing updatePermission query: %w", err)
