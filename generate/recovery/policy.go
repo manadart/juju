@@ -15,6 +15,10 @@ package main
 var recoveryExclusions = map[string]string{
 	"schema": "Keep the target's applied migration bookkeeping.",
 
+    "openfga_changelog": "Rebuild authorisation changes from replayed tuples.",
+    "openfga_sequence": "Keep the target authorisation change sequence.",
+    "openfga_operation": "Do not replay source in-flight request identities.",
+
 	"change_log":           "Do not replay source change notifications.",
 	"change_log_witness":   "Keep target watcher progress.",
 	"change_log_edit_type": "Identical schema seeds need no replay.",

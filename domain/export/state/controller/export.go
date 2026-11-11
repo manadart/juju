@@ -309,25 +309,37 @@ func (st *State) Export(ctx context.Context) (*v4_1_0.ControllerExport, error) {
 	if err != nil {
 		return nil, fmt.Errorf("preparing ObjectStorePlacement statement: %w", err)
 	}
+	stmtOpenfgaAssertion, err := sqlair.Prepare(`SELECT &OpenfgaAssertion.* FROM "openfga_assertion"`, v4_1_0.OpenfgaAssertion{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaAssertion statement: %w", err)
+	}
+	stmtOpenfgaAuthorizationModel, err := sqlair.Prepare(`SELECT &OpenfgaAuthorizationModel.* FROM "openfga_authorization_model"`, v4_1_0.OpenfgaAuthorizationModel{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaAuthorizationModel statement: %w", err)
+	}
+	stmtOpenfgaChangelog, err := sqlair.Prepare(`SELECT &OpenfgaChangelog.* FROM "openfga_changelog"`, v4_1_0.OpenfgaChangelog{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaChangelog statement: %w", err)
+	}
+	stmtOpenfgaOperation, err := sqlair.Prepare(`SELECT &OpenfgaOperation.* FROM "openfga_operation"`, v4_1_0.OpenfgaOperation{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaOperation statement: %w", err)
+	}
+	stmtOpenfgaSequence, err := sqlair.Prepare(`SELECT &OpenfgaSequence.* FROM "openfga_sequence"`, v4_1_0.OpenfgaSequence{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaSequence statement: %w", err)
+	}
+	stmtOpenfgaStore, err := sqlair.Prepare(`SELECT &OpenfgaStore.* FROM "openfga_store"`, v4_1_0.OpenfgaStore{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaStore statement: %w", err)
+	}
+	stmtOpenfgaTuple, err := sqlair.Prepare(`SELECT &OpenfgaTuple.* FROM "openfga_tuple"`, v4_1_0.OpenfgaTuple{})
+	if err != nil {
+		return nil, fmt.Errorf("preparing OpenfgaTuple statement: %w", err)
+	}
 	stmtPasswordHashAlgorithm, err := sqlair.Prepare(`SELECT &PasswordHashAlgorithm.* FROM "password_hash_algorithm"`, v4_1_0.PasswordHashAlgorithm{})
 	if err != nil {
 		return nil, fmt.Errorf("preparing PasswordHashAlgorithm statement: %w", err)
-	}
-	stmtPermission, err := sqlair.Prepare(`SELECT &Permission.* FROM "permission"`, v4_1_0.Permission{})
-	if err != nil {
-		return nil, fmt.Errorf("preparing Permission statement: %w", err)
-	}
-	stmtPermissionAccessType, err := sqlair.Prepare(`SELECT &PermissionAccessType.* FROM "permission_access_type"`, v4_1_0.PermissionAccessType{})
-	if err != nil {
-		return nil, fmt.Errorf("preparing PermissionAccessType statement: %w", err)
-	}
-	stmtPermissionObjectAccess, err := sqlair.Prepare(`SELECT &PermissionObjectAccess.* FROM "permission_object_access"`, v4_1_0.PermissionObjectAccess{})
-	if err != nil {
-		return nil, fmt.Errorf("preparing PermissionObjectAccess statement: %w", err)
-	}
-	stmtPermissionObjectType, err := sqlair.Prepare(`SELECT &PermissionObjectType.* FROM "permission_object_type"`, v4_1_0.PermissionObjectType{})
-	if err != nil {
-		return nil, fmt.Errorf("preparing PermissionObjectType statement: %w", err)
 	}
 	stmtSchema, err := sqlair.Prepare(`SELECT &Schema.* FROM "schema"`, v4_1_0.Schema{})
 	if err != nil {
@@ -624,20 +636,29 @@ func (st *State) Export(ctx context.Context) (*v4_1_0.ControllerExport, error) {
 		if err := tx.Query(ctx, stmtObjectStorePlacement).GetAll(&controllerExport.ObjectStorePlacement); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
 			return fmt.Errorf("querying ObjectStorePlacement (table object_store_placement): %w", err)
 		}
+		if err := tx.Query(ctx, stmtOpenfgaAssertion).GetAll(&controllerExport.OpenfgaAssertion); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaAssertion (table openfga_assertion): %w", err)
+		}
+		if err := tx.Query(ctx, stmtOpenfgaAuthorizationModel).GetAll(&controllerExport.OpenfgaAuthorizationModel); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaAuthorizationModel (table openfga_authorization_model): %w", err)
+		}
+		if err := tx.Query(ctx, stmtOpenfgaChangelog).GetAll(&controllerExport.OpenfgaChangelog); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaChangelog (table openfga_changelog): %w", err)
+		}
+		if err := tx.Query(ctx, stmtOpenfgaOperation).GetAll(&controllerExport.OpenfgaOperation); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaOperation (table openfga_operation): %w", err)
+		}
+		if err := tx.Query(ctx, stmtOpenfgaSequence).GetAll(&controllerExport.OpenfgaSequence); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaSequence (table openfga_sequence): %w", err)
+		}
+		if err := tx.Query(ctx, stmtOpenfgaStore).GetAll(&controllerExport.OpenfgaStore); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaStore (table openfga_store): %w", err)
+		}
+		if err := tx.Query(ctx, stmtOpenfgaTuple).GetAll(&controllerExport.OpenfgaTuple); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
+			return fmt.Errorf("querying OpenfgaTuple (table openfga_tuple): %w", err)
+		}
 		if err := tx.Query(ctx, stmtPasswordHashAlgorithm).GetAll(&controllerExport.PasswordHashAlgorithm); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
 			return fmt.Errorf("querying PasswordHashAlgorithm (table password_hash_algorithm): %w", err)
-		}
-		if err := tx.Query(ctx, stmtPermission).GetAll(&controllerExport.Permission); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
-			return fmt.Errorf("querying Permission (table permission): %w", err)
-		}
-		if err := tx.Query(ctx, stmtPermissionAccessType).GetAll(&controllerExport.PermissionAccessType); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
-			return fmt.Errorf("querying PermissionAccessType (table permission_access_type): %w", err)
-		}
-		if err := tx.Query(ctx, stmtPermissionObjectAccess).GetAll(&controllerExport.PermissionObjectAccess); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
-			return fmt.Errorf("querying PermissionObjectAccess (table permission_object_access): %w", err)
-		}
-		if err := tx.Query(ctx, stmtPermissionObjectType).GetAll(&controllerExport.PermissionObjectType); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
-			return fmt.Errorf("querying PermissionObjectType (table permission_object_type): %w", err)
 		}
 		if err := tx.Query(ctx, stmtSchema).GetAll(&controllerExport.Schema); err != nil && !errors.Is(err, sqlair.ErrNoRows) {
 			return fmt.Errorf("querying Schema (table schema): %w", err)

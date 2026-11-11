@@ -414,36 +414,45 @@ func decodeControllerDump(dump *dump) (*recovery.ControllerDump, error) {
 		case "object_store_placement":
 			// Rebuild placements using the supplied target node.
 			continue
+		case "openfga_assertion":
+			decoded, err := decodeRows[exporttypes.OpenfgaAssertion](rows)
+			if err != nil {
+				return nil, errors.Errorf("table %q: %w", table, err)
+			}
+			out.OpenfgaAssertion = decoded
+		case "openfga_authorization_model":
+			decoded, err := decodeRows[exporttypes.OpenfgaAuthorizationModel](rows)
+			if err != nil {
+				return nil, errors.Errorf("table %q: %w", table, err)
+			}
+			out.OpenfgaAuthorizationModel = decoded
+		case "openfga_changelog":
+			// Rebuild authorisation changes from replayed tuples.
+			continue
+		case "openfga_operation":
+			// Do not replay source in-flight request identities.
+			continue
+		case "openfga_sequence":
+			// Keep the target authorisation change sequence.
+			continue
+		case "openfga_store":
+			decoded, err := decodeRows[exporttypes.OpenfgaStore](rows)
+			if err != nil {
+				return nil, errors.Errorf("table %q: %w", table, err)
+			}
+			out.OpenfgaStore = decoded
+		case "openfga_tuple":
+			decoded, err := decodeRows[exporttypes.OpenfgaTuple](rows)
+			if err != nil {
+				return nil, errors.Errorf("table %q: %w", table, err)
+			}
+			out.OpenfgaTuple = decoded
 		case "password_hash_algorithm":
 			decoded, err := decodeRows[exporttypes.PasswordHashAlgorithm](rows)
 			if err != nil {
 				return nil, errors.Errorf("table %q: %w", table, err)
 			}
 			out.PasswordHashAlgorithm = decoded
-		case "permission":
-			decoded, err := decodeRows[exporttypes.Permission](rows)
-			if err != nil {
-				return nil, errors.Errorf("table %q: %w", table, err)
-			}
-			out.Permission = decoded
-		case "permission_access_type":
-			decoded, err := decodeRows[exporttypes.PermissionAccessType](rows)
-			if err != nil {
-				return nil, errors.Errorf("table %q: %w", table, err)
-			}
-			out.PermissionAccessType = decoded
-		case "permission_object_access":
-			decoded, err := decodeRows[exporttypes.PermissionObjectAccess](rows)
-			if err != nil {
-				return nil, errors.Errorf("table %q: %w", table, err)
-			}
-			out.PermissionObjectAccess = decoded
-		case "permission_object_type":
-			decoded, err := decodeRows[exporttypes.PermissionObjectType](rows)
-			if err != nil {
-				return nil, errors.Errorf("table %q: %w", table, err)
-			}
-			out.PermissionObjectType = decoded
 		case "schema":
 			// Keep the target's applied migration bookkeeping.
 			continue

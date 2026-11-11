@@ -492,33 +492,63 @@ type ObjectStorePlacement struct {
 	NodeID string `db:"node_id" json:"node_id" yaml:"node_id"`
 }
 
+type OpenfgaAssertion struct {
+	StoreID    string `db:"store_id" json:"store_id" yaml:"store_id"`
+	ModelID    string `db:"model_id" json:"model_id" yaml:"model_id"`
+	Assertions string `db:"assertions" json:"assertions" yaml:"assertions"`
+}
+
+type OpenfgaAuthorizationModel struct {
+	StoreID string `db:"store_id" json:"store_id" yaml:"store_id"`
+	ModelID string `db:"model_id" json:"model_id" yaml:"model_id"`
+	Model   string `db:"model" json:"model" yaml:"model"`
+}
+
+type OpenfgaChangelog struct {
+	StoreID    string `db:"store_id" json:"store_id" yaml:"store_id"`
+	Ulid       string `db:"ulid" json:"ulid" yaml:"ulid"`
+	ObjectType string `db:"object_type" json:"object_type" yaml:"object_type"`
+	ObjectID   string `db:"object_id" json:"object_id" yaml:"object_id"`
+	Relation   string `db:"relation" json:"relation" yaml:"relation"`
+	User       string `db:"user" json:"user" yaml:"user"`
+	Condition  string `db:"condition" json:"condition" yaml:"condition"`
+	Operation  int64  `db:"operation" json:"operation" yaml:"operation"`
+	InsertedAt string `db:"inserted_at" json:"inserted_at" yaml:"inserted_at"`
+}
+
+type OpenfgaOperation struct {
+	Ulid string `db:"ulid" json:"ulid" yaml:"ulid"`
+}
+
+type OpenfgaSequence struct {
+	ID      int64 `db:"id" json:"id" yaml:"id"`
+	Millis  int64 `db:"millis" json:"millis" yaml:"millis"`
+	Counter int64 `db:"counter" json:"counter" yaml:"counter"`
+}
+
+type OpenfgaStore struct {
+	ID        string  `db:"id" json:"id" yaml:"id"`
+	Name      string  `db:"name" json:"name" yaml:"name"`
+	CreatedAt string  `db:"created_at" json:"created_at" yaml:"created_at"`
+	UpdatedAt string  `db:"updated_at" json:"updated_at" yaml:"updated_at"`
+	DeletedAt *string `db:"deleted_at" json:"deleted_at" yaml:"deleted_at"`
+}
+
+type OpenfgaTuple struct {
+	StoreID        string  `db:"store_id" json:"store_id" yaml:"store_id"`
+	ObjectType     string  `db:"object_type" json:"object_type" yaml:"object_type"`
+	ObjectID       string  `db:"object_id" json:"object_id" yaml:"object_id"`
+	Relation       string  `db:"relation" json:"relation" yaml:"relation"`
+	User           string  `db:"user" json:"user" yaml:"user"`
+	Condition      string  `db:"condition" json:"condition" yaml:"condition"`
+	PermissionUUID *string `db:"permission_uuid" json:"permission_uuid" yaml:"permission_uuid"`
+	Ulid           string  `db:"ulid" json:"ulid" yaml:"ulid"`
+	InsertedAt     string  `db:"inserted_at" json:"inserted_at" yaml:"inserted_at"`
+}
+
 type PasswordHashAlgorithm struct {
 	ID   *int64 `db:"id" json:"id" yaml:"id"`
 	Name string `db:"name" json:"name" yaml:"name"`
-}
-
-type Permission struct {
-	UUID         string `db:"uuid" json:"uuid" yaml:"uuid"`
-	AccessTypeID int64  `db:"access_type_id" json:"access_type_id" yaml:"access_type_id"`
-	ObjectTypeID int64  `db:"object_type_id" json:"object_type_id" yaml:"object_type_id"`
-	GrantOn      string `db:"grant_on" json:"grant_on" yaml:"grant_on"`
-	GrantTo      string `db:"grant_to" json:"grant_to" yaml:"grant_to"`
-}
-
-type PermissionAccessType struct {
-	ID   *int64 `db:"id" json:"id" yaml:"id"`
-	Type string `db:"type" json:"type" yaml:"type"`
-}
-
-type PermissionObjectAccess struct {
-	ID           *int64 `db:"id" json:"id" yaml:"id"`
-	AccessTypeID int64  `db:"access_type_id" json:"access_type_id" yaml:"access_type_id"`
-	ObjectTypeID int64  `db:"object_type_id" json:"object_type_id" yaml:"object_type_id"`
-}
-
-type PermissionObjectType struct {
-	ID   *int64 `db:"id" json:"id" yaml:"id"`
-	Type string `db:"type" json:"type" yaml:"type"`
 }
 
 type Schema struct {
@@ -708,11 +738,14 @@ type ControllerExport struct {
 	ObjectStoreMetadata                         []ObjectStoreMetadata                         `json:"object_store_metadata" yaml:"object_store_metadata"`
 	ObjectStoreMetadataPath                     []ObjectStoreMetadataPath                     `json:"object_store_metadata_path" yaml:"object_store_metadata_path"`
 	ObjectStorePlacement                        []ObjectStorePlacement                        `json:"object_store_placement" yaml:"object_store_placement"`
+	OpenfgaAssertion                            []OpenfgaAssertion                            `json:"openfga_assertion" yaml:"openfga_assertion"`
+	OpenfgaAuthorizationModel                   []OpenfgaAuthorizationModel                   `json:"openfga_authorization_model" yaml:"openfga_authorization_model"`
+	OpenfgaChangelog                            []OpenfgaChangelog                            `json:"openfga_changelog" yaml:"openfga_changelog"`
+	OpenfgaOperation                            []OpenfgaOperation                            `json:"openfga_operation" yaml:"openfga_operation"`
+	OpenfgaSequence                             []OpenfgaSequence                             `json:"openfga_sequence" yaml:"openfga_sequence"`
+	OpenfgaStore                                []OpenfgaStore                                `json:"openfga_store" yaml:"openfga_store"`
+	OpenfgaTuple                                []OpenfgaTuple                                `json:"openfga_tuple" yaml:"openfga_tuple"`
 	PasswordHashAlgorithm                       []PasswordHashAlgorithm                       `json:"password_hash_algorithm" yaml:"password_hash_algorithm"`
-	Permission                                  []Permission                                  `json:"permission" yaml:"permission"`
-	PermissionAccessType                        []PermissionAccessType                        `json:"permission_access_type" yaml:"permission_access_type"`
-	PermissionObjectAccess                      []PermissionObjectAccess                      `json:"permission_object_access" yaml:"permission_object_access"`
-	PermissionObjectType                        []PermissionObjectType                        `json:"permission_object_type" yaml:"permission_object_type"`
 	Schema                                      []Schema                                      `json:"schema" yaml:"schema"`
 	SecretBackend                               []SecretBackend                               `json:"secret_backend" yaml:"secret_backend"`
 	SecretBackendConfig                         []SecretBackendConfig                         `json:"secret_backend_config" yaml:"secret_backend_config"`

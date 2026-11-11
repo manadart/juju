@@ -674,6 +674,50 @@ func (st *State) LoadControllerDump(ctx context.Context, dump *recovery.Controll
 			},
 		})
 	}
+	if dump.Present["openfga_assertion"] {
+		tables = append(tables, replayTable{
+			name:      "openfga_assertion",
+			deleteSQL: `DELETE FROM "openfga_assertion" AS t`,
+			insertSQL: `INSERT INTO "openfga_assertion" ("store_id", "model_id", "assertions") SELECT $OpenfgaAssertion.store_id AS "store_id", $OpenfgaAssertion.model_id AS "model_id", $OpenfgaAssertion.assertions AS "assertions"`,
+			sample:    exporttypes.OpenfgaAssertion{},
+			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
+				return insertRows(ctx, tx, stmt, dump.OpenfgaAssertion, nil)
+			},
+		})
+	}
+	if dump.Present["openfga_authorization_model"] {
+		tables = append(tables, replayTable{
+			name:      "openfga_authorization_model",
+			deleteSQL: `DELETE FROM "openfga_authorization_model" AS t`,
+			insertSQL: `INSERT INTO "openfga_authorization_model" ("store_id", "model_id", "model") SELECT $OpenfgaAuthorizationModel.store_id AS "store_id", $OpenfgaAuthorizationModel.model_id AS "model_id", $OpenfgaAuthorizationModel.model AS "model"`,
+			sample:    exporttypes.OpenfgaAuthorizationModel{},
+			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
+				return insertRows(ctx, tx, stmt, dump.OpenfgaAuthorizationModel, nil)
+			},
+		})
+	}
+	if dump.Present["openfga_store"] {
+		tables = append(tables, replayTable{
+			name:      "openfga_store",
+			deleteSQL: `DELETE FROM "openfga_store" AS t`,
+			insertSQL: `INSERT INTO "openfga_store" ("id", "name", "created_at", "updated_at", "deleted_at") SELECT $OpenfgaStore.id AS "id", $OpenfgaStore.name AS "name", $OpenfgaStore.created_at AS "created_at", $OpenfgaStore.updated_at AS "updated_at", $OpenfgaStore.deleted_at AS "deleted_at"`,
+			sample:    exporttypes.OpenfgaStore{},
+			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
+				return insertRows(ctx, tx, stmt, dump.OpenfgaStore, nil)
+			},
+		})
+	}
+	if dump.Present["openfga_tuple"] {
+		tables = append(tables, replayTable{
+			name:      "openfga_tuple",
+			deleteSQL: `DELETE FROM "openfga_tuple" AS t`,
+			insertSQL: `INSERT INTO "openfga_tuple" ("store_id", "object_type", "object_id", "relation", "user", "condition", "permission_uuid", "ulid", "inserted_at") SELECT $OpenfgaTuple.store_id AS "store_id", $OpenfgaTuple.object_type AS "object_type", $OpenfgaTuple.object_id AS "object_id", $OpenfgaTuple.relation AS "relation", $OpenfgaTuple.user AS "user", $OpenfgaTuple.condition AS "condition", $OpenfgaTuple.permission_uuid AS "permission_uuid", $OpenfgaTuple.ulid AS "ulid", $OpenfgaTuple.inserted_at AS "inserted_at"`,
+			sample:    exporttypes.OpenfgaTuple{},
+			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
+				return insertRows(ctx, tx, stmt, dump.OpenfgaTuple, nil)
+			},
+		})
+	}
 	if dump.Present["password_hash_algorithm"] {
 		tables = append(tables, replayTable{
 			name:      "password_hash_algorithm",
@@ -682,50 +726,6 @@ func (st *State) LoadControllerDump(ctx context.Context, dump *recovery.Controll
 			sample:    exporttypes.PasswordHashAlgorithm{},
 			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
 				return insertRows(ctx, tx, stmt, dump.PasswordHashAlgorithm, nil)
-			},
-		})
-	}
-	if dump.Present["permission"] {
-		tables = append(tables, replayTable{
-			name:      "permission",
-			deleteSQL: `DELETE FROM "permission" AS t`,
-			insertSQL: `INSERT INTO "permission" ("uuid", "access_type_id", "object_type_id", "grant_on", "grant_to") SELECT $Permission.uuid AS "uuid", $Permission.access_type_id AS "access_type_id", $Permission.object_type_id AS "object_type_id", $Permission.grant_on AS "grant_on", $Permission.grant_to AS "grant_to"`,
-			sample:    exporttypes.Permission{},
-			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
-				return insertRows(ctx, tx, stmt, dump.Permission, nil)
-			},
-		})
-	}
-	if dump.Present["permission_access_type"] {
-		tables = append(tables, replayTable{
-			name:      "permission_access_type",
-			deleteSQL: `DELETE FROM "permission_access_type" AS t`,
-			insertSQL: `INSERT INTO "permission_access_type" ("id", "type") SELECT $PermissionAccessType.id AS "id", $PermissionAccessType.type AS "type"`,
-			sample:    exporttypes.PermissionAccessType{},
-			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
-				return insertRows(ctx, tx, stmt, dump.PermissionAccessType, nil)
-			},
-		})
-	}
-	if dump.Present["permission_object_access"] {
-		tables = append(tables, replayTable{
-			name:      "permission_object_access",
-			deleteSQL: `DELETE FROM "permission_object_access" AS t`,
-			insertSQL: `INSERT INTO "permission_object_access" ("id", "access_type_id", "object_type_id") SELECT $PermissionObjectAccess.id AS "id", $PermissionObjectAccess.access_type_id AS "access_type_id", $PermissionObjectAccess.object_type_id AS "object_type_id"`,
-			sample:    exporttypes.PermissionObjectAccess{},
-			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
-				return insertRows(ctx, tx, stmt, dump.PermissionObjectAccess, nil)
-			},
-		})
-	}
-	if dump.Present["permission_object_type"] {
-		tables = append(tables, replayTable{
-			name:      "permission_object_type",
-			deleteSQL: `DELETE FROM "permission_object_type" AS t`,
-			insertSQL: `INSERT INTO "permission_object_type" ("id", "type") SELECT $PermissionObjectType.id AS "id", $PermissionObjectType.type AS "type"`,
-			sample:    exporttypes.PermissionObjectType{},
-			insertRows: func(ctx context.Context, tx *sqlair.TX, stmt *sqlair.Statement) error {
-				return insertRows(ctx, tx, stmt, dump.PermissionObjectType, nil)
 			},
 		})
 	}
