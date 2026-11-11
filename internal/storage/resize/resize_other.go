@@ -19,3 +19,16 @@ func (*Executor) Resize(context.Context, Request, func(context.Context) error) (
 func runCommand(context.Context, string, ...string) (string, error) {
 	return "", errors.New("local storage resize requires Linux")
 }
+
+func (*Executor) CheckBackend(context.Context, Request) (Observation, error) {
+	return Observation{}, errors.New("local storage resize requires Linux")
+}
+func (*Executor) EnsureBackend(context.Context, Request, func(context.Context) error) (Observation, error) {
+	return Observation{}, errors.New("local storage resize requires Linux")
+}
+func (*Executor) CheckAttachment(context.Context, Request) (Observation, error) {
+	return Observation{}, errors.New("local storage resize requires Linux")
+}
+func (*Executor) EnsureAttachment(context.Context, Request, func(context.Context) error) (Observation, error) {
+	return Observation{}, errors.New("local storage resize requires Linux")
+}

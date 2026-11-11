@@ -78,17 +78,19 @@ func ModelManifold(config ModelManifoldConfig) dependency.Manifold {
 			}
 
 			w, err := config.NewWorker(Config{
-				Model:       config.Model,
-				Scope:       config.Model,
-				StorageDir:  config.StorageDir,
-				Volumes:     adapter,
-				Filesystems: adapter,
-				Life:        adapter,
-				Registry:    registry,
-				Machines:    adapter,
-				Status:      adapter,
-				Clock:       config.Clock,
-				Logger:      config.Logger,
+				Model:          config.Model,
+				Scope:          config.Model,
+				StorageDir:     config.StorageDir,
+				Volumes:        adapter,
+				Filesystems:    adapter,
+				Life:           adapter,
+				Registry:       registry,
+				Machines:       adapter,
+				Status:         adapter,
+				Clock:          config.Clock,
+				Logger:         config.Logger,
+				Resizes:        &modelResizeAdapter{service: domainServices.Storage()},
+				ResizeExecutor: &providerResizeExecutor{registry: registry},
 			})
 			if err != nil {
 				return nil, errors.Trace(err)

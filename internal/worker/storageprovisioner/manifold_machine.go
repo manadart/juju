@@ -55,7 +55,7 @@ func (config MachineManifoldConfig) newWorker(_ context.Context, a agent.Agent, 
 	var resizeExecutor ResizeExecutor
 	if client := storageresizer.NewClient(apiCaller); client.Supported() {
 		resizes = client
-		resizeExecutor = storageresize.NewExecutor(storageDir)
+		resizeExecutor = &localResizeExecutor{local: storageresize.NewExecutor(storageDir)}
 	}
 	w, err := NewStorageProvisioner(Config{
 		Scope:       tag,

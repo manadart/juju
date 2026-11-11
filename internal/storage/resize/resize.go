@@ -11,6 +11,8 @@ type Request struct {
 	VolumeID         string
 	VolumeProviderID string
 	DeviceName       string
+	DeviceLink       string
+	FilesystemUUID   string
 	FilesystemID     string
 	MountPoint       string
 	SizeMiB          uint64

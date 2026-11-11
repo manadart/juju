@@ -9,31 +9,30 @@ import (
 
 	"github.com/juju/names/v6"
 
+	coreerrors "github.com/juju/juju/core/errors"
+	storageerrors "github.com/juju/juju/domain/storage/errors"
 	"github.com/juju/juju/internal/errors"
-	storageresize "github.com/juju/juju/internal/storage/resize"
 	"github.com/juju/juju/rpc/params"
 )
 
-// ResizeAccessor provides authoritative work for the authenticated machine.
-// Prepare binds and revalidates the target. Report is idempotent for an
-// identical terminal outcome, allowing retries after an ambiguous RPC failure.
+// ResizeAccessor exposes only the executor's eligible stages. Reports are
+// idempotent and may be retried after an ambiguous response.
 type ResizeAccessor interface {
 	Requests(context.Context) ([]string, error)
-	Prepare(context.Context, string) (params.StorageResizeWork, error)
-	Report(context.Context, params.StorageResizeReport) error
+	PrepareStage(context.Context, string) (params.StorageResizeStageWork, error)
+	ReportStage(context.Context, params.StorageResizeStageReport) error
 }
 
-// ResizeExecutor grows an existing local resource and measures its capacity.
-// Implementations must honour cancellation, never shrink or replace storage,
-// and call revalidate before each mutation. Stages must be safe to repeat after
-// interruption. Partial observations may accompany a failure.
+// ResizeExecutor performs one bounded, repeatable reconciliation. It must call
+// revalidate before mutation and return observed capacities, never desired sizes.
 type ResizeExecutor interface {
-	Resize(context.Context, storageresize.Request, func(context.Context) error) (storageresize.Observation, error)
+	Execute(context.Context, params.StorageResizeStageWork, func(context.Context) error) (params.StorageResizeStageReport, error)
 }
 
 type resizeOutcome struct {
-	work   params.StorageResizeWork
-	report params.StorageResizeReport
+	report *params.StorageResizeStageReport
+	next   time.Time
+	delay  time.Duration
 }
 
 func processStorageResizes(ctx context.Context, deps *dependencies, results map[string]resizeOutcome) error {
@@ -41,7 +40,6 @@ func processStorageResizes(ctx context.Context, deps *dependencies, results map[
 	if err != nil {
 		return errors.Errorf("fetching resize requests: %w", err)
 	}
-	// A result may already have reached the controller despite an RPC error.
 	pending := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		pending[id] = true
@@ -55,121 +53,115 @@ func processStorageResizes(ctx context.Context, deps *dependencies, results map[
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if _, ok := results[id]; !ok {
-			outcome, err := executeStorageResize(ctx, deps, id)
-			if err != nil {
-				return errors.Errorf("executing storage resize %q: %w", id, err)
-			}
-			if outcome.report.UUID == "" {
-				continue
-			}
-			results[id] = outcome
-		}
 		outcome := results[id]
-		err := deps.config.Resizes.Report(ctx, outcome.report)
-		switch params.ErrCode(err) {
-		case params.CodeNotFound, params.CodeAlreadyExists, params.CodeUnauthorized:
-			delete(results, id)
+		if deps.config.Clock.Now().Before(outcome.next) {
 			continue
-		case params.CodeNotValid:
-			// The target may have changed after local execution. Do not retry
-			// local mutations or apply old observations to a new attachment.
-			if outcome.report.Status == "completed" {
-				outcome.report = params.StorageResizeReport{
-					UUID: id, Status: "failed",
-					Message: "Storage grew locally but completion was rejected: " + err.Error(),
+		}
+		if outcome.report == nil {
+			work, err := deps.config.Resizes.PrepareStage(ctx, id)
+			if err != nil {
+				switch resizeErrorCode(err) {
+				case params.CodeTryAgain, params.CodeAlreadyExists, params.CodeNotFound, params.CodeUnauthorized:
+					continue
 				}
-				results[id] = outcome
+				deps.config.Logger.Warningf(ctx, "preparing resize %q: %v", id, err)
+				results[id] = backoffResize(deps, outcome)
 				continue
 			}
+			timeout := 5 * time.Minute
+			if _, ok := deps.config.Scope.(names.ModelTag); ok {
+				timeout = 30 * time.Second
+			}
+			stepCtx, cancel := context.WithTimeout(ctx, timeout)
+			var validationErr error
+			revalidate := func(ctx context.Context) error {
+				current, err := deps.config.Resizes.PrepareStage(ctx, id)
+				if err == nil && (current.Identity != work.Identity || current.Stage != work.Stage || current.Phase != work.Phase) {
+					err = errors.New("resize stage changed before mutation")
+				}
+				validationErr = err
+				return err
+			}
+			report, err := deps.config.ResizeExecutor.Execute(stepCtx, work, revalidate)
+			if stepCtx.Err() != nil {
+				err = stepCtx.Err()
+			}
+			cancel()
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if validationErr != nil {
+				results[id] = backoffResize(deps, outcome)
+				continue
+			}
+			report.UUID = id
+			report.Identity = work.Identity
+			report.Stage = work.Stage
+			report.Phase = work.Phase
+			if err != nil {
+				report.Message = err.Error()
+				if errors.Is(err, coreerrors.NotSupported) || errors.Is(err, coreerrors.NotValid) {
+					report.Status = "failed"
+				} else if work.Phase == "check" {
+					report.Status = "blocked"
+				} else {
+					report.Status = "pending"
+				}
+			}
+			outcome.report = &report
 		}
+		report := *outcome.report
+		err := deps.config.Resizes.ReportStage(ctx, report)
 		if err != nil {
-			return errors.Errorf("reporting storage resize %q: %w", id, err)
+			switch resizeErrorCode(err) {
+			case params.CodeAlreadyExists, params.CodeNotFound, params.CodeUnauthorized, params.CodeTryAgain:
+				delete(results, id)
+				continue
+			case params.CodeNotValid:
+				// A rejected completion becomes a stage failure, preserving
+				// earlier growth without applying rejected observations.
+				if report.Status != "failed" {
+					report.Status = "failed"
+					report.Message = "Resize result rejected: " + err.Error()
+					report.ObservedSizeMiB = 0
+					report.FilesystemSizeMiB = 0
+					outcome.report = &report
+				}
+			}
+			deps.config.Logger.Warningf(ctx, "reporting resize %q: %v", id, err)
+			results[id] = backoffResize(deps, outcome)
+			continue
 		}
-		delete(results, id)
-		if outcome.report.Status == "completed" {
-			updateResizeCache(deps, outcome)
+		if report.Status == "blocked" || report.Status == "pending" {
+			outcome.report = nil
+			results[id] = backoffResize(deps, outcome)
+		} else {
+			delete(results, id)
+			deps.config.Logger.Infof(ctx, "storage resize %q %s %s: %s", id, report.Stage, report.Status, report.Message)
 		}
-		deps.config.Logger.Infof(ctx, "storage resize %q %s: %s", id, outcome.report.Status, outcome.report.Message)
 	}
 	return nil
 }
 
-func executeStorageResize(ctx context.Context, deps *dependencies, id string) (resizeOutcome, error) {
-	work, err := deps.config.Resizes.Prepare(ctx, id)
-	if err != nil {
-		switch params.ErrCode(err) {
-		case params.CodeTryAgain, params.CodeAlreadyExists, params.CodeNotFound, params.CodeUnauthorized:
-			return resizeOutcome{}, nil
-		case params.CodeNotValid, params.CodeNotSupported:
-			return resizeOutcome{report: params.StorageResizeReport{
-				UUID: id, Status: "failed", Message: err.Error(),
-			}}, nil
-		default:
-			return resizeOutcome{}, err
-		}
-	}
-	operationCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	var retry bool
-	revalidate := func(ctx context.Context) error {
-		current, err := deps.config.Resizes.Prepare(ctx, id)
-		if err != nil {
-			switch params.ErrCode(err) {
-			case params.CodeNotValid, params.CodeNotSupported, params.CodeAlreadyExists, params.CodeNotFound, params.CodeUnauthorized:
-			default:
-				retry = true
-			}
-			return err
-		}
-		if current != work {
-			return errors.New("resize target changed during execution")
-		}
-		return nil
-	}
-	observed, err := deps.config.ResizeExecutor.Resize(operationCtx, storageresize.Request{
-		ProviderType: work.ProviderType, VolumeID: work.VolumeID,
-		VolumeProviderID: work.VolumeProviderID, DeviceName: work.DeviceName,
-		FilesystemID: work.FilesystemID, MountPoint: work.MountPoint,
-		SizeMiB: work.RequestedSizeMiB,
-	}, revalidate)
-	if ctx.Err() != nil {
-		return resizeOutcome{}, ctx.Err()
-	}
-	if retry {
-		// API unavailability is not a terminal storage failure. Repeating
-		// completed growth stages is safe when the connection recovers.
-		return resizeOutcome{}, err
-	}
-	report := params.StorageResizeReport{
-		UUID: id, Status: "completed", Message: "Storage resize completed",
-		VolumeSizeMiB:     observed.VolumeSizeMiB,
-		FilesystemSizeMiB: observed.FilesystemSizeMiB,
-	}
-	if err != nil {
-		report.Status = "failed"
-		report.Message = "Storage resize failed; storage may have partially grown: " + err.Error()
-	}
-	return resizeOutcome{work: work, report: report}, nil
+func backoffResize(deps *dependencies, outcome resizeOutcome) resizeOutcome {
+	outcome.delay = min(max(outcome.delay*2, 5*time.Second), time.Minute)
+	outcome.next = deps.config.Clock.Now().Add(outcome.delay)
+	return outcome
 }
 
-// updateResizeCache keeps the provisioner's local view in step with accepted
-// completion. Watcher refreshes also read the persisted observed capacities.
-func updateResizeCache(deps *dependencies, outcome resizeOutcome) {
-	volumeTag := names.NewVolumeTag(outcome.work.VolumeID)
-	if volume, ok := deps.volumes[volumeTag]; ok {
-		volume.Size = max(volume.Size, outcome.report.VolumeSizeMiB)
-		deps.volumes[volumeTag] = volume
+// Model service calls and agent RPCs use the same reconciliation decisions.
+func resizeErrorCode(err error) string {
+	switch {
+	case errors.Is(err, storageerrors.StorageResizeNotReady):
+		return params.CodeTryAgain
+	case errors.Is(err, storageerrors.StorageResizeResultAlreadyRecorded):
+		return params.CodeAlreadyExists
+	case errors.Is(err, storageerrors.StorageResizeIntentNotFound):
+		return params.CodeNotFound
+	case errors.Is(err, storageerrors.StorageResizeNotAssigned):
+		return params.CodeUnauthorized
+	case errors.Is(err, storageerrors.StorageResizeTargetChanged), errors.Is(err, coreerrors.NotValid):
+		return params.CodeNotValid
 	}
-	if device, ok := deps.volumeBlockDevices[volumeTag]; ok {
-		device.SizeMiB = max(device.SizeMiB, outcome.report.VolumeSizeMiB)
-		deps.volumeBlockDevices[volumeTag] = device
-	}
-	if outcome.work.FilesystemID != "" {
-		tag := names.NewFilesystemTag(outcome.work.FilesystemID)
-		if filesystem, ok := deps.filesystems[tag]; ok {
-			filesystem.Size = max(filesystem.Size, outcome.report.FilesystemSizeMiB)
-			deps.filesystems[tag] = filesystem
-		}
-	}
+	return params.ErrCode(err)
 }

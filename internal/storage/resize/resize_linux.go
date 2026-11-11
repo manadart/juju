@@ -26,131 +26,255 @@ const bytesPerMiB = 1024 * 1024
 // managed ext4 filesystem. Revalidate runs before each mutation. Cancellation
 // leaves the request retryable; the same stages are safe to repeat.
 func (e *Executor) Resize(ctx context.Context, request Request, revalidate func(context.Context) error) (Observation, error) {
-	var observed Observation
-	if e.Run == nil || e.StorageDir == "" || revalidate == nil {
-		return observed, errors.New("incomplete resize executor configuration")
+	if _, err := e.CheckBackend(ctx, request); err != nil {
+		return Observation{}, err
 	}
-	if request.ProviderType != "loop" || !names.IsValidVolume(request.VolumeID) {
-		return observed, errors.New("only existing loop volumes can be resized")
+	if _, err := e.CheckAttachment(ctx, request); err != nil {
+		return Observation{}, err
 	}
-	if request.SizeMiB == 0 || request.SizeMiB > math.MaxInt64/bytesPerMiB {
-		return observed, errors.New("invalid resize target")
+	if _, err := e.EnsureBackend(ctx, request, revalidate); err != nil {
+		return Observation{}, err
 	}
-	volumeTag := names.NewVolumeTag(request.VolumeID).String()
-	if request.VolumeProviderID != volumeTag {
-		return observed, errors.New("loop volume provider identity does not match")
+	observed, err := e.EnsureAttachment(ctx, request, revalidate)
+	if err == nil && (observed.VolumeSizeMiB < request.SizeMiB || (request.FilesystemID != "" && observed.FilesystemSizeMiB < request.SizeMiB)) {
+		err = errors.New("local capacity has not reached the requested target")
 	}
-	deviceName := strings.TrimPrefix(request.DeviceName, "/dev/")
-	if !strings.HasPrefix(deviceName, "loop") {
-		return observed, errors.New("expected a whole loop device")
-	}
-	if _, err := strconv.ParseUint(strings.TrimPrefix(deviceName, "loop"), 10, 32); err != nil {
-		return observed, errors.New("invalid loop device name")
-	}
-	device := filepath.Join("/dev", deviceName)
-	backing := filepath.Join(e.StorageDir, "loop", volumeTag)
-	info, err := os.Lstat(backing)
+	return observed, err
+}
+
+// CheckBackend inspects the existing loop backing file without modifying it.
+func (e *Executor) CheckBackend(ctx context.Context, request Request) (Observation, error) {
+	backing, device, info, err := e.loopTarget(ctx, request)
 	if err != nil {
-		return observed, errors.Errorf("reading backing file: %w", err)
-	}
-	if !info.Mode().IsRegular() {
-		return observed, errors.New("loop backing path is not a regular file")
-	}
-	tools := []string{"losetup", "lsblk", "blockdev", "fallocate"}
-	if request.FilesystemID != "" {
-		tools = append(tools, "findmnt", "dumpe2fs", "resize2fs")
-	}
-	for _, tool := range tools {
-		if _, err := commandPath(tool); err != nil {
-			return observed, err
-		}
+		return Observation{}, err
 	}
 	if err := e.checkLoop(ctx, backing, device, info); err != nil {
+		return Observation{}, err
+	}
+	return Observation{VolumeSizeMiB: uint64(info.Size()) / bytesPerMiB}, nil
+}
+
+// EnsureBackend grows only the local backing file. Device and filesystem
+// observations belong to the attachment stage, even for local storage.
+func (e *Executor) EnsureBackend(ctx context.Context, request Request, revalidate func(context.Context) error) (Observation, error) {
+	if revalidate == nil {
+		return Observation{}, errors.New("missing resize revalidation")
+	}
+	if err := revalidate(ctx); err != nil {
+		return Observation{}, err
+	}
+	backing, device, info, err := e.loopTarget(ctx, request)
+	if err != nil {
+		return Observation{}, err
+	}
+	if err := e.checkLoop(ctx, backing, device, info); err != nil {
+		return Observation{}, err
+	}
+	err = e.ensureBackingSize(ctx, backing, info, request.SizeMiB)
+	current, statErr := os.Stat(backing)
+	if statErr != nil {
+		return Observation{}, statErr
+	}
+	if !os.SameFile(info, current) {
+		return Observation{}, errors.New("loop backing file was replaced")
+	}
+	return Observation{VolumeSizeMiB: uint64(current.Size()) / bytesPerMiB}, err
+}
+
+// CheckAttachment inspects a whole device and optional ext4 mount. Cloud
+// devices currently require a stable by-id link and a SCSI rescan interface.
+func (e *Executor) CheckAttachment(ctx context.Context, request Request) (Observation, error) {
+	var observed Observation
+	device, err := e.attachmentDevice(ctx, request)
+	if err != nil {
 		return observed, err
+	}
+	if request.ProviderType != "loop" {
+		readOnly, err := e.Run(ctx, "blockdev", "--getro", device)
+		if err != nil {
+			return observed, err
+		}
+		if strings.TrimSpace(readOnly) != "0" {
+			return observed, errors.New("block device is read-only")
+		}
 	}
 	if err := e.checkLayout(ctx, device, request.FilesystemID != ""); err != nil {
 		return observed, err
 	}
-	volumeBytes, err := e.deviceSize(ctx, device)
+	size, err := e.deviceSize(ctx, device)
 	if err != nil {
 		return observed, err
 	}
-	observed.VolumeSizeMiB = volumeBytes / bytesPerMiB
-	var filesystemUUID string
+	observed.VolumeSizeMiB = size / bytesPerMiB
 	if request.FilesystemID != "" {
+		for _, tool := range []string{"findmnt", "dumpe2fs", "resize2fs"} {
+			if _, err := commandPath(tool); err != nil {
+				return observed, err
+			}
+		}
 		if err := e.checkMount(ctx, device, request.MountPoint); err != nil {
 			return observed, err
 		}
-		fsBytes, uuid, err := e.filesystemSize(ctx, device)
+		size, uuid, err := e.filesystemSize(ctx, device)
 		if err != nil {
 			return observed, err
 		}
-		filesystemUUID = uuid
-		observed.FilesystemSizeMiB = fsBytes / bytesPerMiB
+		if request.FilesystemUUID != "" && uuid != request.FilesystemUUID {
+			return observed, errors.New("filesystem identity no longer matches the checked target")
+		}
+		observed.FilesystemSizeMiB = size / bytesPerMiB
 	}
-	// The complete local layout has been checked before the first mutation.
+	return observed, nil
+}
+
+// EnsureAttachment refreshes the device and grows its managed filesystem.
+// Insufficient device capacity is a pending observation so propagation can be
+// retried. No partition creation, filesystem formatting or device replacement
+// is permitted on this path.
+func (e *Executor) EnsureAttachment(ctx context.Context, request Request, revalidate func(context.Context) error) (Observation, error) {
+	var observed Observation
+	if revalidate == nil {
+		return observed, errors.New("missing resize revalidation")
+	}
 	if err := revalidate(ctx); err != nil {
 		return observed, err
 	}
-	if err := e.checkLoop(ctx, backing, device, info); err != nil {
-		return observed, err
-	}
-	if err := e.ensureBackingSize(ctx, backing, info, request.SizeMiB); err != nil {
-		return observed, err
-	}
-	if err := revalidate(ctx); err != nil {
-		return observed, err
-	}
-	if err := e.checkLoop(ctx, backing, device, info); err != nil {
-		return observed, err
-	}
-	if _, err := e.Run(ctx, "losetup", "--set-capacity", device); err != nil {
-		return observed, errors.Errorf("refreshing loop capacity: %w", err)
-	}
-	volumeBytes, err = e.deviceSize(ctx, device)
+	observed, err := e.CheckAttachment(ctx, request)
 	if err != nil {
 		return observed, err
 	}
-	observed.VolumeSizeMiB = volumeBytes / bytesPerMiB
-	if observed.VolumeSizeMiB < request.SizeMiB {
-		return observed, errors.New("device has not reached the requested capacity")
+	// An already satisfied attachment needs observation only.
+	if observed.VolumeSizeMiB >= request.SizeMiB && (request.FilesystemID == "" || observed.FilesystemSizeMiB >= request.SizeMiB) {
+		return observed, nil
 	}
-	if request.FilesystemID == "" {
+	device, err := e.attachmentDevice(ctx, request)
+	if err != nil {
+		return observed, err
+	}
+	if request.ProviderType == "loop" {
+		if _, err := e.Run(ctx, "losetup", "--set-capacity", device); err != nil {
+			return observed, err
+		}
+	} else {
+		if err := ctx.Err(); err != nil {
+			return observed, err
+		}
+		// The kernel exposes this only for transports supporting this rescan.
+		if err := os.WriteFile(filepath.Join("/sys/class/block", filepath.Base(device), "device/rescan"), []byte("1\n"), 0200); err != nil {
+			return observed, errors.Errorf("rescanning block device: %w", err)
+		}
+	}
+	size, err := e.deviceSize(ctx, device)
+	if err != nil {
+		return observed, err
+	}
+	observed.VolumeSizeMiB = size / bytesPerMiB
+	if observed.VolumeSizeMiB < request.SizeMiB || request.FilesystemID == "" {
 		return observed, nil
 	}
 	if err := revalidate(ctx); err != nil {
 		return observed, err
 	}
-	if err := e.checkLoop(ctx, backing, device, info); err != nil {
-		return observed, err
-	}
-	if err := e.checkMount(ctx, device, request.MountPoint); err != nil {
-		return observed, err
-	}
-	fsBytes, uuid, err := e.filesystemSize(ctx, device)
+	current, err := e.CheckAttachment(ctx, request)
 	if err != nil {
 		return observed, err
 	}
-	if uuid != filesystemUUID {
-		return observed, errors.New("filesystem identity changed during resize")
-	}
-	if fsBytes/bytesPerMiB < request.SizeMiB {
-		if _, err := e.Run(ctx, "resize2fs", device, fmt.Sprintf("%dM", request.SizeMiB)); err != nil {
-			return observed, errors.Errorf("growing ext4 filesystem: %w", err)
+	observed.FilesystemSizeMiB = current.FilesystemSizeMiB
+	if observed.FilesystemSizeMiB < request.SizeMiB {
+		_, growErr := e.Run(ctx, "resize2fs", device, fmt.Sprintf("%dM", request.SizeMiB))
+		size, uuid, readErr := e.filesystemSize(ctx, device)
+		if readErr == nil && (request.FilesystemUUID == "" || uuid == request.FilesystemUUID) {
+			observed.FilesystemSizeMiB = size / bytesPerMiB
+		}
+		if growErr != nil {
+			return observed, errors.Errorf("growing ext4 filesystem: %w", growErr)
+		}
+		if readErr != nil {
+			return observed, readErr
+		}
+		if request.FilesystemUUID != "" && uuid != request.FilesystemUUID {
+			return observed, errors.New("filesystem identity changed during growth")
 		}
 	}
-	fsBytes, uuid, err = e.filesystemSize(ctx, device)
-	if err != nil {
-		return observed, err
-	}
-	if uuid != filesystemUUID {
-		return observed, errors.New("filesystem identity changed during resize")
-	}
-	observed.FilesystemSizeMiB = fsBytes / bytesPerMiB
-	if observed.FilesystemSizeMiB < request.SizeMiB {
-		return observed, errors.New("filesystem has not reached the requested capacity")
-	}
 	return observed, nil
+}
+
+func (e *Executor) loopTarget(ctx context.Context, request Request) (string, string, os.FileInfo, error) {
+	if e.Run == nil || e.StorageDir == "" {
+		return "", "", nil, errors.New("incomplete resize executor configuration")
+	}
+	if request.ProviderType != "loop" || !names.IsValidVolume(request.VolumeID) {
+		return "", "", nil, errors.New("only existing loop backends can be grown locally")
+	}
+	if request.SizeMiB == 0 || request.SizeMiB > math.MaxInt64/bytesPerMiB {
+		return "", "", nil, errors.New("invalid resize target")
+	}
+	tag := names.NewVolumeTag(request.VolumeID).String()
+	if tag != request.VolumeProviderID {
+		return "", "", nil, errors.New("loop provider identity does not match")
+	}
+	name := strings.TrimPrefix(request.DeviceName, "/dev/")
+	if !strings.HasPrefix(name, "loop") {
+		return "", "", nil, errors.New("expected a loop device")
+	}
+	if _, err := strconv.ParseUint(strings.TrimPrefix(name, "loop"), 10, 32); err != nil {
+		return "", "", nil, errors.New("invalid loop device name")
+	}
+	path := filepath.Join(e.StorageDir, "loop", tag)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", "", nil, err
+	}
+	if !info.Mode().IsRegular() {
+		return "", "", nil, errors.New("loop backing path is not a regular file")
+	}
+	for _, tool := range []string{"losetup", "lsblk", "blockdev", "fallocate"} {
+		if _, err := commandPath(tool); err != nil {
+			return "", "", nil, err
+		}
+	}
+	return path, filepath.Join("/dev", name), info, nil
+}
+
+func (e *Executor) attachmentDevice(ctx context.Context, request Request) (string, error) {
+	if e.Run == nil || request.SizeMiB == 0 || request.SizeMiB > math.MaxInt64/bytesPerMiB {
+		return "", errors.New("invalid attachment resize configuration")
+	}
+	if request.ProviderType == "loop" {
+		backing, device, info, err := e.loopTarget(ctx, request)
+		if err != nil {
+			return "", err
+		}
+		return device, e.checkLoop(ctx, backing, device, info)
+	}
+	name := strings.TrimPrefix(request.DeviceName, "/dev/")
+	if name == "" || name == "." || name == ".." || filepath.Base(name) != name {
+		return "", errors.New("invalid block device name")
+	}
+	device := filepath.Join("/dev", name)
+	if !strings.HasPrefix(request.DeviceLink, "/dev/disk/by-id/") {
+		return "", errors.New("cloud attachment resize requires a stable device link")
+	}
+	actual, err := os.Stat(device)
+	if err != nil {
+		return "", err
+	}
+	link, err := os.Stat(request.DeviceLink)
+	if err != nil {
+		return "", err
+	}
+	if !os.SameFile(actual, link) || actual.Mode()&os.ModeDevice == 0 || actual.Mode()&os.ModeCharDevice != 0 {
+		return "", errors.New("block device identity does not match its stable link")
+	}
+	if _, err := os.Stat(filepath.Join("/sys/class/block", name, "device/rescan")); err != nil {
+		return "", errors.New("attachment transport does not support the implemented SCSI rescan")
+	}
+	for _, tool := range []string{"lsblk", "blockdev"} {
+		if _, err := commandPath(tool); err != nil {
+			return "", err
+		}
+	}
+	return device, nil
 }
 
 func (e *Executor) checkLoop(ctx context.Context, backing, device string, original os.FileInfo) error {
@@ -196,8 +320,8 @@ func (e *Executor) checkLayout(ctx context.Context, device string, managed bool)
 	if err := json.Unmarshal([]byte(out), &layout); err != nil {
 		return err
 	}
-	if len(layout.Devices) != 1 || layout.Devices[0].Name != filepath.Base(device) || layout.Devices[0].Type != "loop" || len(layout.Devices[0].Children) != 0 {
-		return errors.New("partitioned or stacked loop devices are not supported")
+	if len(layout.Devices) != 1 || layout.Devices[0].Name != filepath.Base(device) || (layout.Devices[0].Type != "loop" && layout.Devices[0].Type != "disk") || len(layout.Devices[0].Children) != 0 {
+		return errors.New("partitioned or stacked devices are not supported")
 	}
 	if managed && layout.Devices[0].Filesystem != "ext4" {
 		return errors.New("only whole-device ext4 managed filesystems are supported")
@@ -240,7 +364,7 @@ func (e *Executor) checkMount(ctx context.Context, device, mountPoint string) er
 		return err
 	}
 	if source.Mode()&os.ModeDevice == 0 || source.Mode()&os.ModeCharDevice != 0 || source.Sys().(*syscall.Stat_t).Rdev != target.Sys().(*syscall.Stat_t).Rdev {
-		return errors.New("mounted filesystem is not on the expected loop device")
+		return errors.New("mounted filesystem is not on the expected block device")
 	}
 	return nil
 }

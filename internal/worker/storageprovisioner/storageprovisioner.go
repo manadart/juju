@@ -298,7 +298,7 @@ func (w *storageProvisioner) loop() error {
 	}
 	filesystemAttachmentsChanges = filesystemAttachmentsWatcher.Changes()
 
-	// Execute resizes in this loop to serialize them with local attachment and
+	// Execute resize stages here to serialize them with provisioning and
 	// removal operations. Poll authoritative state so restarts recover work.
 	var resizeTimer clock.Timer
 	var resizeChanges <-chan time.Time

@@ -74,8 +74,10 @@ func (config Config) Validate() error {
 		return errors.NotValidf("nil Logger")
 	}
 	if config.Resizes != nil {
-		if _, ok := config.Scope.(names.MachineTag); !ok {
-			return errors.NotValidf("resize execution outside machine scope")
+		switch config.Scope.(type) {
+		case names.MachineTag, names.ModelTag:
+		default:
+			return errors.NotValidf("resize execution outside machine or model scope")
 		}
 		if config.ResizeExecutor == nil {
 			return errors.NotValidf("nil ResizeExecutor")
