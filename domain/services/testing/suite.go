@@ -46,6 +46,7 @@ import (
 	databasetesting "github.com/juju/juju/internal/database/testing"
 	"github.com/juju/juju/internal/errors"
 	loggertesting "github.com/juju/juju/internal/logger/testing"
+	"github.com/juju/juju/internal/openfga"
 	_ "github.com/juju/juju/internal/provider/dummy"
 	"github.com/juju/juju/internal/services"
 	sshimporter "github.com/juju/juju/internal/ssh/importer"
@@ -268,6 +269,18 @@ type domainServices struct {
 // DomainServicesGetterWithStorageRegistry interface to use in tests with the
 // additional storage provider.
 func (s *DomainServicesSuite) DomainServicesGetterWithStorageRegistry(c *tc.C, objectStore objectstore.ObjectStore, leaseManager lease.LeaseManager, storageRegistry storage.ProviderRegistry) DomainServicesGetterFunc {
+	ctx, cancel := context.WithCancel(c.Context())
+	authorizer, err := openfga.NewAuthorizer(ctx, func(context.Context) (database.TxnRunner, error) {
+		return s.TxnRunner(), nil
+	})
+	if err != nil {
+		cancel()
+	}
+	c.Assert(err, tc.ErrorIsNil)
+	c.Cleanup(func() {
+		cancel()
+		authorizer.Close()
+	})
 	return func(modelUUID model.UUID) services.DomainServices {
 		clock := clock.WallClock
 		logger := loggertesting.WrapCheckLog(c)
@@ -283,6 +296,7 @@ func (s *DomainServicesSuite) DomainServicesGetterWithStorageRegistry(c *tc.C, o
 			clock,
 			logger,
 			loggertesting.WrapCheckLogForContextGetter(c),
+			authorizer,
 		)
 		modelServices := domainservices.NewModelServices(
 			modelUUID,
@@ -309,6 +323,7 @@ func (s *DomainServicesSuite) DomainServicesGetterWithStorageRegistry(c *tc.C, o
 			c.MkDir(),
 			clock,
 			logger,
+			controllerServices.Access(),
 		)
 		return &domainServices{
 			ControllerServices: controllerServices,
