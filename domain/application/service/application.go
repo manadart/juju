@@ -1884,6 +1884,11 @@ func (s *ProviderService) SetApplicationCharm(ctx context.Context, appName strin
 		return errors.Capture(err)
 	}
 
+	paramsState.StorageDirectivesBeforeUpdate = make([]domainstorage.DirectiveArg, 0, len(storageDirectives))
+	for _, directive := range storageDirectives {
+		paramsState.StorageDirectivesBeforeUpdate = append(paramsState.StorageDirectivesBeforeUpdate, domainstorage.DirectiveArg{Name: directive.Name, PoolUUID: directive.PoolUUID, Count: directive.Count, Size: directive.Size})
+	}
+
 	err = s.st.SetApplicationCharm(ctx, appUUID, charmID, paramsState)
 	if err != nil {
 		return errors.Errorf("setting application %q charm: %w", appName, err)

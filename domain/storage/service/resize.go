@@ -19,6 +19,9 @@ import (
 
 // ResizeState describes persistence of storage resize requests and results.
 type ResizeState interface {
+	GetUnitStorageResizeTargets(context.Context, string) ([]internal.UnitStorageResizeTarget, error)
+	CreateUnitStorageResizeIntents(context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent) error
+
 	// Staged execution keeps backend and attachment observations separate.
 	GetStorageResizeStageRequests(context.Context, string) ([]string, error)
 	GetStorageResizePlan(context.Context, string) (domainstorage.ResizePlan, error)

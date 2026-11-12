@@ -396,6 +396,7 @@ type MockStateMockRecorder struct {
 	getApplicationLifeByNameExpects                           []*gomock.Call2_3[context.Context, string, application.UUID, life.Life, error]
 	getApplicationNameExpects                                 []*gomock.Call2_2[context.Context, application.UUID, string, error]
 	getApplicationScaleStateExpects                           []*gomock.Call2_2[context.Context, application.UUID, application0.ScaleState, error]
+	getApplicationStorageSnapshotExpects                      []*gomock.Call2_2[context.Context, string, internal.ApplicationStorageSnapshot, error]
 	getApplicationTrustSettingExpects                         []*gomock.Call2_2[context.Context, application.UUID, bool, error]
 	getApplicationUUIDAndNameByUnitNameExpects                []*gomock.Call2_3[context.Context, unit.Name, application.UUID, string, error]
 	getApplicationUUIDByNameExpects                           []*gomock.Call2_2[context.Context, string, application.UUID, error]
@@ -499,6 +500,7 @@ type MockStateMockRecorder struct {
 	setApplicationHasK8sResourcesExpects                      []*gomock.Call2_1[context.Context, application.UUID, error]
 	setApplicationScalingStateExpects                         []*gomock.Call4_1[context.Context, string, int, bool, error]
 	setApplicationScalingStateWithStartExpects                []*gomock.Call5_1[context.Context, string, int, int, bool, error]
+	setApplicationStorageDirectivesExpects                    []*gomock.Call4_1[context.Context, string, internal.ApplicationStorageSnapshot, []storage0.DirectiveArg, error]
 	setCharmAvailableExpects                                  []*gomock.Call2_1[context.Context, charm.ID, error]
 	setDesiredApplicationScaleExpects                         []*gomock.Call3_1[context.Context, application.UUID, int, error]
 	setUnitWorkloadVersionExpects                             []*gomock.Call3_1[context.Context, unit.Name, string, error]
@@ -1085,6 +1087,24 @@ func (mr *MockStateMockRecorder) GetApplicationScaleState(arg0, arg1 any) *MockS
 
 // MockStateGetApplicationScaleStateCall is the typed call wrapper for GetApplicationScaleState.
 type MockStateGetApplicationScaleStateCall = gomock.Call2_2[context.Context, application.UUID, application0.ScaleState, error]
+
+// GetApplicationStorageSnapshot mocks base method.
+func (m *MockState) GetApplicationStorageSnapshot(arg0 context.Context, arg1 string) (internal.ApplicationStorageSnapshot, error) {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch2_2(&m.recorder.getApplicationStorageSnapshotExpects, m.ctrl, m, "GetApplicationStorageSnapshot", arg0, arg1)
+}
+
+// GetApplicationStorageSnapshot indicates an expected call of GetApplicationStorageSnapshot.
+func (mr *MockStateMockRecorder) GetApplicationStorageSnapshot(arg0, arg1 any) *MockStateGetApplicationStorageSnapshotCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall2_2[context.Context, string, internal.ApplicationStorageSnapshot, error](mr.mock.ctrl.T, mr.mock, "GetApplicationStorageSnapshot", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1))
+	mr.getApplicationStorageSnapshotExpects = append(mr.getApplicationStorageSnapshotExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStateGetApplicationStorageSnapshotCall is the typed call wrapper for GetApplicationStorageSnapshot.
+type MockStateGetApplicationStorageSnapshotCall = gomock.Call2_2[context.Context, string, internal.ApplicationStorageSnapshot, error]
 
 // GetApplicationTrustSetting mocks base method.
 func (m *MockState) GetApplicationTrustSetting(ctx context.Context, appUUID application.UUID) (bool, error) {
@@ -2942,6 +2962,24 @@ func (mr *MockStateMockRecorder) SetApplicationScalingStateWithStart(ctx, appNam
 
 // MockStateSetApplicationScalingStateWithStartCall is the typed call wrapper for SetApplicationScalingStateWithStart.
 type MockStateSetApplicationScalingStateWithStartCall = gomock.Call5_1[context.Context, string, int, int, bool, error]
+
+// SetApplicationStorageDirectives mocks base method.
+func (m *MockState) SetApplicationStorageDirectives(arg0 context.Context, arg1 string, arg2 internal.ApplicationStorageSnapshot, arg3 []storage0.DirectiveArg) error {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch4_1(&m.recorder.setApplicationStorageDirectivesExpects, m.ctrl, m, "SetApplicationStorageDirectives", arg0, arg1, arg2, arg3)
+}
+
+// SetApplicationStorageDirectives indicates an expected call of SetApplicationStorageDirectives.
+func (mr *MockStateMockRecorder) SetApplicationStorageDirectives(arg0, arg1, arg2, arg3 any) *MockStateSetApplicationStorageDirectivesCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall4_1[context.Context, string, internal.ApplicationStorageSnapshot, []storage0.DirectiveArg, error](mr.mock.ctrl.T, mr.mock, "SetApplicationStorageDirectives", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2), gomock.EnsureMatcher(arg3))
+	mr.setApplicationStorageDirectivesExpects = append(mr.setApplicationStorageDirectivesExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStateSetApplicationStorageDirectivesCall is the typed call wrapper for SetApplicationStorageDirectives.
+type MockStateSetApplicationStorageDirectivesCall = gomock.Call4_1[context.Context, string, internal.ApplicationStorageSnapshot, []storage0.DirectiveArg, error]
 
 // SetCharmAvailable mocks base method.
 func (m *MockState) SetCharmAvailable(ctx context.Context, charmID charm.ID) error {

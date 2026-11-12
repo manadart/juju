@@ -50,6 +50,7 @@ type MachineState interface {
 
 // State represents a type for interacting with the underlying state.
 type State interface {
+	ApplicationStorageState
 	ApplicationState
 	CharmState
 	UnitState
