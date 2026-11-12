@@ -5,43 +5,35 @@ package storage
 
 import (
 	"context"
-	"math"
+	"time"
 
-	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/gnuflag"
-	"github.com/juju/utils/v4"
+	"github.com/juju/names/v6"
 
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/cmd"
 	"github.com/juju/juju/cmd/modelcmd"
 	"github.com/juju/juju/core/output"
-	corestorage "github.com/juju/juju/core/storage"
 	"github.com/juju/juju/rpc/params"
 )
 
-// NewResizeCommand returns a command for requesting a storage resize.
+// NewResizeCommand returns a command applying capacity directives to a unit.
 func NewResizeCommand() cmd.Command {
 	c := &resizeCommand{}
-	c.newAPIFunc = func(ctx context.Context) (storageResizeAPI, error) {
-		return c.NewStorageAPI(ctx)
-	}
+	c.newAPIFunc = func(ctx context.Context) (storageResizeAPI, error) { return c.NewStorageAPI(ctx) }
 	return modelcmd.Wrap(c)
 }
 
 type storageResizeAPI interface {
 	storageResizeResultAPI
-	ResizeStorage(context.Context, string, uint64) (string, error)
-	SupportsStorageResizeResults() bool
+	ResizeUnitStorage(context.Context, string) ([]params.UnitStorageResizeResult, error)
 }
 
 type resizeCommand struct {
 	StorageCommandBase
 	modelcmd.IAASOnlyCommand
-
-	storageID  corestorage.ID
-	size       string
-	sizeMiB    uint64
+	unitName   string
 	wait       bool
 	out        cmd.Output
 	newAPIFunc func(context.Context) (storageResizeAPI, error)
@@ -50,59 +42,47 @@ type resizeCommand struct {
 // Info implements Command.Info.
 func (c *resizeCommand) Info() *cmd.Info {
 	return jujucmd.Info(&cmd.Info{
-		Name:    "resize-storage",
-		Args:    "<storage-id> --size <size>",
-		Purpose: "Records a request to grow a storage instance.",
+		Name: "resize-storage", Args: "<unit>",
+		Purpose: "Grows a unit's storage to the application capacity targets.",
 		Doc: `
-Request a new total capacity for an existing storage instance in a machine model.
-The size is a target capacity, not an amount to add. Sizes use binary units;
-M, G, T and P suffixes are supported, and a size without a suffix is in MiB.
+Apply the current application storage directives to a unit's existing storage.
+Use application-storage first to set the desired capacity for each storage name.
+The controller stages requests for all instances that need growth, with targets
+fixed when submitted. Later directive edits do not change those requests.
 
-The command prints the UUID of the recorded request. Recording a request does
-not mean the resize has been approved or completed. Only one request can be
-pending for a storage instance.
+Instances already large enough are reported as already-satisfied. Matching
+pending requests are reused. Conflicting pending targets reject the submission.
+Pool and count changes do not move, add or remove existing storage. Storage is
+never shrunk. This prototype supports machine models.
 
-Use --wait to wait until a completed or failed result is reported. The result
-is printed instead of just the UUID, and a failed resize exits unsuccessfully.
-Stopping the wait does not cancel the request. Use show-storage-resize with the
-request UUID to retrieve the result later.
+Output maps each storage ID to its request ID, target capacity and status.
+Use --wait to wait for all requests and report individual results. Any failed
+request makes the command exit unsuccessfully. Stopping the wait does not cancel
+requests. Use show-storage-resize <request-id> to retrieve a result later.
 
 Run any charm-specific preparation action separately before requesting a resize.
-This command does not pause charm hooks or run preparation actions.
 `,
-		Examples: "juju resize-storage pgdata/0 --size 20G",
-		SeeAlso:  []string{"show-storage-resize", "storage", "show-storage", "add-storage", "run"},
+		Examples: "juju application-storage postgresql pgdata=20G\njuju resize-storage postgresql/0 --wait",
+		SeeAlso:  []string{"application-storage", "show-storage-resize", "storage", "show-storage", "run"},
 	})
 }
 
 // SetFlags implements Command.SetFlags.
 func (c *resizeCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.StorageCommandBase.SetFlags(f)
-	f.StringVar(&c.size, "size", "", "Requested total capacity (for example, 20G)")
-	f.BoolVar(&c.wait, "wait", false, "Wait for the resize result")
+	f.BoolVar(&c.wait, "wait", false, "Wait for all resize results")
 	c.out.AddFlags(f, "yaml", output.DefaultFormatters)
 }
 
 // Init implements Command.Init.
 func (c *resizeCommand) Init(args []string) error {
 	if len(args) != 1 {
-		return errors.New("resize-storage requires one storage ID")
+		return errors.New("resize-storage requires one unit name")
 	}
-	var err error
-	c.storageID, err = corestorage.ParseID(args[0])
-	if err != nil {
-		return err
+	if !names.IsValidUnit(args[0]) {
+		return errors.NotValidf("unit name %q", args[0])
 	}
-	if c.size == "" {
-		return errors.New("--size is required")
-	}
-	c.sizeMiB, err = utils.ParseSize(c.size)
-	if err != nil {
-		return errors.Annotate(err, "invalid size")
-	}
-	if c.sizeMiB == 0 || c.sizeMiB > math.MaxInt64 {
-		return errors.New("size must be between 1 and 9223372036854775807 MiB")
-	}
+	c.unitName = args[0]
 	return nil
 }
 
@@ -113,30 +93,79 @@ func (c *resizeCommand) Run(ctx *cmd.Context) error {
 		return err
 	}
 	defer api.Close()
-	if c.wait && !api.SupportsStorageResizeResults() {
-		return errors.NotSupportedf("waiting for storage resize results on this version of Juju")
-	}
-	uuid, err := api.ResizeStorage(ctx, c.storageID.String(), c.sizeMiB)
+	results, err := api.ResizeUnitStorage(ctx, c.unitName)
 	if err != nil {
 		return err
+	}
+	out := make(map[string]unitStorageResizeOutput, len(results))
+	for _, result := range results {
+		tag, err := names.ParseStorageTag(result.StorageTag)
+		if err != nil {
+			return err
+		}
+		status := params.StorageResizePending
+		if result.AlreadySatisfied {
+			status = "already-satisfied"
+		}
+		out[tag.Id()] = unitStorageResizeOutput{ID: result.UUID, RequestedSizeMiB: result.RequestedSizeMiB, Status: status}
+		if c.wait && result.UUID != "" {
+			ctx.Infof("Storage %s: resize request %s", tag.Id(), result.UUID)
+		}
 	}
 	if !c.wait {
-		return c.out.Write(ctx, uuid)
+		return c.out.Write(ctx, out)
 	}
-	ctx.Infof("Resize request %s recorded. Waiting for a result.", uuid)
-	result, err := getStorageResizeResult(ctx, api, uuid, true, clock.WallClock)
-	if err != nil {
-		return errors.Annotatef(err, "waiting for resize request %s", uuid)
+	// Poll all requests so a pending member never hides another member's result.
+	for {
+		pending, failed := false, false
+		for storageID, result := range out {
+			if result.Status == params.StorageResizePending {
+				details, err := api.StorageResizeDetails(ctx, result.ID)
+				if err != nil {
+					if writeErr := c.out.Write(ctx, out); writeErr != nil {
+						return writeErr
+					}
+					return errors.Annotatef(err, "waiting for resize request %s", result.ID)
+				}
+				switch details.Status {
+				case params.StorageResizePending, params.StorageResizeCompleted, params.StorageResizeFailed:
+				default:
+					return errors.Errorf("unknown resize status %q", details.Status)
+				}
+				if details.Status != params.StorageResizePending {
+					ctx.Infof("Storage %s: %s (%s)", storageID, details.Status, details.Message)
+				}
+				result.Status, result.Message = details.Status, details.Message
+				out[storageID] = result
+			}
+			pending = pending || result.Status == params.StorageResizePending
+			failed = failed || result.Status == params.StorageResizeFailed
+		}
+		if !pending {
+			if err := c.out.Write(ctx, out); err != nil {
+				return err
+			}
+			if failed {
+				return cmd.ErrSilent
+			}
+			return nil
+		}
+		timer := time.NewTimer(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			if err := c.out.Write(ctx, out); err != nil {
+				return err
+			}
+			return ctx.Err()
+		case <-timer.C:
+		}
 	}
-	formatted, err := formatStorageResizeResult(result)
-	if err != nil {
-		return err
-	}
-	if err := c.out.Write(ctx, formatted); err != nil {
-		return err
-	}
-	if result.Status == params.StorageResizeFailed {
-		return cmd.ErrSilent
-	}
-	return nil
+}
+
+type unitStorageResizeOutput struct {
+	ID               string `json:"id,omitempty" yaml:"id,omitempty"`
+	RequestedSizeMiB uint64 `json:"requested-size-mib" yaml:"requested-size-mib"`
+	Status           string `json:"status" yaml:"status"`
+	Message          string `json:"message,omitempty" yaml:"message,omitempty"`
 }

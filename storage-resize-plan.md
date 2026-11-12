@@ -39,6 +39,37 @@ backing-file checks passed, with device commands simulated in the latter.
 No live device or cloud resize was validated. Full lint was unavailable because
 `golangci-lint` was missing; plain vet also found an existing unkeyed test literal.
 
+## Directive-driven unit resize increment
+
+The command workflow now uses `application-storage <app> <name>=<directive>`
+followed by `resize-storage <unit> [--wait]`. Submission stages or reuses the
+existing per-instance requests and reports already satisfied instances. The
+capacity target comes from the current application directive. Existing provider
+and machine execution stages are unchanged. See the command decision below for
+atomic staging, conflict handling and allocation ordering.
+
+The state and service changes are in `9c15120885d` and `5c741408cda`. Version 23
+of the Application facade identifies allocation-only directive updates; Storage
+version 10 adds unit submission. Earlier storage request APIs remain available
+for compatibility. The CLI requires those versions for the new workflow and
+preserves omitted directive fields through parsing, API encoding and persistence.
+
+Existing state, service, client API, facade and command suites pass with the race
+detector. Forty bounded stress runs of the existing storage command suite pass.
+A disposable SQLite model check exercised the new state and service paths:
+size-only updates preserve pool/count, create no requests, reject stale writes
+and allocations, stage multiple instances, reuse matching pending requests,
+reject conflicting batches, detect attachment changes and skip sufficient
+observed capacity. Raw block no-op detection requires both backend and machine
+device capacity, so partial backend growth still stages attachment work. The check caught and verified a SQLair projection correction
+in `e981db49466`. No new repository tests were added; existing mocks and the
+command-list fixture were updated. Static checks pass through schema and import
+validation, then stop because `golangci-lint` is not installed.
+
+The CLI and controller agent build as `4.1-beta3.3` in `.bin`. The live controller
+has not been upgraded and the new command workflow has not been run against it.
+Use the LXD verification commands below after installing the new agent.
+
 ## Cloud resize infrastructure increment
 
 The initial cloud increment added optional provider contracts and coordination
@@ -411,15 +442,17 @@ decisions.
 
 `application-storage` declares the application's storage allocation defaults.
 Updating it validates and persists the supplied fields; it does not submit
-resize requests or mutate existing storage. New allocations use the current
-directive. Omitted pool, size and count fields retain their current values.
+resize requests or mutate existing storage. New units allocate storage using
+the current directive. Omitted pool, size and count fields retain their current values.
 
 `juju resize-storage <unit> [--wait]` applies the current application capacity
 targets to that unit's existing storage instances. The command takes a unit,
 not a storage ID or an explicit size. Match instances to application directives
 by storage name, including every instance when a name has multiple allocations.
 Read the application directive rather than the unit's older directive copy.
-Pool and count changes affect future allocations only: resizing never moves
+The existing `add-storage` command still defaults from the unit directive copy;
+changing that allocation path is outside this increment.
+Pool and count changes affect allocation for new units only: resizing never moves
 storage, creates additional instances or removes surplus instances.
 
 Stage a unit's requests atomically against a consistent snapshot of its live
