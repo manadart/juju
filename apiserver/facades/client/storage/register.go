@@ -36,6 +36,14 @@ func Register(registry facade.FacadeRegistry) {
 	}, reflect.TypeFor[*StorageAPIv8]())
 
 	registry.MustRegister("Storage", 9, func(stdCtx context.Context, ctx facade.ModelContext) (facade.Facade, error) {
+		api, err := newStorageAPI(stdCtx, ctx)
+		if err != nil {
+			return nil, errors.Capture(err)
+		}
+		return &StorageAPIv9{api}, nil
+	}, reflect.TypeFor[*StorageAPIv9]())
+
+	registry.MustRegister("Storage", 10, func(stdCtx context.Context, ctx facade.ModelContext) (facade.Facade, error) {
 		return newStorageAPI(stdCtx, ctx)
 	}, reflect.TypeFor[*StorageAPI]())
 }

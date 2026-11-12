@@ -27,6 +27,9 @@ func Register(registry facade.FacadeRegistry) {
 	registry.MustRegister("Application", 22, func(stdCtx context.Context, ctx facade.ModelContext) (facade.Facade, error) {
 		return newFacadeV22(stdCtx, ctx) // Added GetApplicationStorage and UpdateApplicationStorage storage constraints support
 	}, reflect.TypeFor[*APIv22]())
+	registry.MustRegister("Application", 23, func(stdCtx context.Context, ctx facade.ModelContext) (facade.Facade, error) {
+		return newFacadeV22(stdCtx, ctx) // Allocation-only directive updates.
+	}, reflect.TypeFor[*APIv22]())
 }
 
 func newFacadeV19(stdCtx context.Context, ctx facade.ModelContext) (*APIv19, error) {

@@ -41,3 +41,22 @@ type StorageResizeDetails struct {
 	CreatedAt        time.Time  `json:"created-at"`
 	CompletedAt      *time.Time `json:"completed-at,omitempty"`
 }
+
+// UnitStorageResizeArgs selects a unit whose storage should grow to its current
+// application directives. Targets are resolved and fixed by the controller.
+type UnitStorageResizeArgs struct {
+	UnitTag string `json:"unit-tag"`
+}
+
+// UnitStorageResizeResult identifies a request or an already satisfied instance.
+type UnitStorageResizeResult struct {
+	StorageTag       string `json:"storage-tag"`
+	UUID             string `json:"uuid,omitempty"`
+	RequestedSizeMiB uint64 `json:"requested-size-mib"`
+	AlreadySatisfied bool   `json:"already-satisfied"`
+}
+
+// UnitStorageResizeResults contains the atomically staged unit submission.
+type UnitStorageResizeResults struct {
+	Results []UnitStorageResizeResult `json:"results"`
+}

@@ -72,6 +72,7 @@ type RemovalService interface {
 
 // StorageService defines apis on the storage service.
 type StorageService interface {
+	RequestUnitStorageResize(context.Context, coreunit.Name) ([]domainstorage.UnitStorageResizeResult, error)
 	StoragePoolService
 	StorageAdoptionService
 
@@ -1350,3 +1351,6 @@ func (a *StorageAPI) removeStorageInstance(
 
 	return nil
 }
+
+// StorageAPIv9 retains the single-instance resize API.
+type StorageAPIv9 struct{ *StorageAPI }

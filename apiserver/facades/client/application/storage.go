@@ -11,6 +11,7 @@ import (
 
 	"github.com/juju/juju/core/storage"
 	applicationservice "github.com/juju/juju/domain/application/service"
+	"github.com/juju/juju/rpc/params"
 )
 
 // storageDirectives validates storage directives to override an applications
@@ -49,4 +50,28 @@ func storageDirectives(
 		res[storageName] = sdo
 	}
 	return res, nil
+}
+
+// applicationStorageDirectiveUpdates preserves explicitly supplied fields.
+func applicationStorageDirectiveUpdates(ctx context.Context, storageService StorageService, directives map[string]params.StorageDirectives) (map[string]applicationservice.StorageDirectiveOverrides, error) {
+	updates := make(map[string]applicationservice.StorageDirectiveOverrides, len(directives))
+	for name, directive := range directives {
+		update := applicationservice.StorageDirectiveOverrides{Size: directive.SizeMiB}
+		if directive.Count != nil {
+			if *directive.Count > math.MaxUint32 {
+				return nil, errors.NotValidf("storage directive %q count too large", name)
+			}
+			count := uint32(*directive.Count)
+			update.Count = &count
+		}
+		if directive.Pool != "" {
+			uuid, err := storageService.GetStoragePoolUUID(ctx, directive.Pool)
+			if err != nil {
+				return nil, errors.Annotatef(err, "storage directive %q pool", name)
+			}
+			update.PoolUUID = &uuid
+		}
+		updates[name] = update
+	}
+	return updates, nil
 }

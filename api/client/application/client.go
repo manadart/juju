@@ -1219,10 +1219,15 @@ type ApplicationStorageInfo struct {
 
 // GetApplicationStorage retrieves storage information for the specified applications.
 func (c *Client) GetApplicationStorage(applicationName string) (ApplicationStorageInfo, error) {
+	return c.GetApplicationStorageWithContext(context.Background(), applicationName)
+}
+
+// GetApplicationStorageWithContext retrieves allocation defaults with cancellation.
+func (c *Client) GetApplicationStorageWithContext(ctx context.Context, applicationName string) (ApplicationStorageInfo, error) {
 	application := names.NewApplicationTag(applicationName)
 	in := params.Entities{Entities: []params.Entity{{Tag: application.String()}}}
 	var out params.ApplicationStorageGetResults
-	err := c.facade.FacadeCall(context.Background(), "GetApplicationStorage", in, &out)
+	err := c.facade.FacadeCall(ctx, "GetApplicationStorage", in, &out)
 	if err != nil {
 		return ApplicationStorageInfo{}, errors.Trace(err)
 	}

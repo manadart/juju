@@ -57,3 +57,18 @@ func (c *Client) StorageResizeDetails(
 	}
 	return result, nil
 }
+
+// ResizeUnitStorage stages requests for a unit using application directives.
+func (c *Client) ResizeUnitStorage(ctx context.Context, unitName string) ([]params.UnitStorageResizeResult, error) {
+	if c.BestAPIVersion() < 10 {
+		return nil, errors.NotSupportedf("unit storage resize on this version of Juju")
+	}
+	if !names.IsValidUnit(unitName) {
+		return nil, errors.NotValidf("unit name %q", unitName)
+	}
+	var result params.UnitStorageResizeResults
+	if err := c.facade.FacadeCall(ctx, "ResizeUnitStorage", params.UnitStorageResizeArgs{UnitTag: names.NewUnitTag(unitName).String()}, &result); err != nil {
+		return nil, errors.Trace(err)
+	}
+	return result.Results, nil
+}

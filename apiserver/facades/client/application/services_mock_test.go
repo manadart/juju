@@ -386,6 +386,7 @@ type MockApplicationServiceMockRecorder struct {
 	unsetApplicationConfigKeysExpects          []*gomock.Call3_1[context.Context, application.UUID, []string, error]
 	unsetExposeSettingsExpects                 []*gomock.Call3_1[context.Context, string, set.Strings, error]
 	updateApplicationConfigExpects             []*gomock.Call3_1[context.Context, application.UUID, map[string]string, error]
+	updateApplicationStorageDirectivesExpects  []*gomock.Call3_1[context.Context, application.UUID, map[string]service.StorageDirectiveOverrides, error]
 }
 
 // NewMockApplicationService creates a new mock instance.
@@ -1141,6 +1142,24 @@ func (mr *MockApplicationServiceMockRecorder) UpdateApplicationConfig(arg0, arg1
 
 // MockApplicationServiceUpdateApplicationConfigCall is the typed call wrapper for UpdateApplicationConfig.
 type MockApplicationServiceUpdateApplicationConfigCall = gomock.Call3_1[context.Context, application.UUID, map[string]string, error]
+
+// UpdateApplicationStorageDirectives mocks base method.
+func (m *MockApplicationService) UpdateApplicationStorageDirectives(arg0 context.Context, arg1 application.UUID, arg2 map[string]service.StorageDirectiveOverrides) error {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch3_1(&m.recorder.updateApplicationStorageDirectivesExpects, m.ctrl, m, "UpdateApplicationStorageDirectives", arg0, arg1, arg2)
+}
+
+// UpdateApplicationStorageDirectives indicates an expected call of UpdateApplicationStorageDirectives.
+func (mr *MockApplicationServiceMockRecorder) UpdateApplicationStorageDirectives(arg0, arg1, arg2 any) *MockApplicationServiceUpdateApplicationStorageDirectivesCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall3_1[context.Context, application.UUID, map[string]service.StorageDirectiveOverrides, error](mr.mock.ctrl.T, mr.mock, "UpdateApplicationStorageDirectives", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2))
+	mr.updateApplicationStorageDirectivesExpects = append(mr.updateApplicationStorageDirectivesExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockApplicationServiceUpdateApplicationStorageDirectivesCall is the typed call wrapper for UpdateApplicationStorageDirectives.
+type MockApplicationServiceUpdateApplicationStorageDirectivesCall = gomock.Call3_1[context.Context, application.UUID, map[string]service.StorageDirectiveOverrides, error]
 
 // MockResolveService is a mock of ResolveService interface.
 type MockResolveService struct {

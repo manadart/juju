@@ -169,6 +169,7 @@ type MachineService interface {
 
 // ApplicationService instances save an application to dqlite state.
 type ApplicationService interface {
+	UpdateApplicationStorageDirectives(context.Context, coreapplication.UUID, map[string]applicationservice.StorageDirectiveOverrides) error
 	// CreateIAASApplication creates the specified IAAS application and
 	// subsequent units if supplied.
 	CreateIAASApplication(context.Context, string, internalcharm.Charm, corecharm.Origin, applicationservice.AddApplicationArgs, ...applicationservice.AddIAASUnitArg) (coreapplication.UUID, error)

@@ -2456,9 +2456,20 @@ func (api *APIBase) GetApplicationStorage(ctx context.Context, args params.Entit
 // GetApplicationStorage isn't on the v21 API.
 func (api *APIv21) GetApplicationStorage(_ struct{}) {}
 
-func (api *APIBase) updateOneApplicationStorage(storageUpdate params.ApplicationStorageUpdate) error {
-	// TODO(storage): implement and add test.
-	return errors.NotImplementedf("UpdateApplicationStorage")
+func (api *APIBase) updateOneApplicationStorage(ctx context.Context, update params.ApplicationStorageUpdate) error {
+	tag, err := names.ParseApplicationTag(update.ApplicationTag)
+	if err != nil {
+		return err
+	}
+	uuid, err := api.applicationService.GetApplicationUUIDByName(ctx, tag.Id())
+	if err != nil {
+		return err
+	}
+	directives, err := applicationStorageDirectiveUpdates(ctx, api.storageService, update.StorageDirectives)
+	if err != nil {
+		return err
+	}
+	return api.applicationService.UpdateApplicationStorageDirectives(ctx, uuid, directives)
 }
 
 // UpdateApplicationStorage updates the storage constraints for multiple existing applications in bulk.
@@ -2471,12 +2482,15 @@ func (api *APIBase) UpdateApplicationStorage(ctx context.Context, args params.Ap
 	if err := api.checkCanWrite(ctx); err != nil {
 		return resp, errors.Trace(err)
 	}
+	if err := api.check.ChangeAllowed(ctx); err != nil {
+		return resp, errors.Trace(err)
+	}
 
 	res := make([]params.ErrorResult, len(args.ApplicationStorageUpdates))
 	resp.Results = res
 
 	for i, storageUpdate := range args.ApplicationStorageUpdates {
-		err := api.updateOneApplicationStorage(storageUpdate)
+		err := api.updateOneApplicationStorage(ctx, storageUpdate)
 		res[i].Error = apiservererrors.ServerError(err)
 	}
 
