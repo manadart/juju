@@ -7,8 +7,8 @@ not provide the guarantees needed for resizing existing storage safely.
 
 Status: working prototype and cloud resize infrastructure plan, updated on
 2026-11-12. Workload preparation remains an explicitly invoked charm action;
-new hooks and uniter coordination are out of scope. The selected command is
-`juju resize-storage`.
+new hooks and uniter coordination are out of scope. The selected workflow is `application-storage` followed by
+`juju resize-storage <unit>`; see the command decision below.
 
 ## Prototype location and current additions
 
@@ -169,12 +169,12 @@ export JUJU_DATA="$PWD/.juju-data"
 ./.bin/juju storage -m lxd:work
 ```
 
-Wait for storage attachment and use the storage ID assigned to
-`resize-zfs-test/0` (it may not be `data/0`). Write a file to `/srv/data`, record
-its checksum and filesystem size, then request a larger target:
+Wait for storage attachment. Write a file to `/srv/data`, record its checksum
+and filesystem size, then update the default and apply it to the unit:
 
 ```sh
-./.bin/juju resize-storage -m lxd:work data/<id> --size 128M --wait
+./.bin/juju application-storage -m lxd:work resize-zfs-test data=128M
+./.bin/juju resize-storage -m lxd:work resize-zfs-test/0 --wait
 ./.bin/juju show-storage -m lxd:work data/<id>
 ```
 
@@ -364,8 +364,8 @@ from reversal of a storage expansion that has already started.
 
 ## Verified 4.1 baseline
 
-The standalone application storage directive update and Kubernetes claim-template
-update workflow from 3.6 is unavailable at the reviewed 4.1 revision. The
+At the original reviewed 4.1 baseline, the standalone application storage
+directive update and Kubernetes claim-template workflow from 3.6 were unavailable. The
 `application-storage` command is absent, and the retained
 [`UpdateApplicationStorage` API implementation](apiserver/facades/client/application/application.go#L2459)
 returns a not-implemented error. The storage-constraint watcher, provider
@@ -409,17 +409,56 @@ decisions.
 
 ## Command decision
 
-Use `juju resize-storage` to request resizing of existing storage. Submission
-creates a durable resize operation and returns its identifier, with progress
-and results available asynchronously.
+`application-storage` declares the application's storage allocation defaults.
+Updating it validates and persists the supplied fields; it does not submit
+resize requests or mutate existing storage. New allocations use the current
+directive. Omitted pool, size and count fields retain their current values.
 
-`application-storage` remains the command for viewing and updating application
-storage directives for future allocations. Resizing existing storage does not
-implicitly change those defaults. Restoring the application directive update
-workflow in 4.1 is separate from implementing `resize-storage`.
+`juju resize-storage <unit> [--wait]` applies the current application capacity
+targets to that unit's existing storage instances. The command takes a unit,
+not a storage ID or an explicit size. Match instances to application directives
+by storage name, including every instance when a name has multiple allocations.
+Read the application directive rather than the unit's older directive copy.
+Pool and count changes affect future allocations only: resizing never moves
+storage, creates additional instances or removes surplus instances.
 
-The command name is settled. Exact target syntax, flags, and the commands or API
-methods for waiting and inspecting operation results remain open.
+Stage a unit's requests atomically against a consistent snapshot of its live
+attachments and the current application directives. Generate request UUIDs in
+the service and revalidate the snapshot when committing. A changed directive,
+charm, lifecycle or attachment causes retry or an explicit conflict rather than
+partial submission. Targets are fixed once recorded, so later directive edits
+do not change work already underway. Reuse matching pending requests; conflicting
+pending targets reject the entire submission. Instances with sufficient observed
+capacity are reported as already satisfied, without shrinking or new requests.
+
+The result maps storage IDs to request UUIDs and their snapshotted target sizes.
+`--wait` waits for every staged/reused request and reports individual results,
+including partial execution failure. `show-storage-resize <request-uuid>` remains
+the way to inspect an individual request later. No parent operation is required.
+Request staging is atomic; physical expansion across several instances is not.
+
+For example, after any explicitly invoked charm preparation:
+
+```sh
+juju application-storage postgresql pgdata=20G
+juju resize-storage postgresql/0 --wait
+juju resize-storage postgresql/1 --wait
+juju resize-storage postgresql/2 --wait
+```
+
+This permits a user-controlled rolling resize and gives a later unit the larger
+allocation default. Unit creation must validate the directive snapshot in its
+insertion transaction, so an in-flight add-unit cannot commit an obsolete size.
+Concurrent charm refresh must likewise preserve or reject a changed directive.
+
+This prototype increment retains the machine-model execution scope. Kubernetes
+resize and directive updates are follow-up work: new PVC allocation must honour
+the current directive even when a StatefulSet retains an older claim template.
+That ordering needs to be implemented before exposing directive writes there.
+The Kubernetes resize executor will patch the individual bound PVC, preserve
+PVC/PV identity, and wait for Kubernetes controller and node expansion to finish.
+It will not require a Juju machine resize worker. Existing provider contracts,
+per-instance requests and execution stages remain the basis for both models.
 
 ## Asynchronous resize operation approach
 
