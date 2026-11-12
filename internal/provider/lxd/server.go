@@ -36,6 +36,8 @@ import (
 // Server defines an interface of all localized methods that the environment
 // and provider utilizes.
 type Server interface {
+	// WithContext returns a client scoped to the operation's cancellation.
+	WithContext(context.Context) (lxdclient.InstanceServer, error)
 	FindImage(context.Context, corebase.Base, string, instance.VirtType, []lxd.ServerSpec, bool, environs.StatusCallbackFunc) (lxd.SourcedImage, error)
 	GetServer() (server *lxdapi.Server, ETag string, err error)
 	ServerVersion() string

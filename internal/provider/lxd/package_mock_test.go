@@ -85,6 +85,7 @@ type MockServerMockRecorder struct {
 	useProjectExpects              []*gomock.Call1_0[string]
 	useTargetServerExpects         []*gomock.Call2_2[context.Context, string, *lxd0.Server, error]
 	verifyNetworkDeviceExpects     []*gomock.Call2_1[*api.Profile, string, error]
+	withContextExpects             []*gomock.Call1_2[context.Context, lxd.InstanceServer, error]
 	writeContainerExpects          []*gomock.Call1_1[*lxd0.Container, error]
 }
 
@@ -1053,6 +1054,24 @@ func (mr *MockServerMockRecorder) VerifyNetworkDevice(arg0, arg1 any) *MockServe
 
 // MockServerVerifyNetworkDeviceCall is the typed call wrapper for VerifyNetworkDevice.
 type MockServerVerifyNetworkDeviceCall = gomock.Call2_1[*api.Profile, string, error]
+
+// WithContext mocks base method.
+func (m *MockServer) WithContext(arg0 context.Context) (lxd.InstanceServer, error) {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch1_2(&m.recorder.withContextExpects, m.ctrl, m, "WithContext", arg0)
+}
+
+// WithContext indicates an expected call of WithContext.
+func (mr *MockServerMockRecorder) WithContext(arg0 any) *MockServerWithContextCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall1_2[context.Context, lxd.InstanceServer, error](mr.mock.ctrl.T, mr.mock, "WithContext", gomock.EnsureMatcher(arg0))
+	mr.withContextExpects = append(mr.withContextExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockServerWithContextCall is the typed call wrapper for WithContext.
+type MockServerWithContextCall = gomock.Call1_2[context.Context, lxd.InstanceServer, error]
 
 // WriteContainer mocks base method.
 func (m *MockServer) WriteContainer(arg0 *lxd0.Container) error {

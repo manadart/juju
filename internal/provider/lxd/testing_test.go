@@ -682,6 +682,10 @@ func (conn *StubClient) UseProject(string) {
 	panic("this stub is deprecated; use mocks instead")
 }
 
+func (*StubClient) WithContext(context.Context) (lxdclient.InstanceServer, error) {
+	panic("this stub is deprecated; use mocks instead")
+}
+
 func (*StubClient) HasExtension(extension string) bool {
 	// Legacy address and removal tests model servers without network forwards.
 	// Keep the tripwire for other extensions; new tests must use mocks.

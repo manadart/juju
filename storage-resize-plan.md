@@ -6,7 +6,7 @@ directives remain useful as allocation defaults, but the 3.6 implementation does
 not provide the guarantees needed for resizing existing storage safely.
 
 Status: working prototype and cloud resize infrastructure plan, updated on
-2026-11-11. Workload preparation remains an explicitly invoked charm action;
+2026-11-12. Workload preparation remains an explicitly invoked charm action;
 new hooks and uniter coordination are out of scope. The selected command is
 `juju resize-storage`.
 
@@ -41,9 +41,10 @@ No live device or cloud resize was validated. Full lint was unavailable because
 
 ## Cloud resize infrastructure increment
 
-This increment adds optional provider contracts and the coordination machinery
-without adding resize implementations to cloud providers. A source that does not implement
-its optional resize interface must produce an unsupported result during checks.
+The initial cloud increment added optional provider contracts and coordination
+without provider implementations. The LXD ZFS increment below implements the
+first provider. A source that does not implement its optional resize interface
+must produce an unsupported result during checks.
 Provider inspection errors remain retryable errors, not capability decisions.
 
 The request remains the user-facing operation. Generalise the single machine
@@ -101,15 +102,87 @@ The first cloud attachment executor handles whole SCSI devices with a stable
 `/dev/disk/by-id/` link and a kernel rescan interface, plus whole-device ext4.
 Other transports, partitioned layouts, shared attachments and disruption
 requirements remain explicit failures before backend growth. Provider-native
-filesystems use a backend-only stage. No cloud source implements the optional
-resize interfaces in this increment, so cloud requests currently fail their
-capability check rather than mutating storage.
+filesystems use a backend-only stage. Providers other than LXD still fail their
+capability check because they do not implement the optional resize interfaces.
 
 The agent builds and existing race suites pass. Scratch service
 checks exercise approval, partial completion, separate volume/device observations
 and rejection of offline requirements. The loop backing-file smoke check still
 preserves contents with device commands simulated. These checks do not establish
-live SCSI, ext4 or cloud resize behaviour.
+live SCSI, ext4 or cloud resize behaviour. The later LXD validation is below.
+
+## LXD ZFS provider increment
+
+The LXD filesystem source implements `FilesystemResizer` for custom filesystem
+volumes backed by ZFS datasets on standalone LXD servers. It grows the existing
+volume's `size` quota through the LXD API; no copy, replacement, detach, unmount,
+or machine-side filesystem growth is involved. This follows LXD's documented
+[ZFS quota semantics](https://canonical.com/lxd/docs/latest/reference/storage_zfs/#quotas).
+
+Checks are read-only. Both check and ensure inspect the actual pool driver,
+volume content type, model ownership, stable volume UUID and current quota.
+Other pool drivers, ZFS block mode, clustered servers, shared volumes and
+unlimited quotas are explicitly unsupported in this prototype. LXD inspection
+errors remain retryable. The implementation preserves the existing description
+and configuration, sends the current ETag with the quota update and honours the
+worker's bounded context for API calls and operation completion.
+
+Ensure re-reads the volume after LXD completes the update and verifies that its
+UUID is unchanged. It reports the provider's committed quota, not the requested
+value or a reservation of free space in the backing pool. A retry or smaller
+target is a no-op when the current quota already satisfies the target. No
+separate provider operation journal is required for this convergent quota
+update. A timeout or ambiguous response is retried by inspecting the same
+volume and target again. LXD 5.21 updates are synchronous; newer LXD versions
+may return an operation, whose acknowledgement uses the bounded context.
+
+The existing model-scoped flow is unchanged: record intent, check the provider,
+approve the plan, ensure the quota, persist observed filesystem size and finish
+the request. The controller agent must contain this implementation. Rebuilding
+only the CLI or the workload machine agent does not enable it.
+
+Live provider verification on LXD 5.21.9 used a disposable container and custom
+volume in the local `default` ZFS pool. The actual provider grew the mounted
+filesystem from 64 MiB to 128 MiB, verified with `df -B1`. A 1 MiB random file
+retained its SHA-256 checksum; the volume UUID, attachment and other settings
+were unchanged. Repeated ensure, a smaller target, cancellation and rejection of
+a `dir` pool were also checked. The disposable resources were removed. This
+verified the provider directly; the live Juju request/approval/reporting path
+still needs to be exercised with an updated controller agent. No new automated
+tests were added for this prototype.
+
+The existing LXD provider suite passes with the race detector, as do 40 bounded
+stress runs of its storage suite. Targeted vet passes with the composites check
+disabled; plain vet reports existing unkeyed test literals. Repository static
+checks reach Go lint, which remains unavailable because `golangci-lint` is not
+installed.
+
+To exercise that path after updating or re-bootstrapping the test controller,
+use a Juju pool that explicitly selects the existing ZFS pool:
+
+```sh
+export JUJU_DATA="$PWD/.juju-data"
+./.bin/juju create-storage-pool -m lxd:work resize-zfs lxd \
+  driver=zfs lxd-pool=default
+./.bin/juju deploy -m lxd:work ./testcharms/charms/dummy-storage-fs \
+  resize-zfs-test --base ubuntu@24.04 --storage data=resize-zfs,64M
+./.bin/juju storage -m lxd:work
+```
+
+Wait for storage attachment and use the storage ID assigned to
+`resize-zfs-test/0` (it may not be `data/0`). Write a file to `/srv/data`, record
+its checksum and filesystem size, then request a larger target:
+
+```sh
+./.bin/juju resize-storage -m lxd:work data/<id> --size 128M --wait
+./.bin/juju show-storage -m lxd:work data/<id>
+```
+
+Check the checksum and `df -B1 /srv/data` again on the unit, and use
+`lxc storage volume show default <provider-volume-name>` to confirm the same
+volume UUID and updated quota. Repeating the same target must complete without
+replacing storage. The pre-existing `lxd-zfs` Juju pool in this environment has
+a conflicting `zfs.pool_name`, so the commands above use a separate pool.
 
 The initial review baseline is branch `3.6` at
 `1cefd614fe63861595d5d43dacf1365de4819f4e`. Links in the existing behaviour and
