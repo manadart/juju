@@ -102,13 +102,15 @@ WHERE u.name = $unitKey.name`, key, unitIdentity{})
 	if unit.ApplicationLife != life.Alive {
 		return nil, applicationerrors.ApplicationNotAlive
 	}
+	// Raw block capacity must include the machine observation: backend growth
+	// alone does not establish completion of attachment work.
 	stmt, err = s.Prepare(`
 SELECT si.uuid AS &unitResizeTargetRow.instance_uuid,
        si.storage_id AS &unitResizeTargetRow.storage_id,
        sa.uuid AS &unitResizeTargetRow.attachment_uuid,
        COALESCE(d.size_mib, 0) AS &unitResizeTargetRow.size_mib,
        COALESCE(CASE WHEN si.storage_kind_id = 1 THEN f.size_mib
-                     ELSE v.size_mib END, 0) AS &unitResizeTargetRow.observed_size_mib,
+                     ELSE MIN(COALESCE(v.size_mib, 0), COALESCE(b.size_mib, 0)) END, 0) AS &unitResizeTargetRow.observed_size_mib,
        COALESCE(r.uuid, '') AS &unitResizeTargetRow.pending_uuid,
        COALESCE(r.requested_size_mib, 0) AS &unitResizeTargetRow.pending_size_mib,
        COALESCE(si.life_id = 0 AND sa.life_id = 0, 0) AS &unitResizeTargetRow.alive
@@ -122,6 +124,8 @@ LEFT JOIN storage_instance_filesystem AS ifs ON ifs.storage_instance_uuid = si.u
 LEFT JOIN storage_filesystem AS f ON f.uuid = ifs.storage_filesystem_uuid
 LEFT JOIN storage_instance_volume AS iv ON iv.storage_instance_uuid = si.uuid
 LEFT JOIN storage_volume AS v ON v.uuid = iv.storage_volume_uuid
+LEFT JOIN storage_volume_attachment AS va ON va.storage_volume_uuid = v.uuid AND va.net_node_uuid = u.net_node_uuid
+LEFT JOIN block_device AS b ON b.uuid = va.block_device_uuid
 LEFT JOIN storage_resize_request AS r ON r.storage_instance_uuid = si.uuid AND r.status = 'pending'
 WHERE u.name = $unitKey.name
 ORDER BY si.storage_id`, key, unitResizeTargetRow{})
