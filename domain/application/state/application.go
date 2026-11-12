@@ -1634,6 +1634,12 @@ WHERE  uuid = $entityUUID.uuid
 			return errors.Errorf("getting charm for application %q: %w", appID, err)
 		}
 
+		if params.StorageDirectivesBeforeUpdate != nil {
+			if err := st.checkApplicationStorageDirectives(ctx, tx, appID.String(), params.StorageDirectivesBeforeUpdate); err != nil {
+				return err
+			}
+		}
+
 		// Update storage directives for the new charm.
 		if err := st.updateApplicationStorageDirectives(
 			ctx, tx, appID, chID.String(), params.StorageDirectivesToUpdate); err != nil {

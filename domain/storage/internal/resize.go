@@ -54,3 +54,19 @@ type StorageResizeReport struct {
 	VolumeSizeMiB     uint64
 	FilesystemSizeMiB uint64
 }
+
+// UnitStorageResizeTarget is a snapshot used to stage a unit's requests atomically.
+// Attachment and charm identities prevent applying stale target selections.
+type UnitStorageResizeTarget struct {
+	UnitUUID             string
+	ApplicationCharmUUID string
+	UnitCharmUUID        string
+	StorageInstanceUUID  string
+	StorageID            string
+	AttachmentUUID       string
+	SizeMiB              uint64
+	ObservedSizeMiB      uint64
+	PendingUUID          string
+	PendingSizeMiB       uint64
+	Alive                bool
+}

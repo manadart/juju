@@ -497,6 +497,12 @@ func (st *State) AddIAASUnits(
 			return errors.Errorf("getting application %q charm uuid: %w", appUUID, err)
 		}
 
+		for _, arg := range args {
+			if err := st.checkApplicationStorageDirectives(ctx, tx, appUUID.String(), arg.StorageDirectives); err != nil {
+				return err
+			}
+		}
+
 		for i, arg := range args {
 			uName, mNames, err := st.InsertIAASUnit(ctx, tx, appUUID.String(), charmUUID, arg)
 			if err != nil {

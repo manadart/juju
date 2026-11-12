@@ -561,6 +561,10 @@ type SetCharmStateParams struct {
 	// created based on the new charm's storage requirements.
 	StorageDirectivesToCreate []domainstorage.DirectiveArg
 
+	// StorageDirectivesBeforeUpdate guards concurrent directive edits.
+	// Nil preserves callers that do not reconcile existing directives.
+	StorageDirectivesBeforeUpdate []domainstorage.DirectiveArg
+
 	// StorageDirectivesToUpdate contains storage directives that need to be
 	// applied based on the new charm's storage requirements.
 	StorageDirectivesToUpdate []domainstorage.DirectiveArg

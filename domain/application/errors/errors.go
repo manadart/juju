@@ -644,3 +644,6 @@ func (s CharmStorageDefinitionLocationChanged) Error() string {
 		s.StorageName, s.ExistingLocation, s.NewLocation,
 	)
 }
+
+// StorageDirectivesChanged prevents stale allocation or directive updates.
+const StorageDirectivesChanged = errors.ConstError("application storage directives changed; retry the operation")
