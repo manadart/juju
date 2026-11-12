@@ -995,7 +995,7 @@
     {
         "Name": "Application",
         "Description": "",
-        "Version": 22,
+        "Version": 23,
         "Schema": {
             "type": "object",
             "properties": {
@@ -14258,7 +14258,7 @@
     {
         "Name": "Storage",
         "Description": "",
-        "Version": 9,
+        "Version": 10,
         "Schema": {
             "type": "object",
             "properties": {
@@ -14391,6 +14391,17 @@
                         },
                         "Result": {
                             "$ref": "#/definitions/StorageResizeResult"
+                        }
+                    }
+                },
+                "ResizeUnitStorage": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/UnitStorageResizeArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/UnitStorageResizeResults"
                         }
                     }
                 },
@@ -15276,6 +15287,56 @@
                     "additionalProperties": false,
                     "required": [
                         "storages"
+                    ]
+                },
+                "UnitStorageResizeArgs": {
+                    "type": "object",
+                    "properties": {
+                        "unit-tag": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "unit-tag"
+                    ]
+                },
+                "UnitStorageResizeResult": {
+                    "type": "object",
+                    "properties": {
+                        "already-satisfied": {
+                            "type": "boolean"
+                        },
+                        "requested-size-mib": {
+                            "type": "integer"
+                        },
+                        "storage-tag": {
+                            "type": "string"
+                        },
+                        "uuid": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "storage-tag",
+                        "requested-size-mib",
+                        "already-satisfied"
+                    ]
+                },
+                "UnitStorageResizeResults": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/UnitStorageResizeResult"
+                            }
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "results"
                     ]
                 },
                 "VolumeAttachmentDetails": {
