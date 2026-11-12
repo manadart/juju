@@ -107,11 +107,11 @@ SELECT si.uuid AS &unitResizeTargetRow.instance_uuid,
        si.storage_id AS &unitResizeTargetRow.storage_id,
        sa.uuid AS &unitResizeTargetRow.attachment_uuid,
        COALESCE(d.size_mib, 0) AS &unitResizeTargetRow.size_mib,
-       CASE WHEN si.storage_kind_id = 1 THEN COALESCE(f.size_mib, 0)
-            ELSE COALESCE(v.size_mib, 0) END AS &unitResizeTargetRow.observed_size_mib,
+       COALESCE(CASE WHEN si.storage_kind_id = 1 THEN f.size_mib
+                     ELSE v.size_mib END, 0) AS &unitResizeTargetRow.observed_size_mib,
        COALESCE(r.uuid, '') AS &unitResizeTargetRow.pending_uuid,
        COALESCE(r.requested_size_mib, 0) AS &unitResizeTargetRow.pending_size_mib,
-       (si.life_id = 0 AND sa.life_id = 0) AS &unitResizeTargetRow.alive
+       COALESCE(si.life_id = 0 AND sa.life_id = 0, 0) AS &unitResizeTargetRow.alive
 FROM unit AS u
 JOIN application AS a ON a.uuid = u.application_uuid
 JOIN storage_attachment AS sa ON sa.unit_uuid = u.uuid
