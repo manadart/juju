@@ -22,7 +22,7 @@ The implementation through `0745bd5c422` provides:
   completed/failed results and a stable request UUID.
 - State, service and client API methods for submission and result lookup.
   `resize-storage --wait` waits for the recorded outcome;
-  `show-storage-resize <request-uuid>` retrieves it later.
+  `show-storage-resize <request-id>` retrieves it later.
 - Machine-authorised execution APIs, persisted executor/attachment identity,
   lifecycle revalidation and atomic reporting of measured capacities.
 - Execution in the existing machine storage provisioner, serialized with its
@@ -107,9 +107,47 @@ Repository static checks pass through schema, import and context validation,
 then stop because `golangci-lint` is not installed. Licence and shell-format
 checks are skipped because `go-licenses` and `shfmt` are also unavailable.
 
-The CLI and controller agent build as `4.1-beta3.5` in `.bin`. Command help now
+The CLI and controller agent build as `4.1-beta3.6` in `.bin`. Command help now
 identifies PVC-backed Kubernetes directive updates as supported and keeps
 existing-storage resizing restricted to machine models.
+
+## Integer resize request identifiers
+
+Each resize request now has an internal UUID and a model-scoped integer natural
+key. User commands display and accept the integer ID. A dedicated resize
+sequence allocates IDs in the same transaction that creates the requests;
+matching pending requests retain their original IDs when reused. A cumulative
+schema patch numbers existing requests while preserving their UUIDs, execution
+state and results.
+
+There is no parent operation or operation/task hierarchy. When
+`resize-storage <unit>` finds several storage instances below their current
+application targets, it stages independent requests atomically and returns an
+indented list of request IDs and storage names. Instance IDs disambiguate
+multiple instances of the same storage name. For example:
+
+```text
+Storage resize requests for postgresql/0:
+  - request 41 for pgdata (pgdata/0)
+  - request 42 for pgwal (pgwal/1)
+Check request status with 'juju show-storage-resize <id>'
+```
+
+Storage that already satisfies its target is reported separately without a
+request ID. YAML and JSON output retain the storage-to-request mapping and use
+the integer IDs. `--wait` follows each individual request, and
+`show-storage-resize 41` retrieves its retained result. Worker coordination and
+reporting continue to use UUIDs.
+
+Storage facade version 11 exposes integer-ID lookup; the client requires that
+version before submitting unit requests. Earlier UUID-based API methods remain
+available for older clients. Existing race-enabled schema, storage state/service,
+client API, facade and command suites pass. Disposable database and command
+checks cover cumulative upgrades, ID uniqueness and lookup, retry reuse,
+retained removal results, multiple instances of one storage name, formatted
+output, no-op submissions and partial failures. Forty bounded stress runs of
+the existing storage command suite pass. No new repository tests were added.
+No live controller has been upgraded or exercised with these changes.
 
 ## Cloud resize infrastructure increment
 
@@ -515,9 +553,10 @@ do not change work already underway. Reuse matching pending requests; conflictin
 pending targets reject the entire submission. Instances with sufficient observed
 capacity are reported as already satisfied, without shrinking or new requests.
 
-The result maps storage IDs to request UUIDs and their snapshotted target sizes.
+The result maps storage IDs to integer request IDs and their snapshotted target
+sizes.
 `--wait` waits for every staged/reused request and reports individual results,
-including partial execution failure. `show-storage-resize <request-uuid>` remains
+including partial execution failure. `show-storage-resize <request-id>` remains
 the way to inspect an individual request later. No parent operation is required.
 Request staging is atomic; physical expansion across several instances is not.
 

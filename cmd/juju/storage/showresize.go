@@ -5,13 +5,13 @@ package storage
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/juju/clock"
 	"github.com/juju/errors"
 	"github.com/juju/gnuflag"
 	"github.com/juju/names/v6"
-	"github.com/juju/utils/v4"
 
 	jujucmd "github.com/juju/juju/cmd"
 	"github.com/juju/juju/cmd/cmd"
@@ -31,12 +31,12 @@ func NewShowResizeCommand() cmd.Command {
 
 type storageResizeResultAPI interface {
 	Close() error
-	StorageResizeDetails(context.Context, string) (params.StorageResizeDetails, error)
+	StorageResizeDetailsByID(context.Context, string) (params.StorageResizeDetails, error)
 }
 
 type showResizeCommand struct {
 	StorageCommandBase
-	uuid       string
+	id         string
 	wait       bool
 	out        cmd.Output
 	newAPIFunc func(context.Context) (storageResizeResultAPI, error)
@@ -49,7 +49,7 @@ func (c *showResizeCommand) Info() *cmd.Info {
 		Args:    "<request-id>",
 		Purpose: "Shows the status and result of a storage resize request.",
 		Doc: `
-Retrieve the request identified by the UUID returned by resize-storage.
+Retrieve the request identified by the integer ID returned by resize-storage.
 The result includes the original storage ID, requested size in MiB, status,
 creation time and, when reported, the completion time and result message.
 
@@ -78,10 +78,10 @@ func (c *showResizeCommand) Init(args []string) error {
 	if len(args) != 1 {
 		return errors.New("show-storage-resize requires one request ID")
 	}
-	if !utils.IsValidUUIDString(args[0]) {
+	if _, err := strconv.ParseUint(args[0], 10, 63); err != nil {
 		return errors.NotValidf("resize request ID %q", args[0])
 	}
-	c.uuid = args[0]
+	c.id = args[0]
 	return nil
 }
 
@@ -92,7 +92,7 @@ func (c *showResizeCommand) Run(ctx *cmd.Context) error {
 		return err
 	}
 	defer api.Close()
-	result, err := getStorageResizeResult(ctx, api, c.uuid, c.wait, clock.WallClock)
+	result, err := getStorageResizeResult(ctx, api, c.id, c.wait, clock.WallClock)
 	if err != nil {
 		return err
 	}
@@ -106,14 +106,14 @@ func (c *showResizeCommand) Run(ctx *cmd.Context) error {
 // getStorageResizeResult polls without holding a server call open. Polling is
 // read-only; cancellation never cancels or resubmits the persisted request.
 func getStorageResizeResult(
-	ctx context.Context, api storageResizeResultAPI, uuid string, wait bool,
+	ctx context.Context, api storageResizeResultAPI, id string, wait bool,
 	clk clock.Clock,
 ) (params.StorageResizeDetails, error) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return params.StorageResizeDetails{}, err
 		}
-		result, err := api.StorageResizeDetails(ctx, uuid)
+		result, err := api.StorageResizeDetailsByID(ctx, id)
 		if err != nil {
 			return params.StorageResizeDetails{}, err
 		}
@@ -154,7 +154,7 @@ func formatStorageResizeResult(result params.StorageResizeDetails) (storageResiz
 		return storageResizeOutput{}, err
 	}
 	return storageResizeOutput{
-		ID:               result.UUID,
+		ID:               result.ID,
 		Storage:          tag.Id(),
 		RequestedSizeMiB: result.RequestedSizeMiB,
 		Status:           result.Status,

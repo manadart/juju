@@ -4,7 +4,13 @@
 package storage
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
+	"maps"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/juju/errors"
@@ -55,7 +61,9 @@ pending requests are reused. Conflicting pending targets reject the submission.
 Pool and count changes do not move, add or remove existing storage. Storage is
 never shrunk. This prototype supports machine models.
 
-Output maps each storage ID to its request ID, target capacity and status.
+Output lists each integer request ID and its storage name and instance ID.
+Each request is independent; there is no parent operation. YAML and JSON output
+map storage IDs to request IDs, target capacities and statuses.
 Use --wait to wait for all requests and report individual results. Any failed
 request makes the command exit unsuccessfully. Stopping the wait does not cancel
 requests. Use show-storage-resize <request-id> to retrieve a result later.
@@ -71,7 +79,9 @@ Run any charm-specific preparation action separately before requesting a resize.
 func (c *resizeCommand) SetFlags(f *gnuflag.FlagSet) {
 	c.StorageCommandBase.SetFlags(f)
 	f.BoolVar(&c.wait, "wait", false, "Wait for all resize results")
-	c.out.AddFlags(f, "yaml", output.DefaultFormatters)
+	formatters := maps.Clone(output.DefaultFormatters)
+	formatters["plain"] = c.formatRequests
+	c.out.AddFlags(f, "plain", formatters)
 }
 
 // Init implements Command.Init.
@@ -107,9 +117,10 @@ func (c *resizeCommand) Run(ctx *cmd.Context) error {
 		if result.AlreadySatisfied {
 			status = "already-satisfied"
 		}
-		out[tag.Id()] = unitStorageResizeOutput{ID: result.UUID, RequestedSizeMiB: result.RequestedSizeMiB, Status: status}
-		if c.wait && result.UUID != "" {
-			ctx.Infof("Storage %s: resize request %s", tag.Id(), result.UUID)
+		out[tag.Id()] = unitStorageResizeOutput{ID: result.ID, RequestedSizeMiB: result.RequestedSizeMiB, Status: status}
+		if c.wait && result.ID != "" {
+			name, _, _ := strings.Cut(tag.Id(), "/")
+			ctx.Infof("  - request %s for %s (%s)", result.ID, name, tag.Id())
 		}
 	}
 	if !c.wait {
@@ -120,7 +131,7 @@ func (c *resizeCommand) Run(ctx *cmd.Context) error {
 		pending, failed := false, false
 		for storageID, result := range out {
 			if result.Status == params.StorageResizePending {
-				details, err := api.StorageResizeDetails(ctx, result.ID)
+				details, err := api.StorageResizeDetailsByID(ctx, result.ID)
 				if err != nil {
 					if writeErr := c.out.Write(ctx, out); writeErr != nil {
 						return writeErr
@@ -133,7 +144,7 @@ func (c *resizeCommand) Run(ctx *cmd.Context) error {
 					return errors.Errorf("unknown resize status %q", details.Status)
 				}
 				if details.Status != params.StorageResizePending {
-					ctx.Infof("Storage %s: %s (%s)", storageID, details.Status, details.Message)
+					ctx.Infof("Request %s for %s: %s (%s)", result.ID, storageID, details.Status, details.Message)
 				}
 				result.Status, result.Message = details.Status, details.Message
 				out[storageID] = result
@@ -161,6 +172,50 @@ func (c *resizeCommand) Run(ctx *cmd.Context) error {
 		case <-timer.C:
 		}
 	}
+}
+
+func (c *resizeCommand) formatRequests(writer io.Writer, value any) error {
+	results, ok := value.(map[string]unitStorageResizeOutput)
+	if !ok {
+		return errors.Errorf("unexpected resize result type %T", value)
+	}
+	var buf bytes.Buffer
+	storageIDs := make([]string, 0, len(results))
+	requests, pending := 0, false
+	for storageID, result := range results {
+		storageIDs = append(storageIDs, storageID)
+		if result.ID != "" {
+			requests++
+		}
+		pending = pending || result.Status == params.StorageResizePending
+	}
+	slices.Sort(storageIDs)
+	if requests == 0 {
+		fmt.Fprintf(&buf, "No storage resize requests needed for %s\n", c.unitName)
+	} else {
+		fmt.Fprintf(&buf, "Storage resize requests for %s:\n", c.unitName)
+	}
+	for _, storageID := range storageIDs {
+		result := results[storageID]
+		if result.ID == "" {
+			fmt.Fprintf(&buf, "  - storage %s already satisfies %d MiB\n", storageID, result.RequestedSizeMiB)
+			continue
+		}
+		name, _, _ := strings.Cut(storageID, "/")
+		fmt.Fprintf(&buf, "  - request %s for %s (%s)", result.ID, name, storageID)
+		if result.Status != params.StorageResizePending {
+			fmt.Fprintf(&buf, ": %s", result.Status)
+		}
+		fmt.Fprintln(&buf)
+		if result.Message != "" {
+			fmt.Fprintf(&buf, "    %s\n", result.Message)
+		}
+	}
+	if pending {
+		fmt.Fprintln(&buf, "Check request status with 'juju show-storage-resize <id>'")
+	}
+	_, err := writer.Write(buf.Bytes())
+	return err
 }
 
 type unitStorageResizeOutput struct {
