@@ -932,9 +932,32 @@ func ensureScaleWithFsAttachments(
 	}
 
 	// Ensure PVCs exist.
+	attachments := make(map[string][]internalstorage.KubernetesFilesystemUnitAttachmentParams)
+	for _, fs := range info.Filesystems {
+		existing := info.FilesystemUnitAttachments[fs.StorageName]
+		if len(fs.Attachments) == 0 && len(existing) == 0 {
+			continue
+		}
+		byUnit := make(map[string]internalstorage.KubernetesFilesystemUnitAttachmentParams, len(existing))
+		for _, attachment := range existing {
+			byUnit[attachment.UnitName] = attachment
+		}
+		for ordinal := startOrdinal; ordinal < startOrdinal+scaleTarget; ordinal++ {
+			name := fmt.Sprintf("%s/%d", appName, ordinal)
+			attachment, ok := byUnit[name]
+			if !ok {
+				if len(fs.Attachments) == 0 {
+					continue
+				}
+				attachment = internalstorage.KubernetesFilesystemUnitAttachmentParams{UnitName: name}
+			}
+			attachments[fs.StorageName] = append(attachments[fs.StorageName], attachment)
+		}
+	}
 	err = app.EnsurePVCs(
+		ctx,
 		info.Filesystems,
-		info.FilesystemUnitAttachments,
+		attachments,
 		storageUniqueID,
 	)
 	if err != nil {

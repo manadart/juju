@@ -209,7 +209,7 @@ func (s *applicationSuite) TestEnsurePVCs(c *tc.C) {
 		},
 	}
 
-	err := app.EnsurePVCs(filesystems, filesystemUnitAttachments, "uniqid")
+	err := app.EnsurePVCs(c.Context(), filesystems, filesystemUnitAttachments, "uniqid")
 	c.Assert(err, tc.ErrorIsNil)
 
 	// Verify PVC was created
@@ -250,7 +250,7 @@ func (s *applicationSuite) TestEnsurePVCsWithProvisionedAttachments(c *tc.C) {
 		},
 	}
 
-	err := app.EnsurePVCs(filesystems, filesystemUnitAttachments, "uniqid")
+	err := app.EnsurePVCs(c.Context(), filesystems, filesystemUnitAttachments, "uniqid")
 	c.Assert(err, tc.ErrorIsNil)
 
 	// Verify PVC was created
@@ -291,7 +291,7 @@ func (s *applicationSuite) TestEnsurePVCsUnknownPVCNameFormat(c *tc.C) {
 		},
 	}
 
-	err := app.EnsurePVCs(filesystems, filesystemUnitAttachments, "uniqid")
+	err := app.EnsurePVCs(c.Context(), filesystems, filesystemUnitAttachments, "uniqid")
 	c.Assert(err, tc.ErrorMatches, `mapping pvc template names for app "gitlab".*`)
 
 	// Verify PVC was not created

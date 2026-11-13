@@ -178,6 +178,8 @@ type AgentPasswordService interface {
 }
 
 type StorageProvisioningService interface {
+	// GetK8sFilesystemAllocations returns persisted unit allocations.
+	GetK8sFilesystemAllocations(context.Context, coreapplication.UUID) ([]storageprovisioning.K8sFilesystemAllocation, error)
 	// GetFilesystemTemplatesForApplication returns all the filesystem templates
 	// for a given application.
 	GetFilesystemTemplatesForApplication(ctx context.Context, appID coreapplication.UUID) ([]storageprovisioning.FilesystemTemplate, error)

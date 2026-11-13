@@ -480,7 +480,7 @@ func (s *OpsSuite) TestReconcileDeadUnitScaleScalesAfterUnitRemoval(c *tc.C) {
 		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(units, nil),
 		applicationService.EXPECT().GetApplicationScalingState(gomock.Any(), "test").Return(ps, nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "test").Return(provisionertypes.FilesystemProvisioningInfo{}, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID),
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID),
 		app.EXPECT().ScaleRange(gomock.Any(), 1, 1).Return(nil),
 		app.EXPECT().State().Return(caas.ApplicationState{Replicas: []string{"test/1"}}, nil),
 		applicationService.EXPECT().SetApplicationScalingStateWithStart(gomock.Any(), "test", 0, 1, false).Return(nil),
@@ -797,7 +797,7 @@ func (s *OpsSuite) TestEnsureScaleControllerReusesPersistedNonce(c *tc.C) {
 		agentPasswordService.EXPECT().EnsureControllerNodeNonce(gomock.Any(), "1", gomock.Any()).Return("persisted-nonce", nil),
 		app.EXPECT().EnsureControllerNonce(gomock.Any(), 1, "persisted-nonce").Return(nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "controller").Return(provisionertypes.FilesystemProvisioningInfo{}, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
 		app.EXPECT().Scale(gomock.Any(), 2).Return(nil),
 	)
 
@@ -837,7 +837,7 @@ func (s *OpsSuite) TestEnsureScaleControllerReconcilesSparseOrdinals(c *tc.C) {
 		agentPasswordService.EXPECT().EnsureControllerNodeNonce(gomock.Any(), "2", gomock.Any()).Return("controller-2-nonce", nil),
 		app.EXPECT().EnsureControllerNonce(gomock.Any(), 2, "controller-2-nonce").Return(nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "controller").Return(provisionertypes.FilesystemProvisioningInfo{}, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
 		app.EXPECT().Scale(gomock.Any(), 3).Return(nil),
 	)
 
@@ -875,7 +875,7 @@ func (s *OpsSuite) TestEnsureScaleControllerReconcilesNonceAfterUnitIntroduction
 		agentPasswordService.EXPECT().EnsureControllerNodeNonce(gomock.Any(), "1", gomock.Any()).Return("controller-1-nonce", nil),
 		app.EXPECT().EnsureControllerNonce(gomock.Any(), 1, "controller-1-nonce").Return(nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "controller").Return(provisionertypes.FilesystemProvisioningInfo{}, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
 		app.EXPECT().Scale(gomock.Any(), 2).Return(nil),
 		applicationService.EXPECT().SetApplicationScalingStateWithStart(gomock.Any(), "controller", 0, 0, false).Return(nil),
 	)
@@ -1190,7 +1190,7 @@ func (s *OpsSuite) TestEnsureScaleWithAttachStorage(c *tc.C) {
 		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(units, nil),
 		applicationService.EXPECT().IsControllerApplication(gomock.Any(), appUUID).Return(false, nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "test").Return(provisioningInfo, nil),
-		app.EXPECT().EnsurePVCs([]storage.KubernetesFilesystemParams{{
+		app.EXPECT().EnsurePVCs(gomock.Any(), []storage.KubernetesFilesystemParams{{
 			StorageName: "data",
 			Size:        100,
 			Provider:    "kubernetes",
@@ -1239,7 +1239,7 @@ func (s *OpsSuite) TestEnsureScaleWithAttachStorageEnsurePVCsFails(c *tc.C) {
 		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(units, nil),
 		applicationService.EXPECT().IsControllerApplication(gomock.Any(), appUUID).Return(false, nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "test").Return(provisioningInfo, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID).
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID).
 			Return(errors.New("PVC creation failed")),
 	)
 
@@ -1465,7 +1465,7 @@ func (s *OpsSuite) TestAppDying(c *tc.C) {
 		applicationService.EXPECT().SetApplicationScalingStateWithStart(gomock.Any(), "test", 0, 0, true).Return(nil),
 		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(nil, nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "test").Return(provisionertypes.FilesystemProvisioningInfo{}, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
 		app.EXPECT().Scale(gomock.Any(), 0).Return(nil),
 		applicationService.EXPECT().SetApplicationScalingStateWithStart(gomock.Any(), "test", 0, 0, false).Return(nil),
 		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(nil, nil),
@@ -1516,7 +1516,7 @@ func (s *OpsSuite) TestAppDyingReconcileApplicationNotFound(c *tc.C) {
 		applicationService.EXPECT().SetApplicationScalingStateWithStart(gomock.Any(), "test", 0, 0, true).Return(nil),
 		applicationService.EXPECT().GetAllUnitLifeForApplication(gomock.Any(), appUUID).Return(nil, nil),
 		facade.EXPECT().FilesystemProvisioningInfo(gomock.Any(), "test").Return(provisionertypes.FilesystemProvisioningInfo{}, nil),
-		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
+		app.EXPECT().EnsurePVCs(gomock.Any(), gomock.Any(), gomock.Any(), storageUniqueID).Return(nil),
 		app.EXPECT().Scale(gomock.Any(), 0).Return(nil),
 		applicationService.EXPECT().SetApplicationScalingStateWithStart(gomock.Any(), "test", 0, 0, false).Return(nil),
 		// reconcileDeadUnitScale: the application rows vanish from state

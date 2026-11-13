@@ -28,6 +28,7 @@ import (
 	"github.com/juju/juju/environs/tags"
 	"github.com/juju/juju/internal/cloudconfig/podcfg"
 	"github.com/juju/juju/internal/docker"
+	"github.com/juju/juju/internal/storage"
 	provisionertypes "github.com/juju/juju/internal/worker/caasapplicationprovisioner/types"
 )
 
@@ -81,6 +82,7 @@ type ProvisionerRemovalService interface {
 // provisionerFacadeShim implements CAASProvisionerFacade using domain
 // services instead of an API facade client.
 type provisionerFacadeShim struct {
+	storageSvc    StorageProvisioningService
 	appSvc        ProvisionerApplicationService
 	ctrlConfigSvc ProvisionerControllerConfigService
 	ctrlNodeSvc   ProvisionerControllerNodeService
@@ -223,11 +225,37 @@ func (s *provisionerFacadeShim) ProvisioningInfo(ctx context.Context, appName st
 	}, nil
 }
 
-// FilesystemProvisioningInfo implements CAASProvisionerFacade. The
-// server-side implementation is a stub that returns empty data; the worker
-// already fetches filesystem data through StorageProvisioningService.
-func (s *provisionerFacadeShim) FilesystemProvisioningInfo(_ context.Context, _ string) (provisionertypes.FilesystemProvisioningInfo, error) {
-	return provisionertypes.FilesystemProvisioningInfo{}, nil
+// FilesystemProvisioningInfo reads current defaults and existing allocations
+// immediately before claims are prepared and the application is scaled.
+func (s *provisionerFacadeShim) FilesystemProvisioningInfo(ctx context.Context, appName string) (provisionertypes.FilesystemProvisioningInfo, error) {
+	var info provisionertypes.FilesystemProvisioningInfo
+	uuid, err := s.appSvc.GetApplicationUUIDByName(ctx, appName)
+	if err != nil {
+		return info, err
+	}
+	templates, err := s.storageSvc.GetFilesystemTemplatesForApplication(ctx, uuid)
+	if err != nil {
+		return info, err
+	}
+	allocations, err := s.storageSvc.GetK8sFilesystemAllocations(ctx, uuid)
+	if err != nil {
+		return info, err
+	}
+	tags, err := s.storageSvc.GetStorageResourceTagsForApplication(ctx, uuid)
+	if err != nil {
+		return info, err
+	}
+	for _, template := range templates {
+		info.Filesystems = append(info.Filesystems, makeKubernetesFilesystemParams(template, template.Attachments, tags))
+	}
+	info.FilesystemUnitAttachments = make(map[string][]storage.KubernetesFilesystemUnitAttachmentParams)
+	for _, allocation := range allocations {
+		info.FilesystemUnitAttachments[allocation.StorageName] = append(info.FilesystemUnitAttachments[allocation.StorageName], storage.KubernetesFilesystemUnitAttachmentParams{
+			UnitName: allocation.UnitName, SizeMiB: allocation.SizeMiB,
+			VolumeId: allocation.VolumeID, ClaimName: allocation.ClaimName,
+		})
+	}
+	return info, nil
 }
 
 // RemoveUnit implements CAASProvisionerFacade by delegating to domain

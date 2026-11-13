@@ -58,13 +58,10 @@ type Application interface {
 	// ServiceNotFound indicates that its address Service no longer exists.
 	Service() (*Service, error)
 
-	// EnsurePVCs ensures that Persistent Volume Claims (PVCs) are created for the given
-	// filesystems, unit attachments, and storage unique ID. It creates PVCs
-	// based on the provided filesystem parameters and handles volume
-	// attachments for StatefulSet applications. Returns a cleanup function
-	// that can be used to delete the created PVCs if rollback is needed,
-	// and any error encountered during the process.
+	// EnsurePVCs creates missing claims before scaling, preserving existing
+	// claims and using a unit's allocation size when supplied.
 	EnsurePVCs(
+		context.Context,
 		[]storage.KubernetesFilesystemParams,
 		map[string][]storage.KubernetesFilesystemUnitAttachmentParams,
 		string,

@@ -69,6 +69,12 @@ type KubernetesFilesystemInfo struct {
 
 // KubernetesFilesystemUnitAttachmentParams describes a unit filesystem attachment.
 type KubernetesFilesystemUnitAttachmentParams struct {
+	// SizeMiB is the original allocation size. Zero uses the current default.
+	SizeMiB uint64
+
+	// ClaimName is the previously reported PVC name, if any.
+	ClaimName string
+
 	// UnitName is the name of the unit which the volume is attached to.
 	UnitName string
 

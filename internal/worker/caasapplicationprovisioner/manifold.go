@@ -88,6 +88,7 @@ func (config ManifoldConfig) start(_ context.Context, getter dependency.Getter) 
 	}
 
 	facade := &provisionerFacadeShim{
+		storageSvc:    domainServices.StorageProvisioning(),
 		appSvc:        domainServices.Application(),
 		ctrlConfigSvc: domainServices.ControllerConfig(),
 		ctrlNodeSvc:   domainServices.ControllerNode(),

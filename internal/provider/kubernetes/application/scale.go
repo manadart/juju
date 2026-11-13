@@ -16,6 +16,7 @@ import (
 	"github.com/juju/juju/caas"
 	"github.com/juju/juju/internal/provider/kubernetes/resources"
 	"github.com/juju/juju/internal/provider/kubernetes/scale"
+	"github.com/juju/juju/internal/provider/kubernetes/utils"
 	"github.com/juju/juju/internal/storage"
 )
 
@@ -137,26 +138,43 @@ func (a *app) UnitsToRemove(ctx context.Context, desiredScale int) ([]string, er
 	return unitsToRemove, nil
 }
 
-// EnsurePVCs ensures that Persistent Volume Claims (PVCs) are created for the given
-// filesystems and unit attachments. It creates PVCs based on the provided filesystem
-// parameters and handles volume attachments for StatefulSet applications. Returns a
-// cleanup function that can be used to delete the created PVCs if rollback is needed,
-// and any error encountered during the process.
+// EnsurePVCs creates missing claims for the desired units before scaling.
+// Existing claims are checked but never patched or replaced.
 func (a *app) EnsurePVCs(
+	ctx context.Context,
 	filesystems []storage.KubernetesFilesystemParams,
 	filesystemUnitAttachments map[string][]storage.KubernetesFilesystemUnitAttachmentParams,
 	storageUniqueID string,
 ) error {
-	applier := a.newApplier()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(filesystemUnitAttachments) == 0 {
+		return nil
+	}
 
 	pvcTemplateNames, err := a.storageNameToPVCTemplateNames(filesystems)
 	if err != nil {
 		return errors.Annotatef(err, "mapping pvc template names for app %q", a.name)
 	}
+	// The StatefulSet retains its original claim templates. Use their names
+	// even when no existing PVC has been reported to Juju yet.
+	sts, err := a.client.AppsV1().StatefulSets(a.namespace).Get(ctx, a.name, meta.GetOptions{})
+	if err != nil {
+		return errors.Annotate(err, "getting claim templates before scaling")
+	}
+	for _, fs := range filesystems {
+		for _, template := range sts.Spec.VolumeClaimTemplates {
+			if _, err := utils.MatchStorageMetaLabelVersion(template.ObjectMeta, fs.StorageName); err == nil {
+				pvcTemplateNames[a.appStorageName(fs.StorageName)] = template.Name
+				break
+			}
+		}
+	}
 
 	pvcNameGetter := a.pvcNameGetter(pvcTemplateNames, storageUniqueID)
 
-	storageClasses, err := resources.ListStorageClass(context.Background(), a.client.StorageV1().StorageClasses(), meta.ListOptions{})
+	storageClasses, err := resources.ListStorageClass(ctx, a.client.StorageV1().StorageClasses(), meta.ListOptions{})
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -166,20 +184,26 @@ func (a *app) EnsurePVCs(
 	}
 
 	for _, fs := range filesystems {
+		if len(filesystemUnitAttachments[fs.StorageName]) == 0 {
+			continue
+		}
 		name := a.appStorageName(fs.StorageName)
-		_, pvc, _, err := a.filesystemToVolumeInfo(name, fs, storageClassMap, pvcNameGetter)
+		_, pvc, sc, err := a.filesystemToVolumeInfo(name, fs, storageClassMap, pvcNameGetter)
 		if err != nil {
 			return errors.Trace(err)
 		}
 		if pvc != nil {
-			err := a.handleVolumeAttachment(applier, filesystemUnitAttachments, *pvc, fs.StorageName)
+			if sc != nil {
+				if err := resources.NewStorageClass(a.client.StorageV1().StorageClasses(), sc.Name, sc).Apply(ctx); err != nil {
+					return err
+				}
+				storageClassMap[sc.Name] = resources.StorageClass{StorageClass: *sc}
+			}
+			err := a.handleVolumeAttachment(ctx, filesystemUnitAttachments, *pvc, fs.StorageName)
 			if err != nil {
 				return errors.Trace(err)
 			}
 		}
-	}
-	if err := applier.Run(context.Background(), false); err != nil {
-		return errors.Trace(err)
 	}
 	return nil
 }
