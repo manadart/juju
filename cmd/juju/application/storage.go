@@ -24,18 +24,17 @@ import (
 )
 
 const (
-	appStorageConfigSummary = "Displays or sets storage directives for an application."
+	appStorageConfigSummary = "Displays storage directives or updates their sizes for an application."
 
 	appStorageConfigDoc = `
-View or update storage allocation defaults for an application.
-A directive has the form <storage-name>=<size>,<pool>,<count>.
-Omitted fields retain their current values. For example, data=20G updates only
-capacity and preserves the pool and allocation count.
+View storage allocation defaults or update their sizes for an application.
+An update has the form <storage-name>=<size>, for example cache-devices=20GiB.
+Only size can be updated; the pool and allocation count retain their values.
+Successful updates display the affected directives with their new sizes.
 
 Updating a directive does not resize existing storage or run charm actions.
 New units allocate storage using the updated defaults. To apply capacity targets
 to an existing unit, run resize-storage <unit>, optionally with --wait.
-Pool and count changes do not move, add or remove existing storage.
 
 Directive updates currently require a machine model. Directives may be viewed
 in either model type. Use --format yaml or --format json for structured output.
@@ -48,7 +47,7 @@ View a named directive:
     juju application-storage postgresql pgdata
 
 Update the capacity default, then resize one unit:
-    juju application-storage postgresql pgdata=20G
+    juju application-storage postgresql pgdata=20GiB
     juju resize-storage postgresql/0 --wait
 `
 )
@@ -68,6 +67,7 @@ type applicationStorageCommand struct {
 
 	api             StorageDirectivesAPI
 	applicationName string
+	updates         map[string]storage.DirectiveUpdate
 }
 
 // Info returns the name and usage details for the application storage command,
@@ -76,7 +76,7 @@ type applicationStorageCommand struct {
 func (c *applicationStorageCommand) Info() *cmd.Info {
 	info := &cmd.Info{
 		Name:     "application-storage",
-		Args:     "<application-name> [<storage-name>[={<size>,<pool>,<count>}]] ...",
+		Args:     "<application-name> [<storage-name>[=<size>]] ...",
 		Purpose:  appStorageConfigSummary,
 		Examples: appStorageConfigExamples,
 		Doc:      appStorageConfigDoc,
@@ -115,7 +115,18 @@ func (c *applicationStorageCommand) Init(args []string) error {
 		return errors.Errorf("invalid application name %q", args[0])
 	}
 	c.applicationName = args[0]
-	return c.configBase.Init(args[1:])
+	if err := c.configBase.Init(args[1:]); err != nil {
+		return err
+	}
+	c.updates = make(map[string]storage.DirectiveUpdate, len(c.configBase.ValsToSet))
+	for name, value := range c.configBase.ValsToSet {
+		update, err := storage.ParseDirectiveUpdate(fmt.Sprint(value))
+		if err != nil {
+			return errors.Annotatef(err, "parsing storage directive %q", name)
+		}
+		c.updates[name] = update
+	}
+	return nil
 }
 
 // getAPI returns the API. This allows passing in a test configCommandAPI
@@ -148,11 +159,11 @@ func (c *applicationStorageCommand) Run(ctx *cmd.Context) error {
 		var err error
 		switch action {
 		case config.GetOne:
-			err = c.getConfig(ctx, client)
+			err = c.getConfig(ctx, client, c.configBase.KeysToGet...)
 		case config.SetArgs:
-			err = c.setConfig(ctx, client, c.configBase.ValsToSet)
+			err = c.setConfig(ctx, client)
 		default:
-			err = c.getAllConfig(ctx, client)
+			err = c.getConfig(ctx, client)
 		}
 		if err != nil {
 			return errors.Trace(err)
@@ -168,59 +179,41 @@ type StorageDirectivesAPI interface {
 	SetApplicationStorage(context.Context, string, map[string]storage.DirectiveUpdate) error
 }
 
-// setConfig sets the provided key/value pairs on the application.
-func (c *applicationStorageCommand) setConfig(ctx context.Context, client StorageDirectivesAPI, attrs config.Attrs) error {
-	updates := make(map[string]storage.DirectiveUpdate, len(attrs))
-	for name, value := range attrs {
-		update, err := storage.ParseDirectiveUpdate(fmt.Sprint(value))
-		if err != nil {
-			return errors.Annotatef(err, "parsing storage directive %q", name)
+// setConfig updates sizes and displays the affected directives after success.
+func (c *applicationStorageCommand) setConfig(ctx *cmd.Context, client StorageDirectivesAPI) error {
+	if err := client.SetApplicationStorage(ctx, c.applicationName, c.updates); err != nil {
+		return err
+	}
+	names := make([]string, 0, len(c.updates))
+	for name := range c.updates {
+		names = append(names, name)
+	}
+	return c.getConfig(ctx, client, names...)
+}
+
+// getConfig writes the named storage directives, or all if no names are given.
+func (c *applicationStorageCommand) getConfig(ctx *cmd.Context, client StorageDirectivesAPI, names ...string) error {
+	applicationStorageInfo, err := client.GetApplicationStorageWithContext(ctx, c.applicationName)
+	if err != nil {
+		return err
+	}
+
+	if applicationStorageInfo.Error != nil {
+		return applicationStorageInfo.Error
+	}
+
+	if len(names) == 0 {
+		return c.out.Write(ctx, applicationStorageInfo.StorageConstraints)
+	}
+	directives := make(map[string]storage.Directive, len(names))
+	for _, name := range names {
+		directive, ok := applicationStorageInfo.StorageConstraints[name]
+		if !ok {
+			return errors.NotFoundf("storage %q", name)
 		}
-		updates[name] = update
+		directives[name] = directive
 	}
-	return client.SetApplicationStorage(ctx, c.applicationName, updates)
-}
-
-// getConfig writes one named storage directive.
-func (c *applicationStorageCommand) getConfig(ctx *cmd.Context, client StorageDirectivesAPI) error {
-	applicationStorageInfo, err := client.GetApplicationStorageWithContext(ctx, c.applicationName)
-	if err != nil {
-		return err
-	}
-
-	if len(c.configBase.KeysToGet) == 0 {
-		return errors.New("no storage key specified")
-	}
-
-	if applicationStorageInfo.Error != nil {
-		return applicationStorageInfo.Error
-	}
-
-	storeKey := c.configBase.KeysToGet[0]
-	storageConsForKey, ok := applicationStorageInfo.StorageConstraints[storeKey]
-	if !ok {
-		return errors.NotFoundf("storage %q", storeKey)
-	}
-
-	// Retain the storage name in structured and tabular output.
-	storageConsForKeyMap := map[string]storage.Directive{
-		storeKey: storageConsForKey,
-	}
-
-	return c.out.Write(ctx, storageConsForKeyMap)
-}
-
-// getAllConfig returns the entire configuration for the selected application.
-func (c *applicationStorageCommand) getAllConfig(ctx *cmd.Context, client StorageDirectivesAPI) error {
-	applicationStorageInfo, err := client.GetApplicationStorageWithContext(ctx, c.applicationName)
-	if err != nil {
-		return err
-	}
-
-	if applicationStorageInfo.Error != nil {
-		return applicationStorageInfo.Error
-	}
-	return c.out.Write(ctx, applicationStorageInfo.StorageConstraints)
+	return c.out.Write(ctx, directives)
 }
 
 // formatConfigTabular writes a tabular summary of config information.

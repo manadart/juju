@@ -41,7 +41,7 @@ No live device or cloud resize was validated. Full lint was unavailable because
 
 ## Directive-driven unit resize increment
 
-The command workflow now uses `application-storage <app> <name>=<directive>`
+The command workflow now uses `application-storage <app> <name>=<size>`
 followed by `resize-storage <unit> [--wait]`. Submission stages or reuses the
 existing per-instance requests and reports already satisfied instances. The
 capacity target comes from the current application directive. Existing provider
@@ -52,7 +52,10 @@ The state and service changes are in `9c15120885d` and `5c741408cda`. Version 23
 of the Application facade identifies allocation-only directive updates; Storage
 version 10 adds unit submission. Earlier storage request APIs remain available
 for compatibility. The CLI requires those versions for the new workflow and
-preserves omitted directive fields through parsing, API encoding and persistence.
+supports size-only updates, preserving the pool and count through API encoding
+and persistence. Pool, count and compound directives are rejected. After a
+successful update, the command reads back and displays the affected directives
+in the same format as a query, including their new sizes and existing pool/count.
 
 Existing state, service, client API, facade and command suites pass with the race
 detector. Forty bounded stress runs of the existing storage command suite pass.
@@ -66,7 +69,13 @@ in `e981db49466`. No new repository tests were added; existing mocks and the
 command-list fixture were updated. Static checks pass through schema and import
 validation, then stop because `golangci-lint` is not installed.
 
-The CLI and controller agent build as `4.1-beta3.3` in `.bin`. The live controller
+The size-only refinement passes the existing core storage, application service,
+client API, facade and command suites with the race detector. Disposable command
+and SQLite checks confirm the update output matches a single-directive query,
+zero counts are preserved, pool/count edits are rejected, and failed updates
+produce no success output. No new repository tests were added.
+
+The CLI and controller agent build as `4.1-beta3.4` in `.bin`. The live controller
 has not been upgraded and the new command workflow has not been run against it.
 Use the LXD verification commands below after installing the new agent.
 
@@ -440,10 +449,20 @@ decisions.
 
 ## Command decision
 
-`application-storage` declares the application's storage allocation defaults.
-Updating it validates and persists the supplied fields; it does not submit
-resize requests or mutate existing storage. New units allocate storage using
-the current directive. Omitted pool, size and count fields retain their current values.
+`application-storage` displays the application's storage allocation defaults and
+updates their sizes. Only `<storage-name>=<size>` updates are supported; pool and
+count cannot be changed with this command. Updating validates and persists the
+supplied sizes; it does not submit resize requests or mutate existing storage.
+New units allocate storage using
+the current directive. Pool and count retain their current values, including a
+count of zero. Successful updates print the affected directives using the same
+output format as a query. For example:
+
+```text
+$ juju application-storage ceph-osd cache-devices=20GiB
+Storage        Pool  Size    Count
+cache-devices  loop  20 GiB  0
+```
 
 `juju resize-storage <unit> [--wait]` applies the current application capacity
 targets to that unit's existing storage instances. The command takes a unit,
@@ -452,8 +471,8 @@ by storage name, including every instance when a name has multiple allocations.
 Read the application directive rather than the unit's older directive copy.
 The existing `add-storage` command still defaults from the unit directive copy;
 changing that allocation path is outside this increment.
-Pool and count changes affect allocation for new units only: resizing never moves
-storage, creates additional instances or removes surplus instances.
+Resizing never moves storage, creates additional instances or removes surplus
+instances.
 
 Stage a unit's requests atomically against a consistent snapshot of its live
 attachments and the current application directives. Generate request UUIDs in
