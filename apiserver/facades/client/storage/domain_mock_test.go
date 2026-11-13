@@ -428,6 +428,7 @@ type MockStorageServiceMockRecorder struct {
 	getStorageInstanceUUIDForIDExpects                       []*gomock.Call2_2[context.Context, string, storage0.StorageInstanceUUID, error]
 	getStoragePoolUUIDExpects                                []*gomock.Call2_2[context.Context, string, storage0.StoragePoolUUID, error]
 	getStorageResizeRequestExpects                           []*gomock.Call2_2[context.Context, storage0.StorageResizeUUID, storage0.StorageResizeRequest, error]
+	getStorageResizeRequestByIDExpects                       []*gomock.Call2_2[context.Context, uint64, storage0.StorageResizeRequest, error]
 	getVolumesByMachinesExpects                              []*gomock.Call2_2[context.Context, []machine.UUID, []storage0.VolumeUUID, error]
 	listStoragePoolsExpects                                  []*gomock.Call1_2[context.Context, []storage0.StoragePool, error]
 	listStoragePoolsByNamesExpects                           []*gomock.Call2_2[context.Context, storage0.Names, []storage0.StoragePool, error]
@@ -610,6 +611,24 @@ func (mr *MockStorageServiceMockRecorder) GetStorageResizeRequest(arg0, arg1 any
 
 // MockStorageServiceGetStorageResizeRequestCall is the typed call wrapper for GetStorageResizeRequest.
 type MockStorageServiceGetStorageResizeRequestCall = gomock.Call2_2[context.Context, storage0.StorageResizeUUID, storage0.StorageResizeRequest, error]
+
+// GetStorageResizeRequestByID mocks base method.
+func (m *MockStorageService) GetStorageResizeRequestByID(arg0 context.Context, arg1 uint64) (storage0.StorageResizeRequest, error) {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch2_2(&m.recorder.getStorageResizeRequestByIDExpects, m.ctrl, m, "GetStorageResizeRequestByID", arg0, arg1)
+}
+
+// GetStorageResizeRequestByID indicates an expected call of GetStorageResizeRequestByID.
+func (mr *MockStorageServiceMockRecorder) GetStorageResizeRequestByID(arg0, arg1 any) *MockStorageServiceGetStorageResizeRequestByIDCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall2_2[context.Context, uint64, storage0.StorageResizeRequest, error](mr.mock.ctrl.T, mr.mock, "GetStorageResizeRequestByID", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1))
+	mr.getStorageResizeRequestByIDExpects = append(mr.getStorageResizeRequestByIDExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStorageServiceGetStorageResizeRequestByIDCall is the typed call wrapper for GetStorageResizeRequestByID.
+type MockStorageServiceGetStorageResizeRequestByIDCall = gomock.Call2_2[context.Context, uint64, storage0.StorageResizeRequest, error]
 
 // GetVolumesByMachines mocks base method.
 func (m *MockStorageService) GetVolumesByMachines(ctx context.Context, uuids []machine.UUID) ([]storage0.VolumeUUID, error) {

@@ -104,7 +104,7 @@ var facadeVersions = facades.FacadeVersions{
 	"Spaces":                       {6},
 	"SSHClient":                    {4, 5, 6},
 	"SSHSession":                   {1},
-	"Storage":                      {6, 7, 8, 9, 10},
+	"Storage":                      {6, 7, 8, 9, 10, 11},
 	"StorageProvisioner":           {5, 6, 7},
 	"StorageResizer":               {1, 2},
 	"StringsWatcher":               {1},

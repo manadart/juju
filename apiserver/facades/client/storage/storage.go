@@ -85,6 +85,7 @@ type StorageService interface {
 	GetStorageResizeRequest(
 		context.Context, domainstorage.StorageResizeUUID,
 	) (domainstorage.StorageResizeRequest, error)
+	GetStorageResizeRequestByID(context.Context, uint64) (domainstorage.StorageResizeRequest, error)
 
 	// GetStorageAttachmentUUIDForStorageInstanceAndUnit returns the
 	// [storage.StorageAttachmentUUID] associated with the given storage
@@ -1354,3 +1355,6 @@ func (a *StorageAPI) removeStorageInstance(
 
 // StorageAPIv9 retains the single-instance resize API.
 type StorageAPIv9 struct{ *StorageAPI }
+
+// StorageAPIv10 retains UUID-based request lookup.
+type StorageAPIv10 struct{ *StorageAPI }

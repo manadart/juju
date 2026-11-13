@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/juju/errors"
 	"github.com/juju/names/v6"
@@ -59,8 +60,9 @@ func (c *Client) StorageResizeDetails(
 }
 
 // ResizeUnitStorage stages requests for a unit using application directives.
+// Integer request IDs require version 11, checked before submitting any work.
 func (c *Client) ResizeUnitStorage(ctx context.Context, unitName string) ([]params.UnitStorageResizeResult, error) {
-	if c.BestAPIVersion() < 10 {
+	if c.BestAPIVersion() < 11 {
 		return nil, errors.NotSupportedf("unit storage resize on this version of Juju")
 	}
 	if !names.IsValidUnit(unitName) {
@@ -71,4 +73,19 @@ func (c *Client) ResizeUnitStorage(ctx context.Context, unitName string) ([]para
 		return nil, errors.Trace(err)
 	}
 	return result.Results, nil
+}
+
+// StorageResizeDetailsByID returns a result using its model-scoped integer ID.
+func (c *Client) StorageResizeDetailsByID(ctx context.Context, id string) (params.StorageResizeDetails, error) {
+	if c.BestAPIVersion() < 11 {
+		return params.StorageResizeDetails{}, errors.NotSupportedf("integer storage resize request IDs on this version of Juju")
+	}
+	if _, err := strconv.ParseUint(id, 10, 63); err != nil {
+		return params.StorageResizeDetails{}, errors.NotValidf("resize request ID %q", id)
+	}
+	var result params.StorageResizeDetails
+	if err := c.facade.FacadeCall(ctx, "StorageResizeDetailsByID", params.StorageResizeRequestIDArgs{ID: id}, &result); err != nil {
+		return params.StorageResizeDetails{}, errors.Trace(err)
+	}
+	return result, nil
 }

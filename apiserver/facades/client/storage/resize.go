@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/juju/names/v6"
 
@@ -80,6 +81,7 @@ func (a *StorageAPI) StorageResizeDetails(
 		return params.StorageResizeDetails{}, apiservererrors.ServerError(err)
 	}
 	return params.StorageResizeDetails{
+		ID:               strconv.FormatUint(request.ID, 10),
 		UUID:             request.UUID.String(),
 		StorageTag:       names.NewStorageTag(request.StorageID.String()).String(),
 		RequestedSizeMiB: request.RequestedSizeMiB,
@@ -89,6 +91,39 @@ func (a *StorageAPI) StorageResizeDetails(
 		CompletedAt:      request.CompletedAt,
 	}, nil
 }
+
+// StorageResizeDetailsByID retrieves an independent request by its natural key.
+func (a *StorageAPI) StorageResizeDetailsByID(ctx context.Context, args params.StorageResizeRequestIDArgs) (params.StorageResizeDetails, error) {
+	if err := a.checkCanRead(ctx); err != nil {
+		return params.StorageResizeDetails{}, err
+	}
+	id, err := strconv.ParseUint(args.ID, 10, 63)
+	if err != nil {
+		return params.StorageResizeDetails{}, apiservererrors.ParamsErrorf(params.CodeNotValid, "invalid resize request ID %q", args.ID)
+	}
+	request, err := a.storageService.GetStorageResizeRequestByID(ctx, id)
+	if errors.Is(err, storageerrors.StorageResizeIntentNotFound) {
+		return params.StorageResizeDetails{}, apiservererrors.ParamsErrorf(params.CodeNotFound, "%s", err)
+	} else if err != nil {
+		return params.StorageResizeDetails{}, apiservererrors.ServerError(err)
+	}
+	return params.StorageResizeDetails{
+		ID:               strconv.FormatUint(request.ID, 10),
+		StorageTag:       names.NewStorageTag(request.StorageID.String()).String(),
+		RequestedSizeMiB: request.RequestedSizeMiB,
+		Status:           string(request.Status),
+		Message:          request.Message,
+		CreatedAt:        request.CreatedAt,
+		CompletedAt:      request.CompletedAt,
+	}, nil
+}
+
+// Integer request lookup is unavailable before version 11.
+func (*StorageAPIv6) StorageResizeDetailsByID(_, _, _ struct{})  {}
+func (*StorageAPIv7) StorageResizeDetailsByID(_, _, _ struct{})  {}
+func (*StorageAPIv8) StorageResizeDetailsByID(_, _, _ struct{})  {}
+func (*StorageAPIv9) StorageResizeDetailsByID(_, _, _ struct{})  {}
+func (*StorageAPIv10) StorageResizeDetailsByID(_, _, _ struct{}) {}
 
 // ResizeStorage is unavailable in version 6.
 func (*StorageAPIv6) ResizeStorage(_, _, _ struct{}) {}

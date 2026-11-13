@@ -14258,7 +14258,7 @@
     {
         "Name": "Storage",
         "Description": "",
-        "Version": 10,
+        "Version": 11,
         "Schema": {
             "type": "object",
             "properties": {
@@ -14421,6 +14421,17 @@
                     "properties": {
                         "Params": {
                             "$ref": "#/definitions/StorageResizeRequestArgs"
+                        },
+                        "Result": {
+                            "$ref": "#/definitions/StorageResizeDetails"
+                        }
+                    }
+                },
+                "StorageResizeDetailsByID": {
+                    "type": "object",
+                    "properties": {
+                        "Params": {
+                            "$ref": "#/definitions/StorageResizeRequestIDArgs"
                         },
                         "Result": {
                             "$ref": "#/definitions/StorageResizeDetails"
@@ -15225,6 +15236,9 @@
                             "type": "string",
                             "format": "date-time"
                         },
+                        "id": {
+                            "type": "string"
+                        },
                         "message": {
                             "type": "string"
                         },
@@ -15260,6 +15274,18 @@
                     "additionalProperties": false,
                     "required": [
                         "uuid"
+                    ]
+                },
+                "StorageResizeRequestIDArgs": {
+                    "type": "object",
+                    "properties": {
+                        "id": {
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "id"
                     ]
                 },
                 "StorageResizeResult": {
@@ -15306,6 +15332,9 @@
                     "properties": {
                         "already-satisfied": {
                             "type": "boolean"
+                        },
+                        "id": {
+                            "type": "string"
                         },
                         "requested-size-mib": {
                             "type": "integer"

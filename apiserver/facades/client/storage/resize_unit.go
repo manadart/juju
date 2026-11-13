@@ -5,6 +5,7 @@ package storage
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/juju/names/v6"
 
@@ -35,7 +36,11 @@ func (a *StorageAPI) ResizeUnitStorage(ctx context.Context, args params.UnitStor
 	}
 	out := params.UnitStorageResizeResults{Results: make([]params.UnitStorageResizeResult, 0, len(results))}
 	for _, result := range results {
-		out.Results = append(out.Results, params.UnitStorageResizeResult{StorageTag: names.NewStorageTag(result.StorageID.String()).String(), UUID: result.UUID.String(), RequestedSizeMiB: result.RequestedSizeMiB, AlreadySatisfied: result.AlreadySatisfied})
+		id := ""
+		if !result.AlreadySatisfied {
+			id = strconv.FormatUint(result.ID, 10)
+		}
+		out.Results = append(out.Results, params.UnitStorageResizeResult{StorageTag: names.NewStorageTag(result.StorageID.String()).String(), ID: id, UUID: result.UUID.String(), RequestedSizeMiB: result.RequestedSizeMiB, AlreadySatisfied: result.AlreadySatisfied})
 	}
 	return out, nil
 }

@@ -22,6 +22,11 @@ type StorageResizeRequestArgs struct {
 	UUID string `json:"uuid"`
 }
 
+// StorageResizeRequestIDArgs identifies a request by its integer natural key.
+type StorageResizeRequestIDArgs struct {
+	ID string `json:"id"`
+}
+
 const (
 	// StorageResizePending indicates that no terminal result has been reported.
 	StorageResizePending = "pending"
@@ -33,6 +38,7 @@ const (
 
 // StorageResizeDetails describes a request and its pending or terminal result.
 type StorageResizeDetails struct {
+	ID               string     `json:"id,omitempty"`
 	UUID             string     `json:"uuid"`
 	StorageTag       string     `json:"storage-tag"`
 	RequestedSizeMiB uint64     `json:"requested-size-mib"`
@@ -51,6 +57,7 @@ type UnitStorageResizeArgs struct {
 // UnitStorageResizeResult identifies a request or an already satisfied instance.
 type UnitStorageResizeResult struct {
 	StorageTag       string `json:"storage-tag"`
+	ID               string `json:"id,omitempty"`
 	UUID             string `json:"uuid,omitempty"`
 	RequestedSizeMiB uint64 `json:"requested-size-mib"`
 	AlreadySatisfied bool   `json:"already-satisfied"`
