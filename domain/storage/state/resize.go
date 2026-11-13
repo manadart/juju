@@ -11,10 +11,14 @@ import (
 	"github.com/canonical/sqlair"
 
 	"github.com/juju/juju/domain/life"
+	"github.com/juju/juju/domain/sequence"
+	sequencestate "github.com/juju/juju/domain/sequence/state"
 	storageerrors "github.com/juju/juju/domain/storage/errors"
 	"github.com/juju/juju/domain/storage/internal"
 	"github.com/juju/juju/internal/errors"
 )
+
+const storageResizeSequenceNamespace = sequence.StaticNamespace("storage_resize")
 
 // CreateStorageResizeIntent records one pending intent for a live storage
 // instance. It returns StorageInstanceNotFound, StorageInstanceNotAlive, or
@@ -80,6 +84,10 @@ INSERT INTO storage_resize_request (*) VALUES ($storageResizeIntent.*)
 		} else if !errors.Is(err, sqlair.ErrNoRows) {
 			return errors.Capture(err)
 		}
+		row.ID, err = sequencestate.NextValue(ctx, s, tx, storageResizeSequenceNamespace)
+		if err != nil {
+			return errors.Capture(err)
+		}
 		return errors.Capture(tx.Query(ctx, insertStmt, row).Run())
 	}))
 }
@@ -125,6 +133,7 @@ WHERE sri.uuid = $storageResizeIntent.uuid
 
 type storageResizeIntent struct {
 	UUID                string    `db:"uuid"`
+	ID                  uint64    `db:"request_id"`
 	StorageInstanceUUID string    `db:"storage_instance_uuid"`
 	StorageID           string    `db:"storage_id"`
 	RequestedSizeMiB    uint64    `db:"requested_size_mib"`
@@ -143,7 +152,7 @@ func (s *State) GetStorageResizeRequest(
 	}
 	row := storageResizeRequest{UUID: uuid}
 	stmt, err := s.Prepare(`
-SELECT (srr.uuid, srr.storage_instance_uuid, srr.storage_id,
+SELECT (srr.uuid, srr.request_id, srr.storage_instance_uuid, srr.storage_id,
         srr.requested_size_mib, srr.created_at, srr.status,
         srr.result_message, srr.completed_at) AS (&storageResizeRequest.*)
 FROM storage_resize_request AS srr
@@ -169,6 +178,7 @@ WHERE srr.uuid = $storageResizeRequest.uuid
 			RequestedSizeMiB:    row.RequestedSizeMiB,
 			CreatedAt:           row.CreatedAt,
 		},
+		ID:        row.ID,
 		StorageID: row.StorageID,
 		Status:    row.Status,
 		Message:   row.Message,
@@ -177,6 +187,32 @@ WHERE srr.uuid = $storageResizeRequest.uuid
 		result.CompletedAt = &row.CompletedAt.Time
 	}
 	return result, nil
+}
+
+// GetStorageResizeUUIDByID resolves a user-facing request ID, including retained
+// results whose storage has been removed.
+func (s *State) GetStorageResizeUUIDByID(ctx context.Context, id uint64) (string, error) {
+	db, err := s.DB(ctx)
+	if err != nil {
+		return "", errors.Capture(err)
+	}
+	row := storageResizeRequest{ID: id}
+	stmt, err := s.Prepare(`
+SELECT r.uuid AS &storageResizeRequest.uuid
+FROM storage_resize_request AS r
+WHERE r.request_id = $storageResizeRequest.request_id
+`, row)
+	if err != nil {
+		return "", errors.Capture(err)
+	}
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		if err := tx.Query(ctx, stmt, row).Get(&row); errors.Is(err, sqlair.ErrNoRows) {
+			return storageerrors.StorageResizeIntentNotFound
+		} else {
+			return errors.Capture(err)
+		}
+	})
+	return row.UUID, errors.Capture(err)
 }
 
 // SetStorageResizeResult records a terminal result and releases the pending
@@ -236,6 +272,7 @@ WHERE uuid = $storageResizeRequest.uuid AND status = 'pending'
 
 type storageResizeRequest struct {
 	UUID                string       `db:"uuid"`
+	ID                  uint64       `db:"request_id"`
 	StorageInstanceUUID string       `db:"storage_instance_uuid"`
 	StorageID           string       `db:"storage_id"`
 	RequestedSizeMiB    uint64       `db:"requested_size_mib"`

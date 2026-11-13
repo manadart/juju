@@ -145,6 +145,7 @@ var modelPostPatchFilesByVersion = []struct {
 			"0039-storage-resize-results.PATCH.sql",
 			"0040-storage-resize-execution.PATCH.sql",
 			"0041-storage-resize-stages.PATCH.sql",
+			"0042-storage-resize-request-id.PATCH.sql",
 		},
 	},
 }

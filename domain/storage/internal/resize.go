@@ -17,6 +17,7 @@ type StorageResizeIntent struct {
 // StorageResizeRequest includes the retained identity and result of a request.
 type StorageResizeRequest struct {
 	StorageResizeIntent
+	ID          uint64
 	StorageID   string
 	Status      string
 	Message     string
@@ -67,6 +68,7 @@ type UnitStorageResizeTarget struct {
 	SizeMiB              uint64
 	ObservedSizeMiB      uint64
 	PendingUUID          string
+	PendingID            uint64
 	PendingSizeMiB       uint64
 	Alive                bool
 }

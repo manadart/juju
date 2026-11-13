@@ -11,6 +11,7 @@ import (
 
 	applicationerrors "github.com/juju/juju/domain/application/errors"
 	"github.com/juju/juju/domain/life"
+	sequencestate "github.com/juju/juju/domain/sequence/state"
 	storageerrors "github.com/juju/juju/domain/storage/errors"
 	"github.com/juju/juju/domain/storage/internal"
 	"github.com/juju/juju/internal/errors"
@@ -34,16 +35,18 @@ func (s *State) GetUnitStorageResizeTargets(ctx context.Context, name string) ([
 
 // CreateUnitStorageResizeIntents records a batch only if all inputs remain
 // current. A conflict rolls back the entire batch, including earlier inserts.
-func (s *State) CreateUnitStorageResizeIntents(ctx context.Context, name string, expected []internal.UnitStorageResizeTarget, intents []internal.StorageResizeIntent) error {
+func (s *State) CreateUnitStorageResizeIntents(ctx context.Context, name string, expected []internal.UnitStorageResizeTarget, intents []internal.StorageResizeIntent) (map[string]uint64, error) {
 	db, err := s.DB(ctx)
 	if err != nil {
-		return errors.Capture(err)
+		return nil, errors.Capture(err)
 	}
 	stmt, err := s.Prepare(`INSERT INTO storage_resize_request (*) VALUES ($storageResizeIntent.*)`, storageResizeIntent{})
 	if err != nil {
-		return errors.Capture(err)
+		return nil, errors.Capture(err)
 	}
-	return errors.Capture(db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+	var ids map[string]uint64
+	err = db.Txn(ctx, func(ctx context.Context, tx *sqlair.TX) error {
+		ids = make(map[string]uint64, len(intents))
 		current, err := s.getUnitStorageResizeTargets(ctx, tx, name)
 		if err != nil {
 			return err
@@ -61,12 +64,21 @@ func (s *State) CreateUnitStorageResizeIntents(ctx context.Context, name string,
 				return storageerrors.StorageResizeTargetChanged
 			}
 			row := storageResizeIntent{UUID: intent.UUID, StorageInstanceUUID: intent.StorageInstanceUUID, StorageID: target.StorageID, RequestedSizeMiB: intent.RequestedSizeMiB, CreatedAt: intent.CreatedAt}
+			row.ID, err = sequencestate.NextValue(ctx, s, tx, storageResizeSequenceNamespace)
+			if err != nil {
+				return errors.Capture(err)
+			}
 			if err := tx.Query(ctx, stmt, row).Run(); err != nil {
 				return errors.Capture(err)
 			}
+			ids[intent.UUID] = row.ID
 		}
 		return nil
-	}))
+	})
+	if err != nil {
+		return nil, errors.Capture(err)
+	}
+	return ids, nil
 }
 
 func (s *State) getUnitStorageResizeTargets(ctx context.Context, tx *sqlair.TX, name string) ([]internal.UnitStorageResizeTarget, error) {
@@ -112,6 +124,7 @@ SELECT si.uuid AS &unitResizeTargetRow.instance_uuid,
        COALESCE(CASE WHEN si.storage_kind_id = 1 THEN f.size_mib
                      ELSE MIN(COALESCE(v.size_mib, 0), COALESCE(b.size_mib, 0)) END, 0) AS &unitResizeTargetRow.observed_size_mib,
        COALESCE(r.uuid, '') AS &unitResizeTargetRow.pending_uuid,
+       COALESCE(r.request_id, 0) AS &unitResizeTargetRow.pending_id,
        COALESCE(r.requested_size_mib, 0) AS &unitResizeTargetRow.pending_size_mib,
        COALESCE(si.life_id = 0 AND sa.life_id = 0, 0) AS &unitResizeTargetRow.alive
 FROM unit AS u
@@ -141,7 +154,7 @@ ORDER BY si.storage_id`, key, unitResizeTargetRow{})
 		result = append(result, internal.UnitStorageResizeTarget{
 			UnitUUID: unit.UUID, ApplicationCharmUUID: unit.ApplicationCharmUUID, UnitCharmUUID: unit.CharmUUID,
 			StorageInstanceUUID: row.InstanceUUID, StorageID: row.StorageID, AttachmentUUID: row.AttachmentUUID,
-			SizeMiB: row.SizeMiB, ObservedSizeMiB: row.ObservedSizeMiB, PendingUUID: row.PendingUUID, PendingSizeMiB: row.PendingSizeMiB, Alive: row.Alive,
+			SizeMiB: row.SizeMiB, ObservedSizeMiB: row.ObservedSizeMiB, PendingUUID: row.PendingUUID, PendingID: row.PendingID, PendingSizeMiB: row.PendingSizeMiB, Alive: row.Alive,
 		})
 	}
 	return result, nil
@@ -154,6 +167,7 @@ type unitResizeTargetRow struct {
 	SizeMiB         uint64 `db:"size_mib"`
 	ObservedSizeMiB uint64 `db:"observed_size_mib"`
 	PendingUUID     string `db:"pending_uuid"`
+	PendingID       uint64 `db:"pending_id"`
 	PendingSizeMiB  uint64 `db:"pending_size_mib"`
 	Alive           bool   `db:"alive"`
 }
