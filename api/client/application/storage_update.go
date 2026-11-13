@@ -13,8 +13,8 @@ import (
 	"github.com/juju/juju/rpc/params"
 )
 
-// SetApplicationStorage updates allocation defaults without resizing instances.
-// Version 23 identifies this behaviour and preserves omitted directive fields.
+// SetApplicationStorage updates allocation sizes without resizing instances.
+// Version 23 identifies this behaviour and preserves the pool and count.
 func (c *Client) SetApplicationStorage(ctx context.Context, name string, updates map[string]storage.DirectiveUpdate) error {
 	if c.BestAPIVersion() < 23 {
 		return errors.NotSupportedf("allocation-only storage directive updates on this version of Juju")
@@ -24,7 +24,7 @@ func (c *Client) SetApplicationStorage(ctx context.Context, name string, updates
 	}
 	directives := make(map[string]params.StorageDirectives, len(updates))
 	for name, update := range updates {
-		directives[name] = params.StorageDirectives{Pool: update.Pool, SizeMiB: update.SizeMiB, Count: update.Count}
+		directives[name] = params.StorageDirectives{SizeMiB: update.SizeMiB}
 	}
 	args := params.ApplicationStorageUpdateRequest{ApplicationStorageUpdates: []params.ApplicationStorageUpdate{{ApplicationTag: names.NewApplicationTag(name).String(), StorageDirectives: directives}}}
 	var result params.ErrorResults

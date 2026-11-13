@@ -23,9 +23,9 @@ type ApplicationStorageState interface {
 	SetApplicationStorageDirectives(context.Context, string, internal.ApplicationStorageSnapshot, []domainstorage.DirectiveArg) error
 }
 
-// UpdateApplicationStorageDirectives updates allocation defaults without
+// UpdateApplicationStorageDirectives updates allocation sizes without
 // resizing existing instances or changing existing unit directive copies.
-// Omitted fields retain their values. Concurrent edits are merged on retry.
+// Pool and count are preserved. Concurrent size edits are merged on retry.
 func (s *ProviderService) UpdateApplicationStorageDirectives(ctx context.Context, uuid coreapplication.UUID, overrides map[string]StorageDirectiveOverrides) error {
 	if err := uuid.Validate(); err != nil {
 		return errors.Errorf("%w", err).Add(coreerrors.NotValid)
@@ -44,16 +44,14 @@ func (s *ProviderService) UpdateApplicationStorageDirectives(ctx context.Context
 		if err := corestorage.Name(name).Validate(); err != nil {
 			return errors.Errorf("%w", err).Add(coreerrors.NotValid)
 		}
-		if override.Size != nil && (*override.Size == 0 || *override.Size > math.MaxInt64/(1024*1024)) {
+		if override.PoolUUID != nil || override.Count != nil {
+			return errors.Errorf("storage %q: only size can be updated", name).Add(coreerrors.NotSupported)
+		}
+		if override.Size == nil {
+			return errors.Errorf("storage %q size must be supplied", name).Add(coreerrors.NotValid)
+		}
+		if *override.Size == 0 || *override.Size > math.MaxInt64/(1024*1024) {
 			return errors.Errorf("storage %q size is outside the supported range", name).Add(coreerrors.NotValid)
-		}
-		if override.PoolUUID != nil {
-			if err := override.PoolUUID.Validate(); err != nil {
-				return errors.Errorf("%w", err).Add(coreerrors.NotValid)
-			}
-		}
-		if override.Size == nil && override.Count == nil && override.PoolUUID == nil {
-			return errors.Errorf("storage %q has no fields to update", name).Add(coreerrors.NotValid)
 		}
 	}
 	for range 3 {
@@ -80,15 +78,7 @@ func (s *ProviderService) UpdateApplicationStorageDirectives(ctx context.Context
 				continue
 			}
 			arg := directive.DirectiveArg
-			if override.Size != nil {
-				arg.Size = *override.Size
-			}
-			if override.Count != nil {
-				arg.Count = *override.Count
-			}
-			if override.PoolUUID != nil {
-				arg.PoolUUID = *override.PoolUUID
-			}
+			arg.Size = *override.Size
 			updates = append(updates, arg)
 		}
 		err = s.st.SetApplicationStorageDirectives(ctx, uuid.String(), snapshot, updates)

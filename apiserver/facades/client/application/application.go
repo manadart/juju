@@ -2465,7 +2465,7 @@ func (api *APIBase) updateOneApplicationStorage(ctx context.Context, update para
 	if err != nil {
 		return err
 	}
-	directives, err := applicationStorageDirectiveUpdates(ctx, api.storageService, update.StorageDirectives)
+	directives, err := applicationStorageDirectiveUpdates(update.StorageDirectives)
 	if err != nil {
 		return err
 	}

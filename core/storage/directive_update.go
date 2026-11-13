@@ -3,32 +3,22 @@
 
 package storage
 
-import "strings"
+import "github.com/juju/errors"
 
-// DirectiveUpdate preserves which fields an allocation-default edit supplies.
-// Nil size and count, and an empty pool, retain the existing directive values.
+// DirectiveUpdate changes the size of an allocation default, retaining its pool
+// and count. SizeMiB must be non-nil and positive.
 type DirectiveUpdate struct {
-	Pool    string
 	SizeMiB *uint64
-	Count   *uint64
 }
 
-// ParseDirectiveUpdate parses the usual directive syntax without defaulting
-// omitted fields. In particular, a size-only edit does not reset count to one.
+// ParseDirectiveUpdate accepts only a size, such as 20GiB.
 func ParseDirectiveUpdate(s string) (DirectiveUpdate, error) {
-	directive, err := ParseDirective(s)
+	size, ok, err := parseSize(s)
 	if err != nil {
 		return DirectiveUpdate{}, err
 	}
-	update := DirectiveUpdate{Pool: directive.Pool}
-	if directive.Size != 0 {
-		update.SizeMiB = &directive.Size
+	if !ok || size == 0 {
+		return DirectiveUpdate{}, errors.NotValidf("storage size %q (expected a positive size such as 20GiB)", s)
 	}
-	for field := range strings.SplitSeq(s, ",") {
-		if _, ok, _ := parseCount(field); ok {
-			update.Count = &directive.Count
-			break
-		}
-	}
-	return update, nil
+	return DirectiveUpdate{SizeMiB: &size}, nil
 }
