@@ -20,7 +20,8 @@ import (
 // ResizeState describes persistence of storage resize requests and results.
 type ResizeState interface {
 	GetUnitStorageResizeTargets(context.Context, string) ([]internal.UnitStorageResizeTarget, error)
-	CreateUnitStorageResizeIntents(context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent) error
+	CreateUnitStorageResizeIntents(context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent) (map[string]uint64, error)
+	GetStorageResizeUUIDByID(context.Context, uint64) (string, error)
 
 	// Staged execution keeps backend and attachment observations separate.
 	GetStorageResizeStageRequests(context.Context, string) ([]string, error)
@@ -144,11 +145,25 @@ func (s *Service) GetStorageResizeRequest(
 			RequestedSizeMiB:    request.RequestedSizeMiB,
 			CreatedAt:           request.CreatedAt,
 		},
+		ID:          request.ID,
 		StorageID:   corestorage.ID(request.StorageID),
 		Status:      domainstorage.StorageResizeStatus(request.Status),
 		Message:     request.Message,
 		CompletedAt: request.CompletedAt,
 	}, nil
+}
+
+// GetStorageResizeRequestByID returns a request using its model-scoped integer
+// ID. Internal workers continue to identify and report requests by UUID.
+func (s *Service) GetStorageResizeRequestByID(ctx context.Context, id uint64) (domainstorage.StorageResizeRequest, error) {
+	if id > math.MaxInt64 {
+		return domainstorage.StorageResizeRequest{}, errors.New("resize request ID exceeds the supported range").Add(coreerrors.NotValid)
+	}
+	uuid, err := s.st.GetStorageResizeUUIDByID(ctx, id)
+	if err != nil {
+		return domainstorage.StorageResizeRequest{}, errors.Errorf("getting storage resize request %d: %w", id, err)
+	}
+	return s.GetStorageResizeRequest(ctx, domainstorage.StorageResizeUUID(uuid))
 }
 
 // RecordStorageResizeResult records a completed or failed result and permits

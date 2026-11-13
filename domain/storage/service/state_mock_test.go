@@ -38,7 +38,7 @@ type MockStateMockRecorder struct {
 	createStoragePoolExpects                                       []*gomock.Call2_1[context.Context, internal.CreateStoragePool, error]
 	createStorageResizeIntentExpects                               []*gomock.Call2_1[context.Context, internal.StorageResizeIntent, error]
 	createStorageResizePlanExpects                                 []*gomock.Call2_1[context.Context, storage.ResizePlan, error]
-	createUnitStorageResizeIntentsExpects                          []*gomock.Call4_1[context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent, error]
+	createUnitStorageResizeIntentsExpects                          []*gomock.Call4_2[context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent, map[string]uint64, error]
 	deleteStoragePoolExpects                                       []*gomock.Call2_1[context.Context, string, error]
 	failStorageResizePlanExpects                                   []*gomock.Call5_1[context.Context, string, string, string, time.Time, error]
 	getFilesystemUUIDsByMachinesExpects                            []*gomock.Call2_2[context.Context, []machine.UUID, []storage.FilesystemUUID, error]
@@ -57,6 +57,7 @@ type MockStateMockRecorder struct {
 	getStorageResizeRequestExpects                                 []*gomock.Call2_2[context.Context, string, internal.StorageResizeRequest, error]
 	getStorageResizeRequestsForMachineExpects                      []*gomock.Call2_2[context.Context, string, []string, error]
 	getStorageResizeStageRequestsExpects                           []*gomock.Call2_2[context.Context, string, []string, error]
+	getStorageResizeUUIDByIDExpects                                []*gomock.Call2_2[context.Context, uint64, string, error]
 	getStorageResourceTagInfoForModelExpects                       []*gomock.Call2_2[context.Context, string, storageprovisioning.ModelResourceTagInfo, error]
 	getUnitStorageResizeTargetsExpects                             []*gomock.Call2_2[context.Context, string, []internal.UnitStorageResizeTarget, error]
 	getVolumeUUIDsByMachinesExpects                                []*gomock.Call2_2[context.Context, []machine.UUID, []storage.VolumeUUID, error]
@@ -191,22 +192,22 @@ func (mr *MockStateMockRecorder) CreateStorageResizePlan(arg0, arg1 any) *MockSt
 type MockStateCreateStorageResizePlanCall = gomock.Call2_1[context.Context, storage.ResizePlan, error]
 
 // CreateUnitStorageResizeIntents mocks base method.
-func (m *MockState) CreateUnitStorageResizeIntents(arg0 context.Context, arg1 string, arg2 []internal.UnitStorageResizeTarget, arg3 []internal.StorageResizeIntent) error {
+func (m *MockState) CreateUnitStorageResizeIntents(arg0 context.Context, arg1 string, arg2 []internal.UnitStorageResizeTarget, arg3 []internal.StorageResizeIntent) (map[string]uint64, error) {
 	m.ctrl.T.Helper()
-	return gomock.Dispatch4_1(&m.recorder.createUnitStorageResizeIntentsExpects, m.ctrl, m, "CreateUnitStorageResizeIntents", arg0, arg1, arg2, arg3)
+	return gomock.Dispatch4_2(&m.recorder.createUnitStorageResizeIntentsExpects, m.ctrl, m, "CreateUnitStorageResizeIntents", arg0, arg1, arg2, arg3)
 }
 
 // CreateUnitStorageResizeIntents indicates an expected call of CreateUnitStorageResizeIntents.
 func (mr *MockStateMockRecorder) CreateUnitStorageResizeIntents(arg0, arg1, arg2, arg3 any) *MockStateCreateUnitStorageResizeIntentsCall {
 	mr.mock.ctrl.T.Helper()
-	call := gomock.NewCall4_1[context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent, error](mr.mock.ctrl.T, mr.mock, "CreateUnitStorageResizeIntents", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2), gomock.EnsureMatcher(arg3))
+	call := gomock.NewCall4_2[context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent, map[string]uint64, error](mr.mock.ctrl.T, mr.mock, "CreateUnitStorageResizeIntents", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1), gomock.EnsureMatcher(arg2), gomock.EnsureMatcher(arg3))
 	mr.createUnitStorageResizeIntentsExpects = append(mr.createUnitStorageResizeIntentsExpects, call)
 	mr.mock.ctrl.Track(call.Call)
 	return call
 }
 
 // MockStateCreateUnitStorageResizeIntentsCall is the typed call wrapper for CreateUnitStorageResizeIntents.
-type MockStateCreateUnitStorageResizeIntentsCall = gomock.Call4_1[context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent, error]
+type MockStateCreateUnitStorageResizeIntentsCall = gomock.Call4_2[context.Context, string, []internal.UnitStorageResizeTarget, []internal.StorageResizeIntent, map[string]uint64, error]
 
 // DeleteStoragePool mocks base method.
 func (m *MockState) DeleteStoragePool(ctx context.Context, name string) error {
@@ -531,6 +532,24 @@ func (mr *MockStateMockRecorder) GetStorageResizeStageRequests(arg0, arg1 any) *
 
 // MockStateGetStorageResizeStageRequestsCall is the typed call wrapper for GetStorageResizeStageRequests.
 type MockStateGetStorageResizeStageRequestsCall = gomock.Call2_2[context.Context, string, []string, error]
+
+// GetStorageResizeUUIDByID mocks base method.
+func (m *MockState) GetStorageResizeUUIDByID(arg0 context.Context, arg1 uint64) (string, error) {
+	m.ctrl.T.Helper()
+	return gomock.Dispatch2_2(&m.recorder.getStorageResizeUUIDByIDExpects, m.ctrl, m, "GetStorageResizeUUIDByID", arg0, arg1)
+}
+
+// GetStorageResizeUUIDByID indicates an expected call of GetStorageResizeUUIDByID.
+func (mr *MockStateMockRecorder) GetStorageResizeUUIDByID(arg0, arg1 any) *MockStateGetStorageResizeUUIDByIDCall {
+	mr.mock.ctrl.T.Helper()
+	call := gomock.NewCall2_2[context.Context, uint64, string, error](mr.mock.ctrl.T, mr.mock, "GetStorageResizeUUIDByID", gomock.EnsureMatcher(arg0), gomock.EnsureMatcher(arg1))
+	mr.getStorageResizeUUIDByIDExpects = append(mr.getStorageResizeUUIDByIDExpects, call)
+	mr.mock.ctrl.Track(call.Call)
+	return call
+}
+
+// MockStateGetStorageResizeUUIDByIDCall is the typed call wrapper for GetStorageResizeUUIDByID.
+type MockStateGetStorageResizeUUIDByIDCall = gomock.Call2_2[context.Context, uint64, string, error]
 
 // GetStorageResourceTagInfoForModel mocks base method.
 func (m *MockState) GetStorageResourceTagInfoForModel(ctx context.Context, resourceTagModelConfigKey string) (storageprovisioning.ModelResourceTagInfo, error) {

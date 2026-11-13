@@ -37,6 +37,7 @@ const (
 // Pending requests have no completion time. Results survive storage removal.
 type StorageResizeRequest struct {
 	StorageResizeIntent
+	ID          uint64
 	StorageID   corestorage.ID
 	Status      StorageResizeStatus
 	Message     string
@@ -87,9 +88,10 @@ func (u StorageResizeUUID) Validate() error {
 }
 
 // UnitStorageResizeResult identifies a staged request or an already satisfied
-// storage instance. UUID is empty when AlreadySatisfied is true.
+// storage instance. ID and UUID are unset when AlreadySatisfied is true.
 type UnitStorageResizeResult struct {
 	StorageID        corestorage.ID
+	ID               uint64
 	UUID             StorageResizeUUID
 	RequestedSizeMiB uint64
 	AlreadySatisfied bool

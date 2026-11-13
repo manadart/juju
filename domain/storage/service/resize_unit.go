@@ -44,6 +44,7 @@ func (s *Service) RequestUnitStorageResize(ctx context.Context, name coreunit.Na
 					return nil, errors.Errorf("storage %q has a pending target of %d MiB, application target is %d MiB: %w", target.StorageID, target.PendingSizeMiB, target.SizeMiB, storageerrors.StorageResizeIntentAlreadyExists)
 				}
 				result.UUID = domainstorage.StorageResizeUUID(target.PendingUUID)
+				result.ID = target.PendingID
 			case target.ObservedSizeMiB >= target.SizeMiB:
 				result.AlreadySatisfied = true
 			default:
@@ -56,12 +57,17 @@ func (s *Service) RequestUnitStorageResize(ctx context.Context, name coreunit.Na
 			}
 			results = append(results, result)
 		}
-		err = s.st.CreateUnitStorageResizeIntents(ctx, name.String(), targets, intents)
+		ids, err := s.st.CreateUnitStorageResizeIntents(ctx, name.String(), targets, intents)
 		if errors.Is(err, storageerrors.StorageResizeTargetChanged) {
 			continue
 		}
 		if err != nil {
 			return nil, errors.Errorf("requesting storage resize for unit %q: %w", name, err)
+		}
+		for i := range results {
+			if id, ok := ids[results[i].UUID.String()]; ok {
+				results[i].ID = id
+			}
 		}
 		return results, nil
 	}
