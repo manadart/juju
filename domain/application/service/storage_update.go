@@ -34,9 +34,6 @@ func (s *ProviderService) UpdateApplicationStorageDirectives(ctx context.Context
 	if err != nil {
 		return errors.Capture(err)
 	}
-	if modelType != model.IAAS {
-		return errors.New("application storage updates require a machine model in this prototype").Add(coreerrors.NotSupported)
-	}
 	if len(overrides) == 0 {
 		return errors.New("no storage directive updates supplied").Add(coreerrors.NotValid)
 	}
@@ -61,6 +58,9 @@ func (s *ProviderService) UpdateApplicationStorageDirectives(ctx context.Context
 		}
 		definitions := make(map[string]internal.CharmStorageDefinitionForValidation, len(snapshot.Directives))
 		for _, directive := range snapshot.Directives {
+			if _, updating := overrides[directive.Name.String()]; updating && modelType == model.CAAS && directive.ProviderType != "kubernetes" {
+				return errors.Errorf("storage %q: Kubernetes directive updates require PVC-backed storage", directive.Name).Add(coreerrors.NotSupported)
+			}
 			definitions[directive.Name.String()] = directive.Definition
 		}
 		for name := range overrides {

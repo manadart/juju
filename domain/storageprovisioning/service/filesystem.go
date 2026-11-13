@@ -32,6 +32,9 @@ import (
 // FilesystemState defines the interface required for performing filesystem
 // provisioning operations in the model.
 type FilesystemState interface {
+	// GetK8sFilesystemAllocations returns existing unit allocation sizes and bindings.
+	GetK8sFilesystemAllocations(context.Context, string) ([]internal.K8sFilesystemAllocation, error)
+
 	// CheckFilesystemExists checks if a filesystem exists for the supplied
 	// filesystem ID. True is returned when a filesystem exists for the supplied
 	// id.
