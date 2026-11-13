@@ -88,6 +88,7 @@ SELECT d.storage_name AS &storageDirectiveSnapshotRow.storage_name,
        d.storage_pool_uuid AS &storageDirectiveSnapshotRow.storage_pool_uuid,
        d.size_mib AS &storageDirectiveSnapshotRow.size_mib,
        d.count AS &storageDirectiveSnapshotRow.count,
+       COALESCE(sp.type, '') AS &storageDirectiveSnapshotRow.provider_type,
        k.kind AS &storageDirectiveSnapshotRow.kind,
        cs.count_min AS &storageDirectiveSnapshotRow.count_min,
        cs.count_max AS &storageDirectiveSnapshotRow.count_max,
@@ -97,6 +98,7 @@ FROM application AS a
 JOIN application_storage_directive AS d ON d.application_uuid = a.uuid AND d.charm_uuid = a.charm_uuid
 JOIN charm_storage AS cs ON cs.charm_uuid = d.charm_uuid AND cs.name = d.storage_name
 JOIN charm_storage_kind AS k ON k.id = cs.storage_kind_id
+LEFT JOIN storage_pool AS sp ON sp.uuid = d.storage_pool_uuid
 WHERE a.uuid = $entityUUID.uuid
 ORDER BY d.storage_name
 `, key, storageDirectiveSnapshotRow{})
@@ -111,19 +113,21 @@ ORDER BY d.storage_name
 		result.Directives = append(result.Directives, internal.ApplicationStorageDirective{
 			DirectiveArg: domainstorage.DirectiveArg{Name: domainstorage.Name(row.Name), PoolUUID: domainstorage.StoragePoolUUID(row.PoolUUID), Size: row.Size, Count: row.Count},
 			Definition:   internal.CharmStorageDefinitionForValidation{Name: row.Name, Type: charm.StorageType(row.Kind), CountMin: row.CountMin, CountMax: row.CountMax, MinimumSize: row.MinimumSize, Shared: row.Shared},
+			ProviderType: row.ProviderType,
 		})
 	}
 	return result, nil
 }
 
 type storageDirectiveSnapshotRow struct {
-	Name        string `db:"storage_name"`
-	PoolUUID    string `db:"storage_pool_uuid"`
-	Size        uint64 `db:"size_mib"`
-	Count       uint32 `db:"count"`
-	Kind        string `db:"kind"`
-	CountMin    int    `db:"count_min"`
-	CountMax    int    `db:"count_max"`
-	MinimumSize uint64 `db:"minimum_size_mib"`
-	Shared      bool   `db:"shared"`
+	ProviderType string `db:"provider_type"`
+	Name         string `db:"storage_name"`
+	PoolUUID     string `db:"storage_pool_uuid"`
+	Size         uint64 `db:"size_mib"`
+	Count        uint32 `db:"count"`
+	Kind         string `db:"kind"`
+	CountMin     int    `db:"count_min"`
+	CountMax     int    `db:"count_max"`
+	MinimumSize  uint64 `db:"minimum_size_mib"`
+	Shared       bool   `db:"shared"`
 }

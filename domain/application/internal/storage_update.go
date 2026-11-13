@@ -14,5 +14,6 @@ type ApplicationStorageSnapshot struct {
 // ApplicationStorageDirective includes the constraints used to validate edits.
 type ApplicationStorageDirective struct {
 	storage.DirectiveArg
-	Definition CharmStorageDefinitionForValidation
+	Definition   CharmStorageDefinitionForValidation
+	ProviderType string
 }

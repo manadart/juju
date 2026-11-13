@@ -547,6 +547,9 @@ func (st *State) AddCAASUnits(
 		}
 
 		for _, arg := range args {
+			if err := st.checkApplicationStorageDirectives(ctx, tx, appUUID.String(), arg.StorageDirectives); err != nil {
+				return err
+			}
 			unitName, err := st.insertCAASUnit(ctx, tx, appUUID.String(), charmUUID, arg)
 			if err != nil {
 				return errors.Errorf("inserting unit %q: %w ", unitName, err)
