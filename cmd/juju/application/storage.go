@@ -36,8 +36,9 @@ Updating a directive does not resize existing storage or run charm actions.
 New units allocate storage using the updated defaults. To apply capacity targets
 to an existing unit, run resize-storage <unit>, optionally with --wait.
 
-Directive updates currently require a machine model. Directives may be viewed
-in either model type. Use --format yaml or --format json for structured output.
+Directive updates support machine models and PVC-backed Kubernetes storage.
+Resizing existing storage with resize-storage currently requires a machine model.
+Use --format yaml or --format json for structured output.
 `
 	appStorageConfigExamples = `
 View all allocation defaults:

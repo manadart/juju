@@ -6,7 +6,7 @@ directives remain useful as allocation defaults, but the 3.6 implementation does
 not provide the guarantees needed for resizing existing storage safely.
 
 Status: working prototype and cloud resize infrastructure plan, updated on
-2026-11-12. Workload preparation remains an explicitly invoked charm action;
+2026-11-13. Workload preparation remains an explicitly invoked charm action;
 new hooks and uniter coordination are out of scope. The selected workflow is `application-storage` followed by
 `juju resize-storage <unit>`; see the command decision below.
 
@@ -75,9 +75,41 @@ and SQLite checks confirm the update output matches a single-directive query,
 zero counts are preserved, pool/count edits are rejected, and failed updates
 produce no success output. No new repository tests were added.
 
-The CLI and controller agent build as `4.1-beta3.4` in `.bin`. The live controller
-has not been upgraded and the new command workflow has not been run against it.
-Use the LXD verification commands below after installing the new agent.
+The live controller has not been upgraded and the new command workflow has not
+been run against it. Use the LXD verification commands below after installing
+the new agent.
+
+## Kubernetes allocation directive increment
+
+Size-only directive updates now support PVC-backed Kubernetes storage. Updating
+a directive changes allocation defaults; it does not resize existing claims.
+Before scaling, the application provisioner creates missing PVCs for the desired
+ordinals using current defaults or persisted unit allocation sizes. It uses the
+existing StatefulSet's claim-template names without replacing the StatefulSet.
+Existing claims retain their capacity and binding, including across retries and
+concurrent claim creation. Claim preparation must succeed before scaling.
+
+The state, service and worker/provider changes are in `86d5c181a35`,
+`b9073e29400` and `ada546b0044`. Kubernetes resizing of existing claims and
+rootfs/tmpfs directive updates remain outside this increment.
+
+Existing application state/service, storage provisioning state/service,
+Kubernetes provider, application provisioner and command suites pass with the
+race detector. Forty bounded application provisioner stress runs pass. No new
+repository tests were added; existing mock and call fixtures were updated.
+Disposable SQLite checks cover allocation snapshots, stale directive rejection,
+zero counts and unsupported storage types. A fake Kubernetes client check covers
+new ordinal sizes, persisted allocation sizes, unchanged existing claims and
+StatefulSet identity/templates, retry and create races, cancellation, zero-count
+defaults and claim-creation failures preventing scale changes. These checks do
+not establish live Kubernetes behaviour; no cluster has been upgraded or tested.
+Repository static checks pass through schema, import and context validation,
+then stop because `golangci-lint` is not installed. Licence and shell-format
+checks are skipped because `go-licenses` and `shfmt` are also unavailable.
+
+The CLI and controller agent build as `4.1-beta3.5` in `.bin`. Command help now
+identifies PVC-backed Kubernetes directive updates as supported and keeps
+existing-storage resizing restricted to machine models.
 
 ## Cloud resize infrastructure increment
 
@@ -503,12 +535,28 @@ allocation default. Unit creation must validate the directive snapshot in its
 insertion transaction, so an in-flight add-unit cannot commit an obsolete size.
 Concurrent charm refresh must likewise preserve or reject a changed directive.
 
-This prototype increment retains the machine-model execution scope. Kubernetes
-resize and directive updates are follow-up work: new PVC allocation must honour
-the current directive even when a StatefulSet retains an older claim template.
-That ordering needs to be implemented before exposing directive writes there.
-The Kubernetes resize executor will patch the individual bound PVC, preserve
-PVC/PV identity, and wait for Kubernetes controller and node expansion to finish.
+Kubernetes size-only directive updates are supported for PVC-backed storage.
+Before scaling, the application provisioner reads current allocation defaults
+and persisted unit allocations, then ensures claims for every desired ordinal.
+New ordinals use the current default; existing unit allocations retain their
+recorded sizes. Claims use the existing StatefulSet's template names, including
+legacy names, so its older capacity defaults do not determine new allocations.
+Initial deployment and recovery use the same preparation step before scaling.
+Claims are created with create-only semantics: existing or concurrently created
+claims are checked but never resized or replaced. A created claim fixes its size
+across retries and later directive changes. An add-unit transaction rejects a
+stale directive snapshot. No directive watcher or StatefulSet replacement is
+needed for capacity updates. Existing PVC reuse preserves its size and binding.
+
+Kubernetes rootfs/tmpfs (`emptyDir`) directive updates are excluded: their sizes
+are part of the shared pod template and need separate handling. The existing
+single-allocation-per-storage-name Kubernetes limitation is retained; multiple
+persisted allocations of the same name on a unit are rejected explicitly.
+
+Kubernetes resizing of existing storage remains follow-up work and resize
+submission still requires a machine model. A future Kubernetes resize executor
+will patch the individual bound PVC, preserve PVC/PV identity, and wait for
+Kubernetes controller and node expansion to finish.
 It will not require a Juju machine resize worker. Existing provider contracts,
 per-instance requests and execution stages remain the basis for both models.
 
