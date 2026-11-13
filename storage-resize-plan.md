@@ -149,6 +149,37 @@ output, no-op submissions and partial failures. Forty bounded stress runs of
 the existing storage command suite pass. No new repository tests were added.
 No live controller has been upgraded or exercised with these changes.
 
+## Resize coordination with storage lifecycle
+
+The storage provisioner serialises resize reconciliation steps with creation,
+attachment, detachment and removal in its worker loop. For local ephemeral
+storage, this prevents the worker from unmounting a filesystem, detaching its
+loop device or deleting its backing file while a resize step is using it.
+Three cases still require explicit handling:
+
+1. **Lifecycle changes in controller state.** Storage or its attachments can
+   become dying while the worker is executing a step. Queued resize work must
+   revalidate lifecycle and resource identity before mutation. Completion
+   reports must reject stale state, even though the physical operations in the
+   worker are serialised.
+2. **Removal between resize stages.** Backend growth and device/filesystem
+   growth are separate steps. Removal can intervene between them. Further
+   resize steps must stop, and the request must retain a terminal result
+   reflecting the interruption and any growth already completed.
+3. **Asynchronous provider operations.** A provider resize may continue after
+   its method returns. Serialising method calls does not prevent a subsequent
+   removal from overlapping that remote operation. Future provider support
+   must coordinate conflicting operations for the actual lifetime of the
+   remote work, including across model/machine workers and worker restarts.
+   Reconciliation calls remain bounded; the worker loop must not wait for the
+   whole remote operation to finish.
+
+The intended guarantee is that removal prevents further resize steps from
+starting, any executing step settles before conflicting teardown proceeds,
+and the resize request receives a retained terminal result. Serial execution
+within one worker is the local foundation; durable coordination for remote
+operations remains a provider implementation requirement.
+
 ## Cloud resize infrastructure increment
 
 The initial cloud increment added optional provider contracts and coordination
@@ -929,8 +960,8 @@ contract. This is the selected prototype scope.
    recovery? New charm hooks and uniter readiness coordination are out of scope.
 8. How should out-of-band expansion or replacement be detected and represented?
    Which observed identity changes require an explicit replacement workflow?
-9. What happens when storage or its owner is removed during expansion? What
-   state must survive model migration, backup and recovery?
+9. How will the removal ordering above be enforced for asynchronous provider
+   operations? What state must survive model migration, backup and recovery?
 10. What retry, blocked and timeout policies apply during checking and execution,
     particularly when a required machine is unavailable?
 
