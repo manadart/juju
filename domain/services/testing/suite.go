@@ -27,6 +27,8 @@ import (
 	coreuser "github.com/juju/juju/core/user"
 	jujuversion "github.com/juju/juju/core/version"
 	userbootstrap "github.com/juju/juju/domain/access/bootstrap"
+	accessservice "github.com/juju/juju/domain/access/service"
+	accessstate "github.com/juju/juju/domain/access/state"
 	cloudbootstrap "github.com/juju/juju/domain/cloud/bootstrap"
 	cloudstate "github.com/juju/juju/domain/cloud/state"
 	controllerbootstrap "github.com/juju/juju/domain/controller/bootstrap"
@@ -270,9 +272,10 @@ type domainServices struct {
 // additional storage provider.
 func (s *DomainServicesSuite) DomainServicesGetterWithStorageRegistry(c *tc.C, objectStore objectstore.ObjectStore, leaseManager lease.LeaseManager, storageRegistry storage.ProviderRegistry) DomainServicesGetterFunc {
 	ctx, cancel := context.WithCancel(c.Context())
-	authorizer, err := openfga.NewAuthorizer(ctx, func(context.Context) (database.TxnRunner, error) {
-		return s.TxnRunner(), nil
-	})
+	authorizer, err := openfga.NewAuthorizer(ctx, accessservice.NewAuthorisationService(
+		accessstate.NewAuthorisationState(func(context.Context) (database.TxnRunner, error) {
+			return s.TxnRunner(), nil
+		}), clock.WallClock))
 	if err != nil {
 		cancel()
 	}

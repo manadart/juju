@@ -20,6 +20,8 @@ import (
 	"github.com/juju/juju/core/objectstore"
 	"github.com/juju/juju/core/providertracker"
 	"github.com/juju/juju/core/storage"
+	accessservice "github.com/juju/juju/domain/access/service"
+	accessstate "github.com/juju/juju/domain/access/state"
 	domainservices "github.com/juju/juju/domain/services"
 	internalerrors "github.com/juju/juju/internal/errors"
 	"github.com/juju/juju/internal/openfga"
@@ -133,7 +135,8 @@ func NewWorker(config Config) (worker.Worker, error) {
 
 	w := &domainServicesWorker{}
 	factory := coredatabase.NewTxnRunnerFactoryForNamespace(config.DBGetter.GetWatchableDB, coredatabase.ControllerNS)
-	authorizer, err := openfga.NewAuthorizer(w.tomb.Context(context.Background()), factory)
+	authorizer, err := openfga.NewAuthorizer(w.tomb.Context(context.Background()),
+		accessservice.NewAuthorisationService(accessstate.NewAuthorisationState(factory), config.Clock))
 	if err != nil {
 		return nil, internalerrors.Errorf("starting authorisation engine: %w", err)
 	}

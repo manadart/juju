@@ -9,10 +9,17 @@ import (
 
 	openfgav1 "github.com/openfga/api/proto/openfga/v1"
 	"github.com/openfga/openfga/pkg/server"
+	"github.com/openfga/openfga/pkg/storage"
 	"github.com/openfga/openfga/pkg/typesystem"
 
-	"github.com/juju/juju/core/database"
 	"github.com/juju/juju/core/permission"
+)
+
+// StoreID and ModelID identify Juju's persisted authorisation store and model.
+// Changing the model requires a new model ID and a schema migration.
+const (
+	StoreID = "01J00000000000000000000000"
+	ModelID = "01J00000000000000000000001"
 )
 
 // Authorizer owns the embedded server. Its owner must cancel its context and
@@ -22,8 +29,7 @@ type Authorizer struct {
 }
 
 // NewAuthorizer validates the persisted model before starting the server.
-func NewAuthorizer(ctx context.Context, factory database.TxnRunnerFactory) (*Authorizer, error) {
-	ds := NewDatastore(factory)
+func NewAuthorizer(ctx context.Context, ds storage.OpenFGADatastore) (*Authorizer, error) {
 	model, err := ds.ReadAuthorizationModel(ctx, StoreID, ModelID)
 	if err != nil {
 		return nil, err
