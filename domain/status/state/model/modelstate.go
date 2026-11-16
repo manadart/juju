@@ -2193,6 +2193,7 @@ SELECT
   ct.value AS &machineStatusDetails.constraint_container_type,
   c.virt_type AS &machineStatusDetails.constraint_virt_type,
   c.allocate_public_ip AS &machineStatusDetails.constraint_allocate_public_ip,
+  c.network_offload AS &machineStatusDetails.constraint_network_offload,
   c.image_id AS &machineStatusDetails.constraint_image_id,
   mav.version AS &machineStatusDetails.agent_version
 FROM machine AS m
@@ -2307,6 +2308,9 @@ LEFT JOIN subnet AS sn ON ipa.subnet_uuid = sn.uuid
 			s.ConstraintInstanceType, s.ConstraintContainerType,
 			s.ConstraintAllocatePublicIP, s.ConstraintImageID,
 		)
+		if s.ConstraintNetworkOffload.Valid {
+			cons.NetworkOffload = new(s.ConstraintNetworkOffload.V == 1)
+		}
 
 		machineAddresses := addresses[s.UUID.String()]
 		matchedAddrs := make(corenetwork.SpaceAddresses, 0, len(machineAddresses))

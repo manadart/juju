@@ -467,6 +467,7 @@ func (env *azureEnviron) ConstraintsValidator(ctx context.Context) (constraints.
 	sort.Strings(instTypeNames)
 
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 	validator.RegisterUnsupported(unsupportedConstraints)
 	validator.RegisterVocabulary(
 		constraints.Arch,

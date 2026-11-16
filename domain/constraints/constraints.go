@@ -79,6 +79,10 @@ type Constraints struct {
 	// a public IP so that public cloud behaviour works out of the box.
 	AllocatePublicIP *bool
 
+	// NetworkOffload requests hardware-offload-capable network ports. Nil
+	// inherits defaults; false explicitly requests ordinary ports.
+	NetworkOffload *bool
+
 	// ImageID, if not nil, indicates that a machine must use the specified
 	// image. This is provider specific, and for the moment is only
 	// implemented on MAAS clouds.
@@ -119,6 +123,7 @@ func DecodeConstraints(coreCons constraints.Value) Constraints {
 		VirtType:         coreCons.VirtType,
 		Zones:            coreCons.Zones,
 		AllocatePublicIP: coreCons.AllocatePublicIP,
+		NetworkOffload:   coreCons.NetworkOffload,
 		ImageID:          coreCons.ImageID,
 		IPFamily:         coreCons.IPFamily,
 	}
@@ -165,6 +170,7 @@ func EncodeConstraints(cons Constraints) constraints.Value {
 		VirtType:         cons.VirtType,
 		Zones:            cons.Zones,
 		AllocatePublicIP: cons.AllocatePublicIP,
+		NetworkOffload:   cons.NetworkOffload,
 		ImageID:          cons.ImageID,
 		IPFamily:         cons.IPFamily,
 	}

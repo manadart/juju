@@ -37,6 +37,7 @@ const (
 	VirtType         = "virt-type"
 	Zones            = "zones"
 	AllocatePublicIP = "allocate-public-ip"
+	NetworkOffload   = "network-offload"
 	ImageID          = "image-id"
 	IPFamily         = "ip-family"
 
@@ -117,6 +118,11 @@ type Value struct {
 	// The default behaviour if the value is not specified is to allocate
 	// a public IP so that public cloud behaviour works out of the box.
 	AllocatePublicIP *bool `json:"allocate-public-ip,omitempty" yaml:"allocate-public-ip,omitempty"`
+
+	// NetworkOffload requires hardware-offload-capable ports for every network
+	// interface created for the machine. False explicitly requests ordinary
+	// ports. Nil inherits defaults, falling back to ordinary ports.
+	NetworkOffload *bool `json:"network-offload,omitempty" yaml:"network-offload,omitempty"`
 
 	// ImageID, if not nil, indicates that a machine must use the specified
 	// image. This is provider specific, and for the moment is only
@@ -268,6 +274,11 @@ func (v *Value) HasAllocatePublicIP() bool {
 	return v.AllocatePublicIP != nil
 }
 
+// HasNetworkOffload reports whether network-offload was explicitly set.
+func (v *Value) HasNetworkOffload() bool {
+	return v.NetworkOffload != nil
+}
+
 // HasImageID returns true if the constraints.Value specifies an image-id.
 func (v *Value) HasImageID() bool {
 	return v.ImageID != nil && *v.ImageID != ""
@@ -338,6 +349,9 @@ func (v Value) String() string {
 	if v.AllocatePublicIP != nil {
 		strs = append(strs, "allocate-public-ip="+boolStr(*v.AllocatePublicIP))
 	}
+	if v.NetworkOffload != nil {
+		strs = append(strs, "network-offload="+boolStr(*v.NetworkOffload))
+	}
 	if v.ImageID != nil {
 		strs = append(strs, "image-id="+(*v.ImageID))
 	}
@@ -398,6 +412,9 @@ func (v Value) GoString() string {
 	}
 	if v.AllocatePublicIP != nil {
 		values = append(values, fmt.Sprintf("AllocatePublicIP: %v", *v.AllocatePublicIP))
+	}
+	if v.NetworkOffload != nil {
+		values = append(values, fmt.Sprintf("NetworkOffload: %v", *v.NetworkOffload))
 	}
 	if v.ImageID != nil {
 		values = append(values, fmt.Sprintf("ImageID: %q", *v.ImageID))
@@ -578,6 +595,8 @@ func (v *Value) setRaw(name, str string) error {
 		err = v.setZones(str)
 	case AllocatePublicIP:
 		err = v.setAllocatePublicIP(str)
+	case NetworkOffload:
+		err = v.setNetworkOffload(str)
 	case ImageID:
 		err = v.setImageID(str)
 	case IPFamily:
@@ -653,6 +672,12 @@ func (v *Value) UnmarshalYAML(unmarshal func(any) error) error {
 			v.Zones, err = parseYamlStrings("zones", val)
 		case AllocatePublicIP:
 			v.AllocatePublicIP, err = parseBool(vstr)
+		case NetworkOffload:
+			if val == nil || vstr == "" {
+				v.NetworkOffload = nil
+			} else {
+				v.NetworkOffload, err = parseBool(vstr)
+			}
 		case ImageID:
 			v.ImageID = &vstr
 		case IPFamily:
@@ -818,6 +843,17 @@ func (v *Value) setAllocatePublicIP(str string) (err error) {
 		return errors.Errorf("already set")
 	}
 	v.AllocatePublicIP, err = parseBool(str)
+	return
+}
+
+func (v *Value) setNetworkOffload(str string) (err error) {
+	if str == "" {
+		return nil
+	}
+	if v.NetworkOffload != nil {
+		return errors.Errorf("already set")
+	}
+	v.NetworkOffload, err = parseBool(str)
 	return
 }
 

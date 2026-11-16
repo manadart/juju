@@ -311,6 +311,7 @@ SELECT
     ctype.value AS container_type,
     c.virt_type,
     c.allocate_public_ip,
+    c.network_offload,
     c.image_id,
     c.ip_family,
     ctag.tag,

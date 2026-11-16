@@ -291,6 +291,7 @@ type machineConstraint struct {
 	ContainerType    sql.NullString  `db:"container_type"`
 	VirtType         sql.NullString  `db:"virt_type"`
 	AllocatePublicIP sql.NullBool    `db:"allocate_public_ip"`
+	NetworkOffload   sql.NullBool    `db:"network_offload"`
 	ImageID          sql.NullString  `db:"image_id"`
 	IPFamily         sql.NullString  `db:"ip_family"`
 	SpaceName        sql.NullString  `db:"space_name"`
@@ -325,6 +326,7 @@ type machineProvisioningRow struct {
 	ContainerType    sql.NullString  `db:"container_type"`
 	VirtType         sql.NullString  `db:"virt_type"`
 	AllocatePublicIP sql.NullBool    `db:"allocate_public_ip"`
+	NetworkOffload   sql.NullBool    `db:"network_offload"`
 	ImageID          sql.NullString  `db:"image_id"`
 	IPFamily         sql.NullString  `db:"ip_family"`
 	SpaceName        sql.NullString  `db:"space_name"`
@@ -359,6 +361,7 @@ type setConstraint struct {
 	ContainerTypeID  *uint64            `db:"container_type_id"`
 	VirtType         *string            `db:"virt_type"`
 	AllocatePublicIP *bool              `db:"allocate_public_ip"`
+	NetworkOffload   *bool              `db:"network_offload"`
 	ImageID          *string            `db:"image_id"`
 	IPFamily         *ipfamily.IPFamily `db:"ip_family"`
 }
@@ -400,6 +403,7 @@ type dbConstraint struct {
 	ContainerType    sql.NullString  `db:"container_type"`
 	VirtType         sql.NullString  `db:"virt_type"`
 	AllocatePublicIP sql.NullBool    `db:"allocate_public_ip"`
+	NetworkOffload   sql.NullBool    `db:"network_offload"`
 	ImageID          sql.NullString  `db:"image_id"`
 	IPFamily         sql.NullString  `db:"ip_family"`
 }
@@ -442,6 +446,9 @@ func (c dbConstraint) toValue(
 	// out of the database even when the value is NULL.
 	if c.AllocatePublicIP.Valid {
 		rval.AllocatePublicIP = &c.AllocatePublicIP.Bool
+	}
+	if c.NetworkOffload.Valid {
+		rval.NetworkOffload = &c.NetworkOffload.Bool
 	}
 	if c.ImageID.Valid {
 		rval.ImageID = &c.ImageID.String

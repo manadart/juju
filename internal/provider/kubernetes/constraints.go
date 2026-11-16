@@ -24,6 +24,7 @@ var unsupportedConstraints = []string{
 // validate and merge constraints.
 func (k *kubernetesClient) ConstraintsValidator(ctx context.Context) (constraints.Validator, error) {
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 	validator.RegisterUnsupported(unsupportedConstraints)
 	return validator, nil
 }

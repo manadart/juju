@@ -86,8 +86,8 @@ func (d deltas) Removal(_ context.Context, src []v4_0_12.Removal, _ *v4_0_12.Mod
 	return result, nil
 }
 
-// Constraint copies all v4_0_12 fields and leaves IpFamily nil. Constraints
-// exported from a 4.0.12 model carry no IP family information.
+// Constraint copies all v4_0_12 fields. IpFamily and NetworkOffload remain nil.
+// A 4.0.12 model carries neither IP family nor network offload information.
 func (d deltas) Constraint(_ context.Context, src []v4_0_12.Constraint, _ *v4_0_12.ModelExport) ([]v4_1_0.Constraint, error) {
 	result := make([]v4_1_0.Constraint, len(src))
 	for i, c := range src {

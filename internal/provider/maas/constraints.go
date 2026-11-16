@@ -26,6 +26,7 @@ var unsupportedConstraints = []string{
 // ConstraintsValidator is defined on the Environs interface.
 func (env *maasEnviron) ConstraintsValidator(ctx context.Context) (constraints.Validator, error) {
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 	validator.RegisterUnsupported(unsupportedConstraints)
 	supportedArches, err := env.getSupportedArchitectures(ctx)
 	if err != nil {

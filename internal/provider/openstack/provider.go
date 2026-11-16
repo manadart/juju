@@ -1150,6 +1150,14 @@ func (e *Environ) startInstance(
 	if err != nil {
 		return nil, environs.ZoneIndependentError(err)
 	}
+	offload := args.Constraints.NetworkOffload != nil && *args.Constraints.NetworkOffload
+	if offload {
+		defer func() {
+			if err != nil {
+				e.cleanupOffloadAttempt(ctx, networks, args.InstanceConfig.MachineId)
+			}
+		}()
+	}
 
 	userData, err := providerinit.ComposeUserData(args.InstanceConfig, cloudCfg, OpenstackRenderer{})
 	if err != nil {
@@ -1202,7 +1210,7 @@ func (e *Environ) startInstance(
 	e.usingSecurityGroups = e.usingSecurityGroups || createSecurityGroups
 
 	var novaGroupNames []nova.SecurityGroupName
-	if createSecurityGroups {
+	if createSecurityGroups && !offload {
 		groupNames, err := e.firewaller.SetUpGroups(ctx, args.ControllerUUID, args.InstanceConfig.MachineId)
 		if err != nil {
 			return nil, environs.ZoneIndependentError(errors.Annotate(err, "cannot set up groups"))
@@ -1294,6 +1302,13 @@ func (e *Environ) startInstance(
 				server = nil
 				err = errors.New(faultMsg)
 				break
+			} else if offload {
+				// These ports can only belong to one server. An unexpected
+				// status must not cause another boot using the same ports.
+				if cleanupErr := e.terminateInstances(ctx, []instance.Id{instance.Id(server.Id)}); cleanupErr != nil {
+					logger.Errorf(ctx, "cannot clean up instance %q: %v", server.Id, cleanupErr)
+				}
+				return nil, errors.Errorf("instance %q entered unexpected status %q", server.Id, serverDetail.Status)
 			}
 		}
 		return server, err
@@ -1314,6 +1329,16 @@ func (e *Environ) startInstance(
 		return nil, environs.ZoneIndependentError(err)
 	}
 	e.configurator.ModifyRunServerOptions(&opts)
+	if offload {
+		// Nova accepts either a network ID or a port ID, never both. Keep
+		// network IDs in our ownership list for failure cleanup only.
+		opts.Networks = make([]nova.ServerNetworks, len(networks))
+		for i, net := range networks {
+			opts.Networks[i] = nova.ServerNetworks{PortId: net.PortId}
+		}
+		// Security groups are already assigned to the Neutron ports.
+		opts.SecurityGroupNames = nil
+	}
 
 	// Determine whether the RunServer call requires the nova compute
 	// microversion header. volume_type and tag in block_device_mapping_v2
@@ -1343,11 +1368,15 @@ func (e *Environ) startInstance(
 
 	server, err := tryStartNovaInstance(shortAttempt, novaClient, opts)
 	if err != nil || server == nil {
-		// Attempt to clean up any security groups we created.
-		if err := e.firewaller.DeleteMachineGroup(ctx, args.InstanceConfig.MachineId); err != nil {
-			// If we failed to clean up the security groups, we need the user
-			// to manually clean them up.
-			logger.Errorf(ctx, "cannot cleanup security groups: %v", err)
+		if err == nil {
+			err = errors.New("Nova did not return an instance")
+		}
+		// Offloaded ports must be released before their security groups;
+		// the deferred cleanup above performs these steps in order.
+		if !offload {
+			if err := e.firewaller.DeleteMachineGroup(ctx, args.InstanceConfig.MachineId); err != nil {
+				logger.Errorf(ctx, "cannot cleanup security groups: %v", err)
+			}
 		}
 
 		logger.Debugf(ctx, "cannot run instance full error: %q", err)
@@ -1367,6 +1396,11 @@ func (e *Environ) startInstance(
 
 	detail, err := e.nova().GetServer(server.Id)
 	if err != nil {
+		if offload {
+			if cleanupErr := e.terminateInstances(ctx, []instance.Id{instance.Id(server.Id)}); cleanupErr != nil {
+				logger.Errorf(ctx, "cannot clean up instance %q: %v", server.Id, cleanupErr)
+			}
+		}
 		return nil, environs.ZoneIndependentError(errors.Annotate(err, "cannot get started instance"))
 	}
 
@@ -1473,6 +1507,9 @@ func (e *Environ) networksForInstance(
 	ctx context.Context,
 	args environs.StartInstanceParams, cloudCfg cloudinit.NetworkingConfig,
 ) ([]nova.ServerNetworks, error) {
+	if args.Constraints.NetworkOffload != nil && *args.Constraints.NetworkOffload {
+		return e.offloadedNetworksForInstance(ctx, args, cloudCfg)
+	}
 	networks, err := e.networksForModel(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -1612,7 +1649,7 @@ func (e *Environ) DeletePorts(networks []nova.ServerNetworks) error {
 	for _, network := range networks {
 		if network.NetworkId != "" && network.PortId != "" {
 			err := e.networking.DeletePortByID(network.PortId)
-			if err != nil {
+			if err != nil && !isNotFoundError(err) {
 				errs = append(errs, err)
 			}
 		}
@@ -2058,6 +2095,11 @@ func (e *Environ) Destroy(ctx context.Context) error {
 	if err != nil {
 		return e.HandleCredentialError(ctx, err)
 	}
+	if e.supportsNeutron() {
+		if err := e.deleteUnusedOffloadPorts(ctx, ""); err != nil {
+			return e.HandleCredentialError(ctx, err)
+		}
+	}
 	// Delete all security groups remaining in the model.
 	if err := e.firewaller.DeleteAllModelGroups(ctx); err != nil {
 		return e.HandleCredentialError(ctx, err)
@@ -2227,7 +2269,7 @@ func (e *Environ) terminateInstances(ctx context.Context, ids []instance.Id) err
 	// If in instance firewall mode, gather the security group names.
 	securityGroupNames, err := e.firewaller.GetSecurityGroups(ctx, ids...)
 	if err == environs.ErrNoInstances {
-		return nil
+		err = nil
 	}
 	if err != nil {
 		logger.Debugf(ctx, "error retrieving security groups for %v: %v", ids, err)
@@ -2241,29 +2283,35 @@ func (e *Environ) terminateInstances(ctx context.Context, ids []instance.Id) err
 	// reporting to the user.
 	var firstErr error
 	for _, id := range ids {
-		// Attempt to destroy the ports that could have been created when using
-		// spaces.
-		if err := e.terminateInstanceNetworkPorts(ctx, id); err != nil {
-			logger.Errorf(ctx, "error attempting to remove ports associated with instance %q: %v", id, err)
-			// Unfortunately there is nothing we can do here, there could be
-			// orphan ports left.
-		}
-
-		// Once ports have been deleted, attempt to delete the server.
-		err = novaClient.DeleteServer(string(id))
-		if isNotFoundError(err) {
+		// Capture port ownership before Nova clears device_id on detach.
+		portIDs, portErr := e.instanceNetworkPortIDs(ctx, id)
+		if portErr != nil {
+			if firstErr == nil {
+				firstErr = portErr
+			}
 			continue
 		}
-		if err != nil {
-			logger.Debugf(ctx, "error terminating instance %q: %v", id, err)
+		err = novaClient.DeleteServer(string(id))
+		if err != nil && !isNotFoundError(err) {
 			if firstErr == nil {
 				firstErr = err
 			}
 			if denied, _ := e.MaybeInvalidateCredentialError(ctx, err); denied {
-				// We'll likely fail all subsequent calls if we have an invalid credential.
 				return errors.Trace(err)
 			}
+			continue
 		}
+		// Pre-created ports belong to Juju, so Nova will not delete them.
+		// Retry while asynchronous server deletion releases the ports.
+		if len(portIDs) > 0 {
+			if err := e.terminateInstanceNetworkPorts(ctx, id, portIDs...); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+	}
+
+	if firstErr != nil {
+		return firstErr
 	}
 
 	if len(securityGroupNames) > 0 {
@@ -2276,61 +2324,83 @@ func (e *Environ) terminateInstances(ctx context.Context, ids []instance.Id) err
 	return firstErr
 }
 
-func (e *Environ) terminateInstanceNetworkPorts(ctx context.Context, id instance.Id) error {
-	novaClient := e.nova()
-	osInterfaces, err := novaClient.ListOSInterfaces(string(id))
-	if err != nil {
-		return errors.Trace(err)
+// instanceNetworkPortIDs identifies only ports owned by this model.
+func (e *Environ) instanceNetworkPortIDs(ctx context.Context, id instance.Id) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-
 	client := e.neutron()
 	filter := neutron.NewFilter()
 	filter.Set("device_id", string(id))
 	ports, err := client.ListPortsV2(filter)
 	if err != nil {
-		return errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
-
-	// Unfortunately we're unable to bulk delete these ports, so we have to go
-	// over them, one by one.
+	prefix := "juju-" + e.modelUUID + "-"
 	changes := set.NewStrings()
 	for _, port := range ports {
-		if !strings.HasPrefix(port.Name, fmt.Sprintf("juju-%s", e.modelUUID)) {
-			continue
+		if strings.HasPrefix(port.Name, prefix) {
+			changes.Add(port.Id)
 		}
-		changes.Add(port.Id)
 	}
 
+	osInterfaces, err := e.nova().ListOSInterfaces(string(id))
+	if err != nil && !isNotFoundError(err) {
+		return nil, errors.Trace(err)
+	}
 	for _, osInterface := range osInterfaces {
 		if osInterface.PortID == "" {
 			continue
 		}
-
-		// Ensure we created the port by first checking the name.
 		port, err := client.PortByIdV2(osInterface.PortID)
-		if err != nil || !strings.HasPrefix(port.Name, "juju-") {
+		if isNotFoundError(err) {
 			continue
 		}
-
-		changes.Add(osInterface.PortID)
-	}
-
-	var errs []error
-	for _, change := range changes.SortedValues() {
-		// Delete a port. If we encounter an error add it to the list of errors
-		// and continue until we've exhausted all the ports to delete.
-		logger.Tracef(ctx, "Deleting port %s", change)
-		if err := client.DeletePortV2(change); err != nil {
-			errs = append(errs, err)
-			continue
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		if strings.HasPrefix(port.Name, prefix) {
+			changes.Add(port.Id)
 		}
 	}
+	return changes.SortedValues(), nil
+}
 
-	if len(errs) > 0 {
-		return errors.Errorf("error terminating network ports: %v", errs)
+func (e *Environ) terminateInstanceNetworkPorts(ctx context.Context, id instance.Id, portIDs ...string) error {
+	if len(portIDs) == 0 {
+		var err error
+		portIDs, err = e.instanceNetworkPortIDs(ctx, id)
+		if err != nil {
+			return err
+		}
 	}
-
-	return nil
+	var firstErr error
+	for _, portID := range portIDs {
+		err := retry.Call(retry.CallArgs{
+			Clock:       e.clock,
+			Delay:       time.Second,
+			MaxDuration: 30 * time.Second,
+			Stop:        ctx.Done(),
+			Func: func() error {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
+				err := e.neutron().DeletePortV2(portID)
+				if isNotFoundError(err) {
+					return nil
+				}
+				return err
+			},
+			IsFatalError: func(err error) bool {
+				// Only a port still in use needs a detach retry.
+				return !gooseerrors.IsConflict(err)
+			},
+		})
+		if err != nil && firstErr == nil {
+			firstErr = errors.Annotatef(err, "deleting network port %q", portID)
+		}
+	}
+	return firstErr
 }
 
 // AgentMetadataLookupParams returns parameters which are used to query agent simple-streams metadata.

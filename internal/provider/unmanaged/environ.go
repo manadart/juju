@@ -335,6 +335,7 @@ var unsupportedConstraints = []string{
 // ConstraintsValidator is defined on the Environs interface.
 func (e *manualEnviron) ConstraintsValidator(ctx context.Context) (constraints.Validator, error) {
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 	validator.RegisterUnsupported(unsupportedConstraints)
 	if isRunningController() {
 		validator.UpdateVocabulary(constraints.Arch, []string{arch.HostArch()})

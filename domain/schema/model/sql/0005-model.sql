@@ -39,6 +39,7 @@ SELECT
     c.container_type,
     c.virt_type,
     c.allocate_public_ip,
+    c.network_offload,
     c.image_id,
     c.ip_family
 FROM model_constraint AS mc

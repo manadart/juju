@@ -1264,6 +1264,7 @@ WHERE m.name = $machineName.name
 			ContainerType:    row.ContainerType,
 			VirtType:         row.VirtType,
 			AllocatePublicIP: row.AllocatePublicIP,
+			NetworkOffload:   row.NetworkOffload,
 			ImageID:          row.ImageID,
 			IPFamily:         row.IPFamily,
 			SpaceName:        row.SpaceName,
@@ -1551,6 +1552,9 @@ func decodeConstraints(cons machineConstraints) constraints.Constraints {
 		}
 		if row.AllocatePublicIP.Valid {
 			res.AllocatePublicIP = &row.AllocatePublicIP.Bool
+		}
+		if row.NetworkOffload.Valid {
+			res.NetworkOffload = &row.NetworkOffload.Bool
 		}
 		if row.ImageID.Valid {
 			res.ImageID = &row.ImageID.String

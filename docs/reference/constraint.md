@@ -81,6 +81,28 @@ and behavior.
 
 Memory (MiB). An optional suffix of M/G/T/P indicates the value is mega-/giga-/tera-/peta- bytes.
 
+(constraint-network-offload)=
+### `network-offload`
+
+Whether all network ports Juju creates for a machine must support hardware
+offloading. **Valid values:** `true`, `false`.
+
+This prototype supports OpenStack Neutron ports with a `direct` vNIC and
+`switchdev` capability. The cloud must provide compatible hardware and port
+binding permissions. Port security remains enabled and Juju security groups
+apply. Networks with port security disabled, OpenStack GBP, and system
+containers are not supported.
+
+An omitted value inherits the applicable model or application default, falling
+back to ordinary ports. An explicit `false` overrides an inherited `true`.
+An explicit `true` requires offloaded ports; provisioning fails if the cloud
+cannot supply them. The setting applies to new machines and does not change
+existing interfaces. Placement on an existing machine requires a matching
+recorded provisioning constraint.
+
+See the [OpenStack OVN hardware-offloading guide](https://docs.openstack.org/charm-guide/latest/admin/networking/ovn/hardware-offload.html)
+for the cloud requirements.
+
 (constraint-root-disk)=
 ### `root-disk`
 

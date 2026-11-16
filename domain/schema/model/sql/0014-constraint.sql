@@ -17,6 +17,7 @@ CREATE TABLE "constraint" (
     -- allocate_public_ip is a bool value. We only use int to get around DQlite
     -- limitations with NULL bools.
     allocate_public_ip INT,
+    network_offload INT CHECK (network_offload IN (0, 1)),
     image_id TEXT,
     ip_family TEXT,
     CONSTRAINT fk_constraint_container_type
@@ -40,6 +41,7 @@ SELECT
     ct.value AS container_type,
     c.virt_type,
     c.allocate_public_ip,
+    c.network_offload,
     c.image_id,
     c.ip_family
 FROM "constraint" AS c

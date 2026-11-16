@@ -137,6 +137,7 @@ type dbConstraint struct {
 	ContainerType    sql.NullString `db:"container_type"`
 	VirtType         sql.NullString `db:"virt_type"`
 	AllocatePublicIP sql.NullBool   `db:"allocate_public_ip"`
+	NetworkOffload   sql.NullBool   `db:"network_offload"`
 	ImageID          sql.NullString `db:"image_id"`
 	IPFamily         sql.NullString `db:"ip_family"`
 }
@@ -155,6 +156,7 @@ type dbConstraintInsert struct {
 	ContainerTypeId  sql.NullInt64  `db:"container_type_id"`
 	VirtType         sql.NullString `db:"virt_type"`
 	AllocatePublicIP sql.NullBool   `db:"allocate_public_ip"`
+	NetworkOffload   sql.NullBool   `db:"network_offload"`
 	ImageID          sql.NullString `db:"image_id"`
 	IPFamily         sql.NullString `db:"ip_family"`
 }
@@ -206,6 +208,10 @@ func constraintsToDBInsert(
 		AllocatePublicIP: sql.NullBool{
 			Bool:  deref(constraints.AllocatePublicIP),
 			Valid: constraints.AllocatePublicIP != nil,
+		},
+		NetworkOffload: sql.NullBool{
+			Bool:  deref(constraints.NetworkOffload),
+			Valid: constraints.NetworkOffload != nil,
 		},
 		ImageID: sql.NullString{
 			String: deref(constraints.ImageID),
@@ -266,6 +272,9 @@ func (c dbConstraint) toValue(
 	// out of the database even when the value is NULL.
 	if c.AllocatePublicIP.Valid {
 		rval.AllocatePublicIP = &c.AllocatePublicIP.Bool
+	}
+	if c.NetworkOffload.Valid {
+		rval.NetworkOffload = &c.NetworkOffload.Bool
 	}
 	if c.ImageID.Valid {
 		rval.ImageID = &c.ImageID.String

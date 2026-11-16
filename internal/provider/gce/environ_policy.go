@@ -78,6 +78,7 @@ var instanceTypeConstraints = []string{
 // validate and merge constraints.
 func (env *environ) ConstraintsValidator(ctx context.Context) (constraints.Validator, error) {
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 
 	validator.RegisterConflicts(
 		[]string{constraints.InstanceType},

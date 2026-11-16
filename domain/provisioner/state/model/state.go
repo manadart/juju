@@ -824,6 +824,9 @@ func decodeConstraintRows(rows []constraintRow) constraints.Value {
 	if first.AllocatePublicIP.Valid {
 		cons.AllocatePublicIP = &first.AllocatePublicIP.Bool
 	}
+	if first.NetworkOffload.Valid {
+		cons.NetworkOffload = &first.NetworkOffload.Bool
+	}
 	if first.ImageID.Valid {
 		cons.ImageID = &first.ImageID.String
 	}

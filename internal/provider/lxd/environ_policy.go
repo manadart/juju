@@ -39,6 +39,7 @@ var unsupportedConstraints = []string{
 // validate and merge constraints.
 func (env *environ) ConstraintsValidator(ctx context.Context) (constraints.Validator, error) {
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 
 	validator.RegisterUnsupported(unsupportedConstraints)
 	validator.RegisterVocabulary(constraints.VirtType, []string{"", instance.VirtTypeContainer, instance.VirtTypeMachine})

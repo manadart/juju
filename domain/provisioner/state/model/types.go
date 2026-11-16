@@ -37,6 +37,7 @@ type constraintRow struct {
 	ContainerType    sql.NullString  `db:"container_type"`
 	VirtType         sql.NullString  `db:"virt_type"`
 	AllocatePublicIP sql.NullBool    `db:"allocate_public_ip"`
+	NetworkOffload   sql.NullBool    `db:"network_offload"`
 	ImageID          sql.NullString  `db:"image_id"`
 	IPFamily         sql.NullString  `db:"ip_family"`
 	SpaceName        sql.NullString  `db:"space_name"`

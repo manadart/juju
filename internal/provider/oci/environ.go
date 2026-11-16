@@ -322,6 +322,7 @@ var unsupportedConstraints = []string{
 // ConstraintsValidator implements environs.Environ.
 func (e *Environ) ConstraintsValidator(ctx context.Context) (constraints.Validator, error) {
 	validator := constraints.NewValidator()
+	validator.RegisterVocabulary(constraints.NetworkOffload, []bool{false})
 	validator.RegisterUnsupported(unsupportedConstraints)
 	validator.RegisterVocabulary(constraints.Arch, []string{corearch.AMD64, corearch.ARM64})
 	logger.Infof(ctx, "Returning constraints validator: %v", validator)

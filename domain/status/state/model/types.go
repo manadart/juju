@@ -475,6 +475,7 @@ type machineStatusDetails struct {
 	ConstraintInstanceType     sql.Null[string]          `db:"constraint_instance_type"`
 	ConstraintContainerType    sql.Null[string]          `db:"constraint_container_type"`
 	ConstraintAllocatePublicIP sql.Null[int]             `db:"constraint_allocate_public_ip"`
+	ConstraintNetworkOffload   sql.Null[int]             `db:"constraint_network_offload"`
 	ConstraintImageID          sql.Null[string]          `db:"constraint_image_id"`
 	AgentVersion               sql.Null[string]          `db:"agent_version"`
 }

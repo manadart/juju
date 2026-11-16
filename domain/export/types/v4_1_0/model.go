@@ -514,6 +514,7 @@ type Constraint struct {
 	ContainerTypeID  *int64  `db:"container_type_id" json:"container_type_id" yaml:"container_type_id"`
 	VirtType         *string `db:"virt_type" json:"virt_type" yaml:"virt_type"`
 	AllocatePublicIp *int64  `db:"allocate_public_ip" json:"allocate_public_ip" yaml:"allocate_public_ip"`
+	NetworkOffload   *int64  `db:"network_offload" json:"network_offload" yaml:"network_offload"`
 	ImageID          *string `db:"image_id" json:"image_id" yaml:"image_id"`
 	IpFamily         *string `db:"ip_family" json:"ip_family" yaml:"ip_family"`
 }

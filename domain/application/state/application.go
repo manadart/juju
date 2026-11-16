@@ -2915,6 +2915,7 @@ ON CONFLICT (uuid) DO UPDATE SET
     container_type_id = excluded.container_type_id,
     virt_type = excluded.virt_type,
     allocate_public_ip = excluded.allocate_public_ip,
+    network_offload = excluded.network_offload,
     image_id = excluded.image_id,
     ip_family = excluded.ip_family
 `
@@ -3266,6 +3267,9 @@ func decodeConstraints(cons applicationConstraints) constraints.Constraints {
 		if row.AllocatePublicIP.Valid {
 			res.AllocatePublicIP = &row.AllocatePublicIP.Bool
 		}
+		if row.NetworkOffload.Valid {
+			res.NetworkOffload = &row.NetworkOffload.Bool
+		}
 		if row.ImageID.Valid {
 			res.ImageID = &row.ImageID.String
 		}
@@ -3326,6 +3330,7 @@ func encodeConstraints(constraintUUID string, cons constraints.Constraints, cont
 		VirtType:         cons.VirtType,
 		ImageID:          cons.ImageID,
 		AllocatePublicIP: cons.AllocatePublicIP,
+		NetworkOffload:   cons.NetworkOffload,
 	}
 	if cons.IPFamily != nil {
 		s := cons.IPFamily.String()

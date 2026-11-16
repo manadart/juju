@@ -6812,6 +6812,9 @@
                         "mem": {
                             "type": "integer"
                         },
+                        "network-offload": {
+                            "type": "boolean"
+                        },
                         "root-disk": {
                             "type": "integer"
                         },

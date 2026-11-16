@@ -63,6 +63,10 @@ func PlaceMachine(
 		return []coremachine.Name{machineName}, nil
 
 	case deployment.PlacementTypeContainer:
+		if args.Constraints.NetworkOffload != nil && *args.Constraints.NetworkOffload {
+			return nil, errors.New("network-offload=true is not supported for containers").
+				Add(machineerrors.MachineConstraintViolation)
+		}
 		// The placement is container scoped (example: lxd or lxd:0). If there
 		// is no directive, we need to create a parent machine (the next in the
 		// sequence) with the associated net node UUID. With a directive we need
@@ -756,8 +760,7 @@ WHERE name = $machineNameWithMachineUUID.name
 // validateMachineSatisfiesConstraints checks that the machine specified satisfies
 // the provided constraints and matches the provided platform.
 //
-// TODO(jack-w-shaw): This only checks that the machine arch matches. In future,
-// we will need to verify the remaining constraints and platform as well.
+// TODO(jack-w-shaw): Verify the remaining constraints and platform as well.
 func validateMachineSatisfiesConstraints(
 	ctx context.Context,
 	tx *sqlair.TX,
@@ -766,10 +769,13 @@ func validateMachineSatisfiesConstraints(
 	cons constraints.Constraints,
 ) error {
 	query := `
-SELECT    &instanceDataResult.arch
+SELECT    v.arch AS &placementCharacteristics.arch,
+          c.network_offload AS &placementCharacteristics.network_offload
 FROM      v_hardware_characteristics AS v
-WHERE     v.machine_uuid = $instanceDataResult.machine_uuid`
-	instanceData := instanceDataResult{
+LEFT JOIN machine_constraint AS mc ON mc.machine_uuid = v.machine_uuid
+LEFT JOIN "constraint" AS c ON c.uuid = mc.constraint_uuid
+WHERE     v.machine_uuid = $placementCharacteristics.machine_uuid`
+	instanceData := placementCharacteristics{
 		MachineUUID: machineUUID,
 	}
 	stmt, err := preparer.Prepare(query, instanceData)
@@ -788,8 +794,24 @@ WHERE     v.machine_uuid = $instanceDataResult.machine_uuid`
 		return errors.Errorf("machine %q has arch %q, but constraints require arch %q", machineUUID, *instanceData.Arch, *cons.Arch).
 			Add(machineerrors.MachineConstraintViolation)
 	}
+	// Machine constraints are the immutable provisioning request. Only a
+	// machine provisioned with offloading can satisfy an explicit requirement;
+	// machines predating the constraint or adopted manually cannot establish it.
+	if cons.NetworkOffload != nil {
+		offloaded := instanceData.NetworkOffload != nil && *instanceData.NetworkOffload
+		if offloaded != *cons.NetworkOffload {
+			return errors.Errorf("network-offload=%t does not match the machine provisioning request", *cons.NetworkOffload).
+				Add(machineerrors.MachineConstraintViolation)
+		}
+	}
 
 	return nil
+}
+
+type placementCharacteristics struct {
+	MachineUUID    string  `db:"machine_uuid"`
+	Arch           *string `db:"arch"`
+	NetworkOffload *bool   `db:"network_offload"`
 }
 
 func encodeArchitecture(a domainarchitecture.Architecture) (int, error) {
@@ -839,6 +861,7 @@ func encodeConstraints(constraintUUID string, cons constraints.Constraints, cont
 		ImageID:          cons.ImageID,
 		IPFamily:         cons.IPFamily,
 		AllocatePublicIP: cons.AllocatePublicIP,
+		NetworkOffload:   cons.NetworkOffload,
 	}
 	if cons.Container != nil {
 		res.ContainerTypeID = &containerTypeID
