@@ -99,7 +99,7 @@ ON CONFLICT (store_id, model_id) DO UPDATE SET assertions = excluded.assertions
 	})
 }
 
-// GetAuthorisationAssertions retrieves the serialized assertions for a model.
+// GetAuthorisationAssertions retrieves the serialised assertions for a model.
 func (s *AuthorisationState) GetAuthorisationAssertions(ctx context.Context, store, model string) (string, error) {
 	db, err := s.factory(ctx)
 	if err != nil {

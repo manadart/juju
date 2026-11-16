@@ -15,7 +15,7 @@ import (
 	"github.com/juju/juju/internal/errors"
 )
 
-// GetAuthorisationTuples materialises every matching row inside the transaction.
+// GetAuthorisationTuples materialises matching rows inside the transaction.
 func (s *AuthorisationState) GetAuthorisationTuples(ctx context.Context, store string, filter internal.TupleFilter) ([]internal.Tuple, error) {
 	db, err := s.factory(ctx)
 	if err != nil {
