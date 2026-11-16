@@ -18,9 +18,9 @@ import (
 	"github.com/juju/juju/core/logger"
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/objectstore"
+	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/core/providertracker"
 	"github.com/juju/juju/core/storage"
-	accessservice "github.com/juju/juju/domain/access/service"
 	crossmodelrelationservice "github.com/juju/juju/domain/crossmodelrelation/service"
 	domainservices "github.com/juju/juju/domain/services"
 	"github.com/juju/juju/internal/services"
@@ -31,6 +31,7 @@ import (
 // ManifoldConfig holds the information necessary to run a domain services
 // worker in a dependency.Engine.
 type ManifoldConfig struct {
+	AuthorizerName              string
 	ChangeStreamName            string
 	DBAccessorName              string
 	ProviderFactoryName         string
@@ -73,7 +74,7 @@ type ControllerDomainServicesFn func(
 	clock.Clock,
 	logger.Logger,
 	logger.LoggerContextGetter,
-	accessservice.PermissionChecker,
+	permission.Authorizer,
 ) services.ControllerDomainServices
 
 // ModelDomainServicesFn is a function that returns a model domain services.
@@ -96,6 +97,9 @@ type ModelDomainServicesFn func(
 
 // Validate validates the manifold configuration.
 func (config ManifoldConfig) Validate() error {
+	if config.AuthorizerName == "" {
+		return errors.NotValidf("empty AuthorizerName")
+	}
 	if config.ChangeStreamName == "" {
 		return errors.NotValidf("empty ChangeStreamName")
 	}
@@ -149,6 +153,7 @@ func (config ManifoldConfig) Validate() error {
 func Manifold(config ManifoldConfig) dependency.Manifold {
 	return dependency.Manifold{
 		Inputs: []string{
+			config.AuthorizerName,
 			config.ChangeStreamName,
 			config.DBAccessorName,
 			config.ProviderFactoryName,
@@ -166,6 +171,11 @@ func Manifold(config ManifoldConfig) dependency.Manifold {
 // start is a method on ManifoldConfig because it's more readable than a closure.
 func (config ManifoldConfig) start(ctx context.Context, getter dependency.Getter) (worker.Worker, error) {
 	if err := config.Validate(); err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	var authorizer permission.Authorizer
+	if err := getter.Get(config.AuthorizerName, &authorizer); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -220,6 +230,7 @@ func (config ManifoldConfig) start(ctx context.Context, getter dependency.Getter
 	}
 
 	return config.NewWorker(Config{
+		Authorizer:                  authorizer,
 		DBGetter:                    dbGetter,
 		ClusterDescriber:            clusterDescriber,
 		ProviderFactory:             providerFactory,
@@ -267,7 +278,7 @@ func NewControllerDomainServices(
 	clock clock.Clock,
 	logger logger.Logger,
 	loggerContextGetter logger.LoggerContextGetter,
-	permissionChecker accessservice.PermissionChecker,
+	authorizer permission.Authorizer,
 ) services.ControllerDomainServices {
 	return domainservices.NewControllerServices(
 		changestream.NewWatchableDBFactoryForNamespace(dbGetter.GetWatchableDB, coredatabase.ControllerNS),
@@ -275,7 +286,7 @@ func NewControllerDomainServices(
 		clock,
 		logger,
 		loggerContextGetter,
-		permissionChecker,
+		authorizer,
 	)
 }
 

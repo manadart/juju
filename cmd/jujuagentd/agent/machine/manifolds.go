@@ -59,6 +59,7 @@ import (
 	"github.com/juju/juju/internal/worker/apiserver"
 	"github.com/juju/juju/internal/worker/apiservercertwatcher"
 	"github.com/juju/juju/internal/worker/auditconfigupdater"
+	workerauthorizer "github.com/juju/juju/internal/worker/authorizer"
 	"github.com/juju/juju/internal/worker/backup"
 	"github.com/juju/juju/internal/worker/bootstrap"
 	"github.com/juju/juju/internal/worker/caasupgrader"
@@ -835,7 +836,16 @@ func commonManifolds(config ManifoldsConfig) dependency.Manifolds {
 			GetControllerConfig:          modelworkermanager.GetControllerConfig,
 		})),
 
+		authorizerName: ifDatabaseUpgradeComplete(workerauthorizer.Manifold(workerauthorizer.ManifoldConfig{
+			DBAccessorName:    dbAccessorName,
+			Clock:             config.Clock,
+			NewWorker:         workerauthorizer.NewWorker,
+			NewBackingService: workerauthorizer.NewBackingService,
+			NewAuthorizer:     workerauthorizer.NewAuthorizer,
+		})),
+
 		domainServicesName: workerdomainservices.Manifold(workerdomainservices.ManifoldConfig{
+			AuthorizerName:              authorizerName,
 			DBAccessorName:              dbAccessorName,
 			ChangeStreamName:            changeStreamName,
 			ProviderFactoryName:         providerTrackerName,
@@ -1758,6 +1768,7 @@ const (
 	jwtParserName                      = "jwt-parser"
 	leaseExpiryName                    = "lease-expiry"
 	leaseManagerName                   = "lease-manager"
+	authorizerName                     = "authorizer"
 	loggingConfigUpdaterName           = "logging-config-updater"
 	logRouterName                      = "log-router"
 	logSinkName                        = "log-sink"

@@ -3,8 +3,8 @@
 
 // Package openfga configures the embedded OpenFGA v1.22.1 engine. The access
 // domain supplies its datastore through an authorisation backing service and
-// SQLair state. The engine owner closes its background resources; neither the
-// engine nor its backing service owns database connections.
+// SQLair state. A dedicated authorizer worker owns startup, cancellation and
+// closure. Neither the engine nor its backing service owns database connections.
 //
 // The controller schema owns the persisted store, immutable model, tuples,
 // assertions and changelog. Domain mutations write tuples inside their own

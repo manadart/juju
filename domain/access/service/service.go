@@ -223,7 +223,7 @@ type Service struct {
 
 // NewService returns a new Service for interacting with the underlying access
 // state.
-func NewService(st State, clock clock.Clock, checker PermissionChecker) *Service {
+func NewService(st State, clock clock.Clock, checker permission.Authorizer) *Service {
 	return &Service{
 		UserService:       NewUserService(st, clock),
 		PermissionService: NewPermissionService(st, checker),

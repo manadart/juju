@@ -18,19 +18,20 @@ import (
 	"github.com/juju/juju/core/logger"
 	coremodel "github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/objectstore"
+	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/core/providertracker"
 	"github.com/juju/juju/core/storage"
-	accessservice "github.com/juju/juju/domain/access/service"
-	accessstate "github.com/juju/juju/domain/access/state"
 	domainservices "github.com/juju/juju/domain/services"
 	internalerrors "github.com/juju/juju/internal/errors"
-	"github.com/juju/juju/internal/openfga"
 	"github.com/juju/juju/internal/services"
 	internalstorage "github.com/juju/juju/internal/storage"
 )
 
 // Config is the configuration required for domain services worker.
 type Config struct {
+	// Authorizer is the shared, independently managed permission engine.
+	Authorizer permission.Authorizer
+
 	// DBGetter supplies WatchableDB implementations by namespace.
 	DBGetter changestream.WatchableDBGetter
 
@@ -79,6 +80,9 @@ type Config struct {
 
 // Validate validates the domain services configuration.
 func (config Config) Validate() error {
+	if config.Authorizer == nil {
+		return errors.NotValidf("nil Authorizer")
+	}
 	if config.DBGetter == nil {
 		return errors.NotValidf("nil DBGetter")
 	}
@@ -134,12 +138,6 @@ func NewWorker(config Config) (worker.Worker, error) {
 	}
 
 	w := &domainServicesWorker{}
-	factory := coredatabase.NewTxnRunnerFactoryForNamespace(config.DBGetter.GetWatchableDB, coredatabase.ControllerNS)
-	authorizer, err := openfga.NewAuthorizer(w.tomb.Context(context.Background()),
-		accessservice.NewAuthorisationService(accessstate.NewAuthorisationState(factory), config.Clock))
-	if err != nil {
-		return nil, internalerrors.Errorf("starting authorisation engine: %w", err)
-	}
 
 	controllerObjectStoreGetter := controllerObjectStoreGetter{
 		objectStoreGetter: config.ObjectStoreGetter,
@@ -150,7 +148,7 @@ func NewWorker(config Config) (worker.Worker, error) {
 		config.Clock,
 		config.Logger,
 		config.LoggerContextGetter,
-		authorizer,
+		config.Authorizer,
 	)
 	w.ctrlFactory = ctrlFactory
 	w.servicesGetter = config.NewDomainServicesGetter(
@@ -169,7 +167,6 @@ func NewWorker(config Config) (worker.Worker, error) {
 		config.LoggerContextGetter,
 	)
 	w.tomb.Go(func() error {
-		defer authorizer.Close()
 		<-w.tomb.Dying()
 		return w.tomb.Err()
 	})

@@ -18,20 +18,15 @@ import (
 	"github.com/juju/juju/internal/uuid"
 )
 
-// PermissionChecker evaluates relationships using the persisted model.
-type PermissionChecker interface {
-	Check(context.Context, string, corepermission.ID, corepermission.Access) (bool, error)
-}
-
 // PermissionService provides the API for working with permissions.
 type PermissionService struct {
 	st      PermissionState
-	checker PermissionChecker
+	checker corepermission.Authorizer
 }
 
 // NewPermissionService returns a new PermissionService for interacting with the underlying
 // permission state.
-func NewPermissionService(st PermissionState, checker PermissionChecker) *PermissionService {
+func NewPermissionService(st PermissionState, checker corepermission.Authorizer) *PermissionService {
 	return &PermissionService{
 		st:      st,
 		checker: checker,

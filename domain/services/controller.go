@@ -12,6 +12,7 @@ import (
 	"github.com/juju/juju/core/logger"
 	"github.com/juju/juju/core/model"
 	"github.com/juju/juju/core/objectstore"
+	"github.com/juju/juju/core/permission"
 	"github.com/juju/juju/domain"
 	accessservice "github.com/juju/juju/domain/access/service"
 	accessstate "github.com/juju/juju/domain/access/state"
@@ -62,7 +63,7 @@ import (
 type ControllerServices struct {
 	serviceFactoryBase
 
-	permissionChecker     accessservice.PermissionChecker
+	authorizer            permission.Authorizer
 	controllerObjectStore objectstore.NamespacedObjectStoreGetter
 	clock                 clock.Clock
 	loggerContextGetter   logger.LoggerContextGetter
@@ -76,14 +77,14 @@ func NewControllerServices(
 	clock clock.Clock,
 	logger logger.Logger,
 	loggerContextGetter logger.LoggerContextGetter,
-	permissionChecker accessservice.PermissionChecker,
+	authorizer permission.Authorizer,
 ) *ControllerServices {
 	return &ControllerServices{
 		serviceFactoryBase: serviceFactoryBase{
 			controllerDB: controllerDB,
 			logger:       logger,
 		},
-		permissionChecker:     permissionChecker,
+		authorizer:            authorizer,
 		controllerObjectStore: controllerObjectStoreGetter,
 		clock:                 clock,
 		loggerContextGetter:   loggerContextGetter,
@@ -207,7 +208,7 @@ func (s *ControllerServices) Flag() *flagservice.Service {
 // Access returns the access service, this includes users and permissions.
 func (s *ControllerServices) Access() *accessservice.Service {
 	return accessservice.NewService(accessstate.NewState(changestream.NewTxnRunnerFactory(s.controllerDB),
-		s.clock, s.logger.Child("access")), s.clock, s.permissionChecker)
+		s.clock, s.logger.Child("access")), s.clock, s.authorizer)
 }
 
 func (s *ControllerServices) SecretBackend() *secretbackendservice.WatchableService {
