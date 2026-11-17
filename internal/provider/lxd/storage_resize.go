@@ -21,12 +21,12 @@ import (
 	"github.com/juju/juju/internal/storage"
 )
 
-var _ storage.FilesystemResizer = (*lxdFilesystemSource)(nil)
+var _ storage.Resizer = (*lxdFilesystemSource)(nil)
 
-// CheckFilesystemResize checks online growth of a ZFS filesystem quota.
+// CheckResize checks online growth of a ZFS filesystem quota.
 // LXD owns the filesystem, so no machine attachment work is required.
-func (s *lxdFilesystemSource) CheckFilesystemResize(
-	ctx context.Context, request storage.FilesystemResizeRequest,
+func (s *lxdFilesystemSource) CheckResize(
+	ctx context.Context, request storage.ResizeRequest,
 ) (storage.ResizeRequirements, error) {
 	current, err := s.inspectFilesystemResize(ctx, request)
 	if err != nil {
@@ -38,11 +38,11 @@ func (s *lxdFilesystemSource) CheckFilesystemResize(
 	}, nil
 }
 
-// EnsureFilesystemSize grows the existing dataset's quota in place. Reading
+// EnsureSize grows the existing dataset's quota in place. Reading
 // the current quota makes retries safe after a lost response or worker restart;
 // an already satisfied target never lowers a larger quota.
-func (s *lxdFilesystemSource) EnsureFilesystemSize(
-	ctx context.Context, request storage.FilesystemResizeRequest,
+func (s *lxdFilesystemSource) EnsureSize(
+	ctx context.Context, request storage.ResizeRequest,
 ) (storage.ResizeProgress, error) {
 	current, err := s.inspectFilesystemResize(ctx, request)
 	if err != nil {
@@ -99,7 +99,7 @@ type filesystemResizeInfo struct {
 // inspectFilesystemResize is read-only and is repeated immediately before
 // mutation. A quota is provider capacity, not a reservation of free pool space.
 func (s *lxdFilesystemSource) inspectFilesystemResize(
-	ctx context.Context, request storage.FilesystemResizeRequest,
+	ctx context.Context, request storage.ResizeRequest,
 ) (filesystemResizeInfo, error) {
 	var result filesystemResizeInfo
 	if err := ctx.Err(); err != nil {
@@ -108,7 +108,7 @@ func (s *lxdFilesystemSource) inspectFilesystemResize(
 	if request.OperationID == "" || request.SizeMiB == 0 || request.SizeMiB > math.MaxInt64/(1024*1024) {
 		return result, errors.New("invalid LXD filesystem resize request").Add(coreerrors.NotValid)
 	}
-	poolName, volumeName, err := parseFilesystemId(request.FilesystemID)
+	poolName, volumeName, err := parseFilesystemId(request.ProviderID)
 	if err != nil || poolName == "" || volumeName == "" || strings.ContainsAny(poolName+volumeName, "/\\") {
 		return result, errors.New("invalid LXD filesystem provider ID").Add(coreerrors.NotValid)
 	}

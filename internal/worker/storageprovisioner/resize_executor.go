@@ -77,49 +77,39 @@ func (e *providerResizeExecutor) Execute(ctx context.Context, work params.Storag
 	if t.AttachmentID != "" {
 		attachments = []storage.ResizeAttachment{{AttachmentID: t.AttachmentID, InstanceID: t.InstanceID}}
 	}
-	var requirements storage.ResizeRequirements
-	var progress storage.ResizeProgress
 	// Resolving resize sources intentionally does not consult Dynamic(), which
 	// describes creation after machine provisioning, not resize capability.
+	var source any
 	switch t.Kind {
 	case "volume":
-		source, sourceErr := provider.VolumeSource(config)
-		if sourceErr != nil {
-			return report, sourceErr
-		}
-		resizer, ok := source.(storage.VolumeResizer)
-		if !ok {
-			return report, errors.New("volume source does not implement resizing").Add(coreerrors.NotSupported)
-		}
-		request := storage.VolumeResizeRequest{OperationID: work.UUID, VolumeID: t.ProviderID, SizeMiB: t.SizeMiB, Attachments: attachments}
-		if work.Phase == "check" {
-			requirements, err = resizer.CheckVolumeResize(ctx, request)
-		} else {
-			if err := revalidate(ctx); err != nil {
-				return report, err
-			}
-			progress, err = resizer.EnsureVolumeSize(ctx, request)
-		}
+		source, err = provider.VolumeSource(config)
 	case "filesystem":
-		source, sourceErr := provider.FilesystemSource(config)
-		if sourceErr != nil {
-			return report, sourceErr
-		}
-		resizer, ok := source.(storage.FilesystemResizer)
-		if !ok {
-			return report, errors.New("filesystem source does not implement resizing").Add(coreerrors.NotSupported)
-		}
-		request := storage.FilesystemResizeRequest{OperationID: work.UUID, FilesystemID: t.ProviderID, SizeMiB: t.SizeMiB, Attachments: attachments}
-		if work.Phase == "check" {
-			requirements, err = resizer.CheckFilesystemResize(ctx, request)
-		} else {
-			if err := revalidate(ctx); err != nil {
-				return report, err
-			}
-			progress, err = resizer.EnsureFilesystemSize(ctx, request)
-		}
+		source, err = provider.FilesystemSource(config)
 	default:
 		return report, errors.New("unknown resize resource kind").Add(coreerrors.NotValid)
+	}
+	if err != nil {
+		return report, err
+	}
+	resizer, ok := source.(storage.Resizer)
+	if !ok {
+		return report, errors.Errorf("%s source does not implement resizing", t.Kind).Add(coreerrors.NotSupported)
+	}
+	request := storage.ResizeRequest{
+		OperationID: work.UUID,
+		ProviderID:  t.ProviderID,
+		SizeMiB:     t.SizeMiB,
+		Attachments: attachments,
+	}
+	var requirements storage.ResizeRequirements
+	var progress storage.ResizeProgress
+	if work.Phase == "check" {
+		requirements, err = resizer.CheckResize(ctx, request)
+	} else {
+		if err := revalidate(ctx); err != nil {
+			return report, err
+		}
+		progress, err = resizer.EnsureSize(ctx, request)
 	}
 	if work.Phase == "check" {
 		report.Status = "checked"

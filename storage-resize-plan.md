@@ -211,11 +211,13 @@ survives failures. Removal retains the request result as before.
 
 Services coordinate the workflow through transactional state operations. Model
 workers use domain services directly; machine workers use their authorised API.
-The existing request/result commands remain usable. The model provisioner resolves the correct pool/source and invoke optional `VolumeResizer` or
-`FilesystemResizer` contracts. Resize source resolution must not use the
-creation-specific `Dynamic()` gate. Each reconciliation is bounded, with
-backoff for pending/blocked results rather than waiting for remote completion
-inside the provisioner loop.
+The existing request/result commands remain usable. The model provisioner
+resolves the correct pool/source and invokes its optional `Resizer` contract.
+Volumes and provider-native filesystems share `ResizeRequest`; its `ProviderID`
+identifies the resource within the selected source. Resize source resolution
+must not use the creation-specific `Dynamic()` gate. Each reconciliation is
+bounded, with backoff for pending/blocked results rather than waiting for remote
+completion inside the provisioner loop.
 
 Machine execution is split into local backend growth and attachment expansion.
 Loop storage uses both stages on its machine; cloud storage uses a model backend
@@ -225,9 +227,9 @@ reject unsupported disruption, partition or shared-storage requirements before
 backend mutation. Do not infer workload readiness or invoke charm actions.
 
 The initial infrastructure keeps unsupported node transports/layouts explicit.
-Provider-native filesystems can use the filesystem contract without pretending
-they are block volumes. Unattached storage needing machine work remains pending;
-backend-only storage can complete after the required provider observations.
+Provider-native filesystems use the shared contract through their filesystem
+source. Unattached storage needing machine work remains pending; backend-only
+storage can complete after the required provider observations.
 Further provider implementations, offline coordination, multi-attachment
 execution and migration of active resize operations remain follow-up work.
 
@@ -244,7 +246,7 @@ The first cloud attachment executor handles whole SCSI devices with a stable
 Other transports, partitioned layouts, shared attachments and disruption
 requirements remain explicit failures before backend growth. Provider-native
 filesystems use a backend-only stage. Providers other than LXD still fail their
-capability check because they do not implement the optional resize interfaces.
+capability check because their sources do not implement the optional `Resizer`.
 
 The agent builds and existing race suites pass. Scratch service
 checks exercise approval, partial completion, separate volume/device observations
@@ -254,7 +256,7 @@ live SCSI, ext4 or cloud resize behaviour. The later LXD validation is below.
 
 ## LXD ZFS provider increment
 
-The LXD filesystem source implements `FilesystemResizer` for custom filesystem
+The LXD filesystem source implements `Resizer` for custom filesystem
 volumes backed by ZFS datasets on standalone LXD servers. It grows the existing
 volume's `size` quota through the LXD API; no copy, replacement, detach, unmount,
 or machine-side filesystem growth is involved. This follows LXD's documented
@@ -796,35 +798,39 @@ be selected within this preparation model.
 The existing
 [`Provider`, `VolumeSource` and `FilesystemSource` interfaces](internal/storage/interface.go#L54)
 provide a suitable extension point, including for Kubernetes. They currently
-have no resize methods. Optional interfaces would allow providers to add
+have no resize methods. An optional `Resizer` interface allows sources to add
 support without implying that every storage source can resize:
 
 ```go
-type VolumeResizer interface {
-    CheckVolumeResize(context.Context, VolumeResizeRequest) (ResizeRequirements, error)
-    EnsureVolumeSize(context.Context, VolumeResizeRequest) (ResizeProgress, error)
+type Resizer interface {
+    CheckResize(context.Context, ResizeRequest) (ResizeRequirements, error)
+    EnsureSize(context.Context, ResizeRequest) (ResizeProgress, error)
 }
 
-type FilesystemResizer interface {
-    CheckFilesystemResize(context.Context, FilesystemResizeRequest) (ResizeRequirements, error)
-    EnsureFilesystemSize(context.Context, FilesystemResizeRequest) (ResizeProgress, error)
+type ResizeRequest struct {
+    OperationID string
+    ProviderID  string
+    SizeMiB     uint64
+    Attachments []ResizeAttachment
 }
 ```
 
-These are schematic contracts, not agreed Go declarations. Requests need stable
-resource identity, target capacity and relevant attachment references. Types,
-batching, error representation and the division of node-side work remain open.
+These declarations describe the prototype contract. The selected volume or
+filesystem source determines the resource kind; `ProviderID` identifies the
+resource within that source. Requests carry stable operation identity, target
+capacity and relevant attachment references. Checks and ensure calls share the
+same contract for both kinds of source.
 The existing `Provider.Dynamic()` describes creation after machine provisioning;
 it must not be treated as a resize capability.
 
-### Meaning of the check methods
+### Meaning of the check method
 
-`CheckVolumeResize` and `CheckFilesystemResize` assess whether the particular
-resource can reach the requested size, and identify any requirements. Support
-can depend on the pool, backend, filesystem, attachment state and target size,
-even when the source implements the optional interface.
+`CheckResize` assesses whether the particular resource can reach the requested
+size, and identifies any requirements. Support can depend on the pool, backend,
+filesystem, attachment state and target size, even when the source implements
+the optional interface.
 
-The methods run in the worker phase of the asynchronous operation. A check can
+The method runs in the worker phase of the asynchronous operation. A check can
 be a normal call within its worker; the API does not wait for its execution.
 
 | Outcome | Meaning |
@@ -845,7 +851,7 @@ follow-up work needed to complete it. An already-satisfied volume check does
 not establish that its filesystem or every attached machine has observed the
 larger size. The coordinator must assess the complete storage instance.
 
-`Ensure*Size` must be idempotent, honour cancellation and handle conditions that
+`EnsureSize` must be idempotent, honour cancellation and handle conditions that
 changed after the check. It must distinguish a request accepted by the provider
 from completed growth, returning observed progress for reconciliation. Retries
 must preserve data and identity and must not repeat destructive creation work.

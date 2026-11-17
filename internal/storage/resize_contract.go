@@ -5,24 +5,18 @@ package storage
 
 import "context"
 
-// VolumeResizer is an optional capability of a VolumeSource. Checks must have
-// no side effects. Unsupported requests return an error matching
-// core/errors.NotSupported; inspection failures must remain errors.
-// EnsureVolumeSize must preserve identity and data, honour cancellation, and
+// Resizer is an optional capability of a VolumeSource or FilesystemSource.
+// The selected source determines the kind of resource being resized.
+// Checks must have no side effects. Unsupported requests return an error
+// matching core/errors.NotSupported; inspection failures must remain errors.
+// EnsureSize must preserve identity and data, honour cancellation, and
 // safely resume using OperationID after an ambiguous response or worker restart.
-// Ensure must revalidate changed conditions and refuse new, unmet
+// EnsureSize must revalidate changed conditions and refuse new, unmet
 // prerequisites before mutation. Acceptance is progress, not completion.
 // Each call performs a bounded step.
-type VolumeResizer interface {
-	CheckVolumeResize(context.Context, VolumeResizeRequest) (ResizeRequirements, error)
-	EnsureVolumeSize(context.Context, VolumeResizeRequest) (ResizeProgress, error)
-}
-
-// FilesystemResizer is the equivalent capability for a provider-native
-// filesystem. The same check, retry and completion contracts apply.
-type FilesystemResizer interface {
-	CheckFilesystemResize(context.Context, FilesystemResizeRequest) (ResizeRequirements, error)
-	EnsureFilesystemSize(context.Context, FilesystemResizeRequest) (ResizeProgress, error)
+type Resizer interface {
+	CheckResize(context.Context, ResizeRequest) (ResizeRequirements, error)
+	EnsureSize(context.Context, ResizeRequest) (ResizeProgress, error)
 }
 
 // ResizeAttachment identifies the attachment relevant to a provider operation.
@@ -31,22 +25,15 @@ type ResizeAttachment struct {
 	InstanceID   string
 }
 
-// VolumeResizeRequest describes growth of an existing provider volume.
-// OperationID and target remain stable across retries. The provider must
-// discover existing remote progress when a previous response was lost.
-type VolumeResizeRequest struct {
+// ResizeRequest describes growth of an existing provider resource.
+// ProviderID identifies the resource within the selected volume or filesystem
+// source. OperationID and target remain stable across retries. The provider
+// must discover existing remote progress when a previous response was lost.
+type ResizeRequest struct {
 	OperationID string
-	VolumeID    string
+	ProviderID  string
 	SizeMiB     uint64
 	Attachments []ResizeAttachment
-}
-
-// FilesystemResizeRequest describes growth of a provider-native filesystem.
-type FilesystemResizeRequest struct {
-	OperationID  string
-	FilesystemID string
-	SizeMiB      uint64
-	Attachments  []ResizeAttachment
 }
 
 // ResizeRequirement identifies a prerequisite or required follow-up step.
