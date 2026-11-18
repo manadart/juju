@@ -545,7 +545,7 @@ go-install: $(INSTALL_TARGETS)
 ## go-install: Install Juju binaries
 
 .PHONY: rebuild-schema
-rebuild-schema:
+rebuild-schema: rebuild-authorisation
 ## rebuild-schema: Rebuild the schema for clients with the latest facades
 	@echo "Generating facade schema..."
 # GOOS and GOARCH environment variables are cleared in case the user is trying
@@ -560,20 +560,26 @@ else
 		./apiserver/facades/agent-schema.json
 endif
 
+.PHONY: rebuild-authorisation
+rebuild-authorisation:
+## rebuild-authorisation: Generate the controller permission model from OpenFGA DSL
+	@echo "Generating authorisation model..."
+	@env GOOS= GOARCH= go run $(PROJECT)/generate/authorisation
+
 .PHONY: rebuild-triggers
-rebuild-triggers:
+rebuild-triggers: rebuild-authorisation
 ## rebuild-triggers: Rebuild the SQL trigger schema
 	@echo "Generating trigger schema..."
 	@env GOOS= GOARCH= CGO_ENABLED=1 go generate -tags="libsqlite3" $(COMPILE_FLAGS) -x ./domain/schema
 
 .PHONY: rebuild-ddl
-rebuild-ddl:
+rebuild-ddl: rebuild-authorisation
 ## rebuild-ddl: Rebuild the SQL DDL schema
 	@echo "Generating DDL schema..."
 	@env GOOS= GOARCH= CGO_ENABLED=1 go run -tags="libsqlite3" $(PROJECT)/generate/ddlgen
 
 .PHONY: rebuild-export
-rebuild-export:
+rebuild-export: rebuild-authorisation
 ## rebuild-export: Rebuild the exported schema
 	@echo "Generating exported schema..."
 	@env GOOS= GOARCH= CGO_ENABLED=1 go run -tags="libsqlite3" $(PROJECT)/generate/export

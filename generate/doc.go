@@ -6,6 +6,7 @@
 // These tools are build-time programs invoked via go generate directives or
 // Make targets that transform inputs into generated artifacts as below:
 //
+//   - authorisation transforms OpenFGA DSL into a controller model seed
 //   - certgen transforms PKI profiles into test certificates
 //   - cloudcred transforms registered provider schemas into credential metadata
 //   - ddlgen transforms database schemas into DDL snapshots for verification

@@ -6,6 +6,9 @@
 // SQLair state. A dedicated authorizer worker owns startup, cancellation and
 // closure. Database connections remain owned by the accessor.
 //
+// The versioned DSL under domain/access/authorisation generates the persisted
+// model seed. The engine reads that model from the controller database.
+//
 // The controller schema owns the persisted store, immutable model, tuples,
 // assertions and changelog. Domain mutations write tuples inside their own
 // SQLair transactions; triggers record every actual tuple change atomically.

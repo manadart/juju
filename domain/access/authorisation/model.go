@@ -1,8 +1,6 @@
 // Copyright 2026 Canonical Ltd.
 // Licensed under the AGPLv3, see LICENCE file for details.
 
-// Package authorisation identifies the persisted Juju permission model.
-// Its versioned OpenFGA DSL is the source for the generated controller seed.
 package authorisation
 
 //go:generate go run ../../../generate/authorisation -root ../../..
