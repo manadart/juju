@@ -13,13 +13,7 @@ import (
 	"github.com/openfga/openfga/pkg/typesystem"
 
 	"github.com/juju/juju/core/permission"
-)
-
-// StoreID and ModelID identify Juju's persisted authorisation store and model.
-// Changing the model requires a new model ID and a schema migration.
-const (
-	StoreID = "01J00000000000000000000000"
-	ModelID = "01J00000000000000000000001"
+	"github.com/juju/juju/domain/access/authorisation"
 )
 
 // Authorizer owns the embedded server. Its owner must cancel its context and
@@ -30,7 +24,7 @@ type Authorizer struct {
 
 // NewAuthorizer validates the persisted model before starting the server.
 func NewAuthorizer(ctx context.Context, ds storage.OpenFGADatastore) (*Authorizer, error) {
-	model, err := ds.ReadAuthorizationModel(ctx, StoreID, ModelID)
+	model, err := ds.ReadAuthorizationModel(ctx, authorisation.StoreID, authorisation.ModelID)
 	if err != nil {
 		return nil, err
 	}
@@ -62,8 +56,8 @@ func (a *Authorizer) Close() { a.server.Close() }
 // Check evaluates the persisted Juju authorisation model with fresh tuples.
 func (a *Authorizer) Check(ctx context.Context, subject string, target permission.ID, access permission.Access) (bool, error) {
 	result, err := a.server.Check(ctx, &openfgav1.CheckRequest{
-		StoreId:              StoreID,
-		AuthorizationModelId: ModelID,
+		StoreId:              authorisation.StoreID,
+		AuthorizationModelId: authorisation.ModelID,
 		TupleKey: &openfgav1.CheckRequestTupleKey{
 			User:     subject,
 			Object:   target.ObjectType.String() + ":" + target.Key,

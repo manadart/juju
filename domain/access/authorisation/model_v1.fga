@@ -1,0 +1,46 @@
+# Copyright 2026 Canonical Ltd.
+# Licensed under the AGPLv3, see LICENCE file for details.
+#
+# Version 1 preserves the prototype's direct grants and access hierarchies.
+# Local users and external users are separate types so public grants apply
+# only to external users. Disabled and removed users are rejected by access
+# services before evaluation. Controller-wide overrides remain with callers.
+
+model
+  schema 1.1
+
+type user
+
+type external
+
+type controller
+  relations
+    define login: [user, external, external:*]
+    define superuser: [user, external, external:*]
+    define can_login: login or superuser
+    define can_superuser: superuser
+
+type cloud
+  relations
+    define add_model: [user, external, external:*]
+    define admin: [user, external, external:*]
+    define can_add_model: add_model or admin
+    define can_admin: admin
+
+type model
+  relations
+    define read: [user, external, external:*]
+    define write: [user, external, external:*]
+    define admin: [user, external, external:*]
+    define can_read: read or write or admin
+    define can_write: write or admin
+    define can_admin: admin
+
+type offer
+  relations
+    define read: [user, external, external:*]
+    define consume: [user, external, external:*]
+    define admin: [user, external, external:*]
+    define can_read: read or consume or admin
+    define can_consume: consume or admin
+    define can_admin: admin

@@ -94,6 +94,7 @@ require (
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/openfga/api/proto v0.0.0-20260619182052-dd87be81488e
+	github.com/openfga/language/pkg/go v0.3.2
 	github.com/openfga/openfga v1.22.1
 	github.com/oracle/oci-go-sdk/v65 v65.121.0
 	github.com/pkg/sftp v1.13.11
@@ -273,7 +274,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/natefinch/wrap v0.2.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/openfga/language/pkg/go v0.3.2 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.2 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
