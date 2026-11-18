@@ -140,5 +140,6 @@ func (env *environ) AdoptResources(ctx context.Context, controllerUUID string, f
 	if len(failed) != 0 {
 		return errors.Errorf("failed to update controller for some instances: %v", failed)
 	}
-	return nil
+	return errors.Annotate(env.HandleCredentialError(ctx,
+		env.adoptNetworkACLs(ctx, controllerUUID)), "adopting model firewall ACLs")
 }

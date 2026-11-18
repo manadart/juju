@@ -223,8 +223,9 @@ func ensureOVNNetworkForward(ctx context.Context, srv Server, networkName, insta
 	return errors.Annotatef(err, "creating forward for OVN interface %q on network %q", iface, networkName)
 }
 
-// removeInstances cleans up owned forwards before deleting provider instances.
-// A cleanup failure leaves the instances available for a subsequent retry.
+// removeInstances removes forwards before instances, then their unused ACLs.
+// ACLs remain attached until deletion so a stopped or partially removed
+// instance never loses its firewall while waiting for a retry.
 func removeInstances(ctx context.Context, srv Server, names []string) error {
 	if err := removeInstanceNetworkForwards(ctx, srv, names); err != nil {
 		return errors.Annotate(err, "removing instance network forwards")
@@ -232,7 +233,10 @@ func removeInstances(ctx context.Context, srv Server, names []string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return errors.Trace(srv.RemoveContainers(names))
+	if err := srv.RemoveContainers(names); err != nil {
+		return errors.Trace(err)
+	}
+	return errors.Annotate(removeInstanceNetworkACLs(ctx, srv, names), "removing instance firewall ACLs")
 }
 
 func removeInstanceNetworkForwards(ctx context.Context, srv Server, names []string) error {

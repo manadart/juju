@@ -133,12 +133,14 @@ func (env *environ) newContainer(
 
 	cSpec, err := env.getContainerSpec(ctx, image, target.ServerVersion(), args)
 	if err != nil {
+		cleanupFailedInstanceACLs(ctx, target, cSpec.Name)
 		return nil, errors.Trace(err)
 	}
 
 	_ = statusCallback(ctx, status.Allocating, "Creating container", nil)
 	container, err := target.CreateContainerFromSpec(cSpec)
 	if err != nil {
+		cleanupFailedInstanceACLs(ctx, target, cSpec.Name)
 		return nil, errors.Trace(err)
 	}
 	if err := ensureOVNNetworkForwards(ctx, target, container, env.clock); err != nil {
@@ -271,6 +273,9 @@ func (env *environ) getContainerSpec(
 			continue
 		}
 		cSpec.Config[lxd.UserNamespacePrefix+k] = v
+	}
+	if err := env.prepareContainerFirewall(ctx, &cSpec, args.ControllerUUID, nics); err != nil {
+		return cSpec, err
 	}
 
 	return cSpec, nil

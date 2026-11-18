@@ -28,10 +28,18 @@ The LXD cloud, especially when used locally, is great for:
 Juju expects to see an operating system-like environment, so a LXD system container fits the bill. Docker containers are laid out for a singular application process, with a self-contained filesystem rather than a base userspace image.
 ```
 
+(lxd-limitations)=
+## Limitations
+
+- Juju firewall enforcement applies only to NICs attached to managed OVN networks. Bridge and other NIC types remain outside Juju firewall enforcement, including those on machines that also have OVN NICs.
+- Automatic same-model firewall access uses OVN port-group membership on a shared network. Access routed between different OVN networks requires explicit source CIDR permissions, such as application exposure to the relevant spaces.
+- Existing operator-managed ACLs remain effective and can grant additional access or restrict Juju's permissions.
+
 (lxd-requirements)=
 ## Requirements
 
 - LXD `5.0` or later (the minimum version that Juju accepts).
+- OVN firewalling requires the LXD API extensions `network_acl`, `network_ovn_acl`, and `network_ovn_acl_defaults`, and credentials permitted to manage network ACLs and instance NIC configuration in the effective network project.
 
 (lxd-concepts)=
 ## Concepts
@@ -231,8 +239,9 @@ Applies to all machines, including controller machines. Controller-specific defa
 
 **Networking**
 
-- **Network interfaces**: Default `eth0` bridged to default network. Additional NICs (`eth1`, `eth2`, etc.) for space constraints. Each NIC: type `nic`, `nictype=bridged`, parent host bridge, generated MAC address.
+- **Network interfaces**: NICs inherited from the applied profiles, plus additional NICs (`eth1`, `eth2`, etc.) for space constraints. Generated NICs use a managed `network` attachment for OVN or a bridged attachment for host bridges, with a generated MAC address.
 - **Cloud-init network config**: Netplan generated for multiple NICs when needed.
+- **OVN firewall ACLs**: A shared model ACL plus a machine ACL in `firewall-mode=instance` (the default), or a shared exposure ACL in `firewall-mode=global`. ACLs apply to every OVN NIC of the machine, including NICs inherited from profiles. `firewall-mode=none` disables Juju's ACL management.
 
 **Storage**
 
@@ -241,10 +250,25 @@ Applies to all machines, including controller machines. Controller-specific defa
 (lxd-machine-networking-behavior)=
 ### Networking behavior
 
-- **Network discovery**: Lists LXD networks and uses bridge networks for machine placement.
-- **Subnet ID format**: `subnet-<hostBridgeName>-<CIDR>`. Example: `subnet-lxdbr0-10.0.0.0/24`.
-- **NIC assignment**: Default `eth0` from `default` profile. Additional NICs for space constraints are bridged to host bridges.
-- **IP assignment**: Assigned by host bridge DHCP on the LXD host.
+- **Network discovery**: Lists LXD networks and discovers subnets on bridge and OVN networks for machine placement.
+- **Subnet ID format**: `subnet-<networkName>-<CIDR>`. Example: `subnet-lxdbr0-10.0.0.0/24`.
+- **NIC assignment**: NICs from the applied profiles, plus attachments to bridge or OVN networks required by space constraints.
+- **IP assignment**: Provided by the attached network's DHCP configuration.
+
+(lxd-machine-ovn-firewall)=
+#### OVN firewall
+
+OVN NICs have default-deny ingress and egress policies. The model ACL permits TCP, UDP and ICMP traffic between model members on a shared OVN network, and stateful outbound traffic through the OVN router. Unrestricted egress ACL rules are avoided because LXD evaluates ingress and egress permissions together; such a rule could override another machine's default ingress denial.
+
+Machine SSH access follows the model's `ssh-allow` configuration. Application ingress permissions combine the ports declared open by charms with the sources selected by `juju expose`. Exposure can be restricted by endpoint, source CIDR or source space. Controller access and cross-model relation permissions use the same Juju firewaller as other machine providers. Address forwards provide reachability independently of these ACL permissions.
+
+ACLs are attached before new instances start. Existing OVN instances acquire ACLs during firewall reconciliation after an upgrade. Unexposing an application removes its exposure permissions; model access, SSH and independently required permissions remain. These are stateful rules, so removal does not guarantee immediate termination of established connections.
+
+Juju preserves unrelated ACL assignments and manages its own ACLs in the LXD network project. Instance ACLs are removed after instance deletion; shared ACLs are removed with their model. Firewall resource ownership follows model migration to another controller.
+
+```{ibnote}
+See more: [LXD | Network ACLs](https://canonical.com/lxd/docs/latest/howto/network_acls/), {ref}`command-juju-expose`, {ref}`command-juju-unexpose`.
+```
 
 (lxd-machine-storage-behavior)=
 ### Storage behavior

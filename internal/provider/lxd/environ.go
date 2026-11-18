@@ -230,6 +230,11 @@ func (env *environ) Destroy(ctx context.Context) error {
 	if err := env.base.DestroyEnv(ctx); err != nil {
 		return errors.Trace(env.HandleCredentialError(ctx, err))
 	}
+	if err := removeNetworkACLs(ctx, env.server(), func(acl api.NetworkACL) bool {
+		return acl.Config[jujuACLModelKey] == env.uuid
+	}); err != nil {
+		return errors.Annotate(env.HandleCredentialError(ctx, err), "destroying model firewall ACLs")
+	}
 	if env.storageSupported() {
 		if err := destroyModelFilesystems(env); err != nil {
 			return errors.Annotate(env.HandleCredentialError(ctx, err), "destroying LXD filesystems for model")
@@ -249,6 +254,11 @@ func (env *environ) DestroyController(ctx context.Context, controllerUUID string
 	}
 	if err := env.destroyHostedModelResources(ctx, controllerUUID); err != nil {
 		return errors.Trace(env.HandleCredentialError(ctx, err))
+	}
+	if err := removeNetworkACLs(ctx, env.server(), func(acl api.NetworkACL) bool {
+		return acl.Config[jujuACLControllerKey] == controllerUUID
+	}); err != nil {
+		return errors.Annotate(env.HandleCredentialError(ctx, err), "destroying controller firewall ACLs")
 	}
 	if env.storageSupported() {
 		if err := destroyControllerFilesystems(env, controllerUUID); err != nil {
